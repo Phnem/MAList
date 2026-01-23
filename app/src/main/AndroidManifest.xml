@@ -7,12 +7,15 @@
         android:label="MyAnimeList"
         android:theme="@style/Theme.MyApplication"
         android:icon="@drawable/ico"
+
         android:roundIcon="@mipmap/ic_launcher_round"
         android:enableOnBackInvokedCallback="true">
 
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:windowSoftInputMode="adjustNothing">
+
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

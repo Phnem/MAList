@@ -55,7 +55,6 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.8.5")
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("com.google.code.gson:gson:2.10.1")
-
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
@@ -63,6 +62,11 @@ dependencies {
     // ВЕРНУЛИ БИБЛИОТЕКУ
     implementation(libs.androidx.material3)
 // Или implementation("androidx.compose.material3:material3:1.3.1")
+    implementation(platform("androidx.compose:compose-bom:2024.04.00")) // или ваша версия
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui-graphics")
+    implementation("androidx.compose.ui:ui-tooling-preview")
+    implementation("androidx.compose.material3:material3")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

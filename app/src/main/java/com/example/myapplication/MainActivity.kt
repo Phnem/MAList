@@ -1,5 +1,10 @@
 package com.example.myapplication
 
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.core.view.WindowCompat
+import androidx.compose.ui.unit.DpOffset
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -35,7 +40,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.*
-import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -77,6 +83,7 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
+import java.text.DecimalFormat
 import kotlin.math.min
 
 // ==========================================
@@ -86,7 +93,10 @@ import kotlin.math.min
 val OneUiBlack = Color(0xFF000000)
 val OneUiListBg = Color(0xFF080808)
 val OneUiCardBg = Color(0xFF1C1C1E)
+val OneUiCardLight = Color(0xFF2C2C2E)
 val OneUiBlue = Color(0xFF3E82F7)
+
+val OneUiBluePastel = Color(0xFF90CAF9)
 val OneUiRed = Color(0xFFFF3B30)
 val OneUiText = Color(0xFFFFFFFF)
 val OneUiTextDim = Color(0xFF999999)
@@ -900,6 +910,284 @@ fun DeleteConfirmationDialog(onConfirm: () -> Unit, onCancel: () -> Unit) {
 // ==========================================
 // SCREENS
 // ==========================================
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MalistTopBar(
+    currentSort: SortOption,
+    onSortSelected: (SortOption) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    // Контейнер для эффекта левитации (сама капсула заголовка)
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .statusBarsPadding()
+            .padding(top = 12.dp),
+        shape = CircleShape,
+        color = Color(0xFF2C2C2E).copy(alpha = 0.95f),
+        shadowElevation = 8.dp
+    ) {
+        CenterAlignedTopAppBar(
+            title = {
+                Text(
+                    "MAList",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 20.sp,
+                    color = Color.White
+                )
+            },
+            actions = {
+                Box {
+                    IconButton(onClick = { expanded = true }) {
+                        Icon(
+                            imageVector = Icons.Default.Sort,
+                            contentDescription = "Sort",
+                            tint = Color.White
+                        )
+                    }
+
+                    MaterialTheme(
+                        shapes = MaterialTheme.shapes.copy(extraSmall = RoundedCornerShape(16.dp))
+                    ) {
+                        DropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false },
+                            containerColor = Color(0xFF2C2C2E).copy(alpha = 0.9f),
+                            offset = DpOffset(x = 12.dp, y = 8.dp)
+                        ) {
+                            SortOption.values().forEach { option ->
+                                val isSelected = currentSort == option
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = option.label,
+                                            // Используем новый пастельный цвет
+                                            color = if (isSelected) OneUiBluePastel else OneUiText,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                            fontSize = 16.sp
+                                        )
+                                    },
+                                    trailingIcon = {
+                                        val icon = when (option) {
+                                            SortOption.DATE_NEWEST -> Icons.Default.DateRange
+                                            SortOption.RATING_HIGH -> Icons.Default.Star
+                                            SortOption.AZ -> Icons.AutoMirrored.Filled.Sort
+                                        }
+                                        Icon(
+                                            imageVector = icon,
+                                            contentDescription = null,
+                                            // И тут тоже пастельный цвет
+                                            tint = if (isSelected) OneUiBluePastel else OneUiTextDim
+                                        )
+                                    },
+                                    onClick = {
+                                        onSortSelected(option)
+                                        expanded = false
+                                    },
+                                    colors = MenuDefaults.itemColors(
+                                        // Чтобы фон элемента при нажатии не был слишком ярким
+                                        textColor = OneUiText,
+                                        trailingIconColor = OneUiTextDim
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                containerColor = Color.Transparent
+            )
+        )
+    }
+}
+
+// --- НОВАЯ КАРТОЧКА СТАТИСТИКИ (COMPOSABLE) ---
+@Composable
+fun StatsCard(
+    title: String,
+    icon: ImageVector,
+    isExpanded: Boolean,
+    onClick: () -> Unit,
+    rankColor: Color? = null,
+    content: @Composable () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .clickable { onClick() }
+            .animateContentSize(), // Анимация разворачивания
+        colors = CardDefaults.cardColors(containerColor = OneUiCardLight)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Заголовок (всегда виден)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = OneUiBluePastel, // Цвет иконок
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = OneUiText,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            // Контент (виден только если развернуто)
+            if (isExpanded) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    content()
+                }
+            }
+        }
+    }
+}
+
+// --- КОНТЕНТ ДЛЯ BOTTOM SHEET "C" ---
+@Composable
+fun WatchStatsContent(animeList: List<Anime>) {
+    // 1. РАСЧЕТЫ (Reactive)
+    val totalEpisodes = remember(animeList) { animeList.sumOf { it.episodes } }
+
+    // Время
+    val totalMinutes = totalEpisodes * 22L // Long для больших чисел
+    val formatter = DecimalFormat("#,###") // Формат с пробелами (1 248)
+    val formattedMinutes = formatter.format(totalMinutes).replace(",", " ")
+    val formattedHours = formatter.format(totalMinutes / 60).replace(",", " ")
+    val formattedDays = formatter.format(totalMinutes / (60 * 24)).replace(",", " ")
+
+    // Рейтинг
+    val avgRating = remember(animeList) {
+        if (animeList.isEmpty()) 0.0 else animeList.map { it.rating }.average()
+    }
+
+    // Ранг
+    val (rankName, rankColor) = remember(totalEpisodes) {
+        when {
+            totalEpisodes >= 1200 -> "Legend" to RateColor5 // Green/Gold
+            totalEpisodes >= 800 -> "Veteran" to RateColor4 // Yellow
+            totalEpisodes >= 500 -> "Dedicated" to RateColor3 // Orange
+            totalEpisodes >= 300 -> "Casual" to RateColor2 // Deep Orange
+            else -> "Rookie" to RateColor1 // Red
+        }
+    }
+
+    // Состояние аккордеона (-1 значит все свернуты)
+    var expandedIndex by remember { mutableIntStateOf(-1) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp)
+            .padding(bottom = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // Шапка
+        Text(
+            "Your Watch Stats",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            color = OneUiText
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            "Everything you’ve watched so far",
+            style = MaterialTheme.typography.bodyMedium,
+            color = OneUiTextDim
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // --- КАРТОЧКИ ---
+
+        // К1: Watched Episodes
+        StatsCard(
+            title = "Watched episodes",
+            icon = Icons.Default.Visibility,
+            isExpanded = expandedIndex == 0,
+            onClick = { expandedIndex = if (expandedIndex == 0) -1 else 0 }
+        ) {
+            Text(
+                text = "$totalEpisodes Episodes watched",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = OneUiText
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // К2: Time Spent
+        StatsCard(
+            title = "Time spent watching",
+            icon = Icons.Default.Schedule,
+            isExpanded = expandedIndex == 1,
+            onClick = { expandedIndex = if (expandedIndex == 1) -1 else 1 }
+        ) {
+            Column {
+                Text(
+                    text = "$formattedMinutes min",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = OneUiText
+                )
+                Text(
+                    text = "$formattedHours h",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = OneUiTextDim
+                )
+                Text(
+                    text = "$formattedDays days",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = OneUiBluePastel
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // К3: Average Rating
+        StatsCard(
+            title = "Average rating",
+            icon = Icons.Default.Star,
+            isExpanded = expandedIndex == 2,
+            onClick = { expandedIndex = if (expandedIndex == 2) -1 else 2 }
+        ) {
+            Text(
+                text = String.format("%.1f / 5⭐", avgRating),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = OneUiText
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // К4: Your Rank
+        // Используем EmojiEvents (кубок) или MilitaryTech (медаль). Возьмем MilitaryTech для ранга.
+        StatsCard(
+            title = "Your rank:",
+            icon = Icons.Default.MilitaryTech,
+            isExpanded = expandedIndex == 3,
+            onClick = { expandedIndex = if (expandedIndex == 3) -1 else 3 }
+        ) {
+            Text(
+                text = rankName,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = rankColor
+            )
+        }
+    }
+}
+
 
 @OptIn(ExperimentalSharedTransitionApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -912,10 +1200,17 @@ fun HomeScreen(
     val kbd = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
     val view = LocalView.current
-    var showSortSheet by remember { mutableStateOf(false) }
-    var isSearchFocused by remember { mutableStateOf(false) }
-    var isDockVisible by remember { mutableStateOf(true) }
 
+    // Состояния для BottomSheets и меню
+    var showSortSheet by remember { mutableStateOf(false) }
+    var showCSheet by remember { mutableStateOf(false) } // Для иконки "С"
+    var showNotifSheet by remember { mutableStateOf(false) } // Для уведомлений
+
+    // Состояние поиска
+    var isSearchVisible by remember { mutableStateOf(false) }
+    val searchFocusRequester = remember { FocusRequester() }
+
+    // Превью
     var selectedAnimeForPreview by remember { mutableStateOf<Anime?>(null) }
     var currentPreviewAnime by remember { mutableStateOf<Anime?>(null) }
 
@@ -923,14 +1218,15 @@ fun HomeScreen(
         currentPreviewAnime = selectedAnimeForPreview
     }
 
-    BackHandler(enabled = isSearchFocused || vm.searchQuery.isNotEmpty() || selectedAnimeForPreview != null) {
+    // Обработка кнопки "Назад"
+    BackHandler(enabled = isSearchVisible || vm.searchQuery.isNotEmpty() || selectedAnimeForPreview != null) {
         if (selectedAnimeForPreview != null) {
             performHaptic(view, false)
             selectedAnimeForPreview = null
-        } else {
+        } else if (isSearchVisible) {
             performHaptic(view, false)
+            isSearchVisible = false
             vm.searchQuery = ""
-            isSearchFocused = false
             focusManager.clearFocus()
             kbd?.hide()
         }
@@ -938,89 +1234,69 @@ fun HomeScreen(
 
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    // Показываем кнопку "наверх" только если прокрутили и нет активного поиска/превью
     val showScrollToTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 2 } }
-
-    val nestedScrollConnection = remember {
-        object : NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                if (available.y < -5) {
-                    isDockVisible = false
-                } else if (available.y > 5) {
-                    isDockVisible = true
-                }
-                return Offset.Zero
-            }
-        }
-    }
 
     Scaffold(
         containerColor = OneUiBlack,
-        bottomBar = { }
+        // Убрали bottomBar отсюда, чтобы сделать кастомный док
+        bottomBar = {},
+
+        // --- КНОПКА ПОИСКА (ЛУПА) СПРАВА ---
+        floatingActionButton = {
+            // Показываем лупу только если не открыто превью
+            if (selectedAnimeForPreview == null) {
+                FloatingActionButton(
+                    onClick = {
+                        performHaptic(view, false)
+                        isSearchVisible = !isSearchVisible
+                        if (!isSearchVisible) {
+                            vm.searchQuery = ""
+                            focusManager.clearFocus()
+                            kbd?.hide()
+                        }
+                    },
+                    // Если поиск активен - синий, иначе серый. Полупрозрачность 60%
+                    containerColor = (if (isSearchVisible) OneUiBlue else Color(0xFF333333)).copy(alpha = 0.6f),
+                    contentColor = Color.White,
+                    shape = CircleShape,
+                    modifier = Modifier
+                        .padding(bottom = 10.dp) // Чуть поднимем, чтобы быть на уровне дока
+                        .navigationBarsPadding() // Учитываем системные отступы
+                ) {
+                    Icon(
+                        imageVector = if (isSearchVisible) Icons.Default.Close else Icons.Default.Search,
+                        contentDescription = "Search"
+                    )
+                }
+            }
+        }
     ) { innerPadding ->
+
         Box(modifier = Modifier
             .fillMaxSize()
-            .nestedScroll(nestedScrollConnection)
+            // .padding(top = innerPadding.calculateTopPadding()) <--- ЭТУ СТРОКУ УДАЛИ (иначе будет дырка сверху)
         ) {
-
-            val shouldBlur = (isSearchFocused && vm.searchQuery.isBlank()) || selectedAnimeForPreview != null
-            val blurAmount by animateDpAsState(targetValue = if (shouldBlur) 20.dp else 0.dp, label = "blur")
+            // --- 1. ВСТАВЛЯЕМ ЭТОТ БЛОК (В САМОЕ НАЧАЛО BOX) ---
+            Box(modifier = Modifier.zIndex(5f).align(Alignment.TopCenter)) {
+                // Внутри Box -> Box (где zIndex(5f)):
+                MalistTopBar(
+                    currentSort = vm.sortOption, // Передаем текущее значение
+                    onSortSelected = { newOption ->
+                        performHaptic(view, false)
+                        vm.sortOption = newOption // Обновляем сортировку
+                    }
+                )
+            }
+            val shouldBlur = (isSearchVisible && vm.searchQuery.isBlank()) || selectedAnimeForPreview != null
+            val blurAmount by animateDpAsState(targetValue = if (shouldBlur) 10.dp else 0.dp, label = "blur")
 
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .blur(blurAmount)
             ) {
-                // Header
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(OneUiBlack)
-                        .padding(horizontal = 24.dp, vertical = 20.dp)
-                        .padding(top = 24.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        Text(
-                            text = "My\nCollection",
-                            style = MaterialTheme.typography.displayLarge
-                        )
-                        IconButton(onClick = {
-                            performHaptic(view, false)
-                            vm.loadAnime()
-                        }) {
-                            Icon(Icons.Default.Refresh, null, tint = MaterialTheme.colorScheme.primary)
-                        }
-                    }
-                    Spacer(Modifier.height(16.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "${vm.animeList.size} items",
-                            color = MaterialTheme.colorScheme.secondary,
-                            fontSize = 14.sp
-                        )
-                        Spacer(Modifier.weight(1f))
-                        Surface(
-                            color = Color(0xFF2C2C2E),
-                            shape = RoundedCornerShape(16.dp),
-                            onClick = {
-                                performHaptic(view, false)
-                                showSortSheet = true
-                            }
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(vm.sortOption.label, fontSize = 12.sp, color = Color.White)
-                                Spacer(Modifier.width(4.dp))
-                                Icon(Icons.Default.ArrowDropDown, null, tint = Color.Gray, modifier = Modifier.size(16.dp))
-                            }
-                        }
-                    }
-                }
+
 
                 // Список
                 Box(
@@ -1038,11 +1314,12 @@ fun HomeScreen(
                     } else {
                         LazyColumn(
                             state = listState,
-                            contentPadding = PaddingValues(top = 24.dp, bottom = 100.dp, start = 16.dp, end = 16.dp),
+                            // Добавляем отступ снизу побольше, чтобы док не перекрывал контент
+                            contentPadding = PaddingValues(top = 120.dp, bottom = 120.dp, start = 16.dp, end = 16.dp),
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
                             items(list, key = { it.id }) { anime ->
-                                Box(modifier = Modifier.animateItemPlacement()) {
+                                Box(modifier = Modifier.animateItem()) {
                                     OneUiAnimeCard(
                                         anime = anime,
                                         viewModel = vm,
@@ -1063,22 +1340,175 @@ fun HomeScreen(
                 }
             }
 
-            if (shouldBlur) {
-                if (selectedAnimeForPreview == null) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.5f))
-                            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
-                                focusManager.clearFocus()
-                                isSearchFocused = false
-                                kbd?.hide()
+            // --- ПАРЯЩИЙ ДОК (FLOATING DOCK) ---
+            // Скрываем, если открыт поиск или превью
+            if (selectedAnimeForPreview == null && !isSearchVisible) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 40.dp) // Отступ от низа экрана (левитация)
+                        .navigationBarsPadding() // Учитываем системную полоску навигации
+                        .zIndex(3f) // Поверх списка
+                ) {
+                    // Сама "пилюля"
+                    Surface(
+                        shape = CircleShape, // Полностью круглые края
+                        // Светло-серый цвет, полупрозрачный (60%)
+                        color = Color(0xFF3E3E40).copy(alpha = 0.6f),
+                        shadowElevation = 10.dp, // Тень для объема
+                        tonalElevation = 5.dp
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(24.dp), // Расстояние между иконками
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // 1. Плюс (Добавить) с Анимацией
+                            with(sharedTransitionScope) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(28.dp) // Размер области нажатия
+                                        .sharedBounds(
+                                            rememberSharedContentState(key = "fab_container"),
+                                            animatedVisibilityScope = animatedVisibilityScope,
+                                            resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds
+                                        )
+                                        .clickable {
+                                            performHaptic(view, false)
+                                            nav.navigate("add_anime")
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = "Add",
+                                        tint = Color.White,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .sharedElement(
+                                                rememberSharedContentState(key = "fab_icon"),
+                                                animatedVisibilityScope = animatedVisibilityScope
+                                            )
+                                    )
+                                }
                             }
-                            .zIndex(2f)
-                    )
+
+                            // 2. Буква "C" в круге
+                            Box(
+                                modifier = Modifier
+                                    .size(26.dp)
+                                    .border(1.5.dp, Color.White, CircleShape)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                    ) {
+                                        performHaptic(view, false)
+                                        showCSheet = true
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "C",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+
+                            // 3. Уведомления (Колокольчик)
+                            Icon(
+                                imageVector = Icons.Default.Notifications,
+                                contentDescription = "Notifications",
+                                tint = Color.White,
+                                modifier = Modifier
+                                    .size(26.dp)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                    ) {
+                                        performHaptic(view, false)
+                                        showNotifSheet = true
+                                    }
+                            )
+                        }
+                    }
                 }
             }
 
+            // --- ВСПЛЫВАЮЩАЯ ПАНЕЛЬ ПОИСКА (Над доком) ---
+            AnimatedVisibility(
+                visible = isSearchVisible,
+                enter = slideInVertically { it } + fadeIn(),
+                exit = slideOutVertically { it } + fadeOut(),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    // Сначала применяем отступ клавиатуры:
+                    .windowInsetsPadding(WindowInsets.ime)
+                    // Затем небольшой отступ, чтобы поле не прилипало к самой клавиатуре (или к низу экрана):
+                    .padding(bottom = 16.dp)
+                    .zIndex(10f)             // Поверх затемнения (которое zIndex 2f)
+            ) {
+                val glowColor = Color.White.copy(alpha = 0.15f)
+                val borderColor = Color.White.copy(alpha = 0.1f)
+
+                BasicTextField(
+                    value = vm.searchQuery,
+                    onValueChange = {
+                        vm.searchQuery = it
+                        if(it.isNotEmpty()) performHaptic(view, false)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .shadow(12.dp, RoundedCornerShape(28.dp), ambientColor = glowColor, spotColor = glowColor)
+                        .border(1.dp, borderColor, RoundedCornerShape(28.dp))
+                        .clip(RoundedCornerShape(28.dp))
+                        .background(Color(0xFF202022).copy(alpha = 0.95f))
+                        .padding(horizontal = 20.dp)
+                        .focusRequester(searchFocusRequester),
+                    singleLine = true,
+                    textStyle = TextStyle(fontSize = 16.sp, color = Color.White),
+                    cursorBrush = SolidColor(OneUiBlue),
+                    decorationBox = { innerTextField ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Search, null, tint = OneUiBlue)
+                            Spacer(Modifier.width(12.dp))
+                            Box {
+                                if (vm.searchQuery.isEmpty()) {
+                                    Text("Search collection...", color = Color.Gray, fontSize = 16.sp)
+                                }
+                                innerTextField()
+                            }
+                        }
+                    },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { kbd?.hide() })
+                )
+
+                LaunchedEffect(Unit) {
+                    searchFocusRequester.requestFocus()
+                    kbd?.show()
+                }
+            }
+
+            // Затемнение фона
+            if (shouldBlur && selectedAnimeForPreview == null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.5f))
+                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+                            focusManager.clearFocus()
+                            isSearchVisible = false
+                            kbd?.hide()
+                        }
+                        .zIndex(2f)
+                )
+            }
+
+            // Превью (Overlay)
             AnimatedVisibility(
                 visible = selectedAnimeForPreview != null,
                 enter = fadeIn() + scaleIn(initialScale = 0.9f) + slideInVertically { it / 6 },
@@ -1101,14 +1531,14 @@ fun HomeScreen(
                 }
             }
 
-            // Кнопка наверх
+            // Кнопка наверх (Сдвинута левее, чтобы не мешать FAB)
             AnimatedVisibility(
-                visible = showScrollToTop && !isSearchFocused && selectedAnimeForPreview == null,
+                visible = showScrollToTop && !isSearchVisible && selectedAnimeForPreview == null,
                 enter = fadeIn() + scaleIn(),
                 exit = fadeOut() + scaleOut(),
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(bottom = 100.dp, end = 24.dp)
+                    .padding(bottom = 160.dp, end = 24.dp)
                     .zIndex(1f)
             ) {
                 Box(
@@ -1125,97 +1555,9 @@ fun HomeScreen(
                     Icon(Icons.Default.KeyboardArrowUp, "Up", tint = Color.White)
                 }
             }
-
-            // Док
-            AnimatedVisibility(
-                visible = (isDockVisible || isSearchFocused) && selectedAnimeForPreview == null,
-                enter = slideInVertically { it } + fadeIn(),
-                exit = slideOutVertically { it } + fadeOut(),
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .zIndex(3f)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 24.dp)
-                        .navigationBarsPadding()
-                        .imePadding(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val glowColor = Color.White.copy(alpha = 0.15f)
-                    val borderColor = Color.White.copy(alpha = 0.1f)
-
-                    BasicTextField(
-                        value = vm.searchQuery,
-                        onValueChange = {
-                            vm.searchQuery = it
-                            if(it.isNotEmpty()) performHaptic(view, false)
-                        },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(56.dp)
-                            .shadow(12.dp, RoundedCornerShape(28.dp), ambientColor = glowColor, spotColor = glowColor)
-                            .border(1.dp, borderColor, RoundedCornerShape(28.dp))
-                            .clip(RoundedCornerShape(28.dp))
-                            .background(Color(0xFF202022).copy(alpha = 0.95f))
-                            .padding(horizontal = 20.dp)
-                            .onFocusChanged { isSearchFocused = it.isFocused },
-                        singleLine = true,
-                        textStyle = TextStyle(fontSize = 16.sp, color = Color.White),
-                        cursorBrush = SolidColor(OneUiBlue),
-                        decorationBox = { innerTextField ->
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Search, null, tint = if(isSearchFocused) OneUiBlue else Color.Gray)
-                                Spacer(Modifier.width(12.dp))
-                                Box {
-                                    if (vm.searchQuery.isEmpty()) {
-                                        Text("Search", color = Color.Gray, fontSize = 16.sp)
-                                    }
-                                    innerTextField()
-                                }
-                            }
-                        },
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = { kbd?.hide() })
-                    )
-
-                    Spacer(Modifier.width(12.dp))
-
-                    with(sharedTransitionScope) {
-                        Box(
-                            modifier = Modifier
-                                .size(56.dp)
-                                .shadow(12.dp, CircleShape, ambientColor = glowColor, spotColor = glowColor)
-                                .border(1.dp, borderColor, CircleShape)
-                                .sharedBounds(
-                                    rememberSharedContentState(key = "fab_container"),
-                                    animatedVisibilityScope = animatedVisibilityScope,
-                                    resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds
-                                )
-                                .clip(CircleShape)
-                                .background(OneUiBlue)
-                                .clickable {
-                                    performHaptic(view, false)
-                                    nav.navigate("add_anime")
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Default.Add,
-                                null,
-                                tint = Color.White,
-                                modifier = Modifier.sharedElement(
-                                    rememberSharedContentState(key = "fab_icon"),
-                                    animatedVisibilityScope = animatedVisibilityScope
-                                )
-                            )
-                        }
-                    }
-                }
-            }
         }
 
+        // --- BOTTOM SHEETS (С ИЗМЕНЕНИЯМИ ДЛЯ "C") ---
         if (showSortSheet) {
             ModalBottomSheet(
                 onDismissRequest = { showSortSheet = false },
@@ -1239,6 +1581,31 @@ fun HomeScreen(
                                 selectedTextColor = MaterialTheme.colorScheme.primary
                             )
                         )
+                    }
+                }
+            }
+        }
+
+        if (showCSheet) {
+            ModalBottomSheet(
+                onDismissRequest = { showCSheet = false },
+                containerColor = OneUiCardBg
+            ) {
+                // ПЕРЕДАЕМ СПИСОК АНИМЕ В НОВУЮ СТАТИСТИКУ
+                WatchStatsContent(animeList = vm.animeList)
+            }
+        }
+
+        if (showNotifSheet) {
+            ModalBottomSheet(
+                onDismissRequest = { showNotifSheet = false },
+                containerColor = OneUiCardBg
+            ) {
+                Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.Notifications, null, tint = OneUiBlue, modifier = Modifier.size(48.dp))
+                        Spacer(Modifier.height(16.dp))
+                        Text("Notifications\nComing soon...", color = OneUiText, fontSize = 18.sp, textAlign = TextAlign.Center)
                     }
                 }
             }
@@ -1420,6 +1787,7 @@ class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalSharedTransitionApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) { window.attributes.preferredDisplayModeId = 0 }
         checkPerms()
         setContent {
