@@ -551,7 +551,6 @@ enum class SortOption(val label: String) {
 // UI COMPONENTS
 // ==========================================
 
-// --- ОБНОВЛЕННЫЙ HAPTIC FEEDBACK (Универсальный) ---
 fun performHaptic(view: View, type: String) {
     when (type) {
         "success" -> {
@@ -572,7 +571,6 @@ fun performHaptic(view: View, type: String) {
     }
 }
 
-// Перегрузка для совместимости с glass.kt (если он использует boolean)
 fun performHaptic(view: View, isStrong: Boolean) {
     performHaptic(view, if (isStrong) "warning" else "light")
 }
@@ -742,9 +740,10 @@ fun SharedTransitionScope.TextAsIndividualLetters(
                     sharedContentState = rememberSharedContentState(key = "hint_$index"),
                     animatedVisibilityScope = animatedContentScope,
                     boundsTransform = { _, _ ->
+                        // УСКОРЕННАЯ анимация (stiffness = 1000f)
                         spring(
                             dampingRatio = Spring.DampingRatioLowBouncy,
-                            stiffness = 25f * (text.length - index).coerceAtLeast(1)
+                            stiffness = 1000f
                         )
                     }
                 ),
@@ -768,9 +767,8 @@ fun AnimatedOneUiTextField(
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
 
-    val showHintAbove by remember {
-        derivedStateOf { isFocused || value.isNotEmpty() }
-    }
+    // Логика: если фокус ИЛИ есть текст -> подсказка наверху
+    val showHintAbove = isFocused || value.isNotEmpty()
 
     val containerColor = MaterialTheme.colorScheme.surfaceVariant
     val textColor = MaterialTheme.colorScheme.onSurface
@@ -779,58 +777,91 @@ fun AnimatedOneUiTextField(
     val hintStyleInner = TextStyle(fontSize = 18.sp)
     val hintStyleOuter = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold)
 
-    SharedTransitionLayout {
-        AnimatedContent(
-            targetState = showHintAbove,
-            transitionSpec = { EnterTransition.None togetherWith ExitTransition.None },
-            label = "hintAnimation"
-        ) { targetShowAbove ->
-
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Box(modifier = Modifier.padding(start = 24.dp, bottom = 4.dp).height(16.dp)) {
+    // ВАЖНО: BasicTextField теперь СНАРУЖИ. Он стабилен и не пересоздается.
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        interactionSource = interactionSource,
+        textStyle = textStyle,
+        singleLine = singleLine,
+        maxLines = maxLines,
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        decorationBox = { innerTextField ->
+            // SharedTransitionLayout внутри decorationBox
+            SharedTransitionLayout {
+                AnimatedContent(
+                    targetState = showHintAbove,
+                    transitionSpec = { EnterTransition.None togetherWith ExitTransition.None },
+                    label = "hintAnimation"
+                ) { targetShowAbove ->
                     if (targetShowAbove) {
-                        TextAsIndividualLetters(
-                            animatedContentScope = this@AnimatedContent,
-                            text = placeholder,
-                            style = hintStyleOuter,
-                            textColor = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-                BasicTextField(
-                    value = value,
-                    onValueChange = onValueChange,
-                    interactionSource = interactionSource,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .sharedElement(
-                            rememberSharedContentState(key = "input_box"),
-                            animatedVisibilityScope = this@AnimatedContent
-                        )
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(containerColor)
-                        .padding(horizontal = 24.dp, vertical = 16.dp),
-                    textStyle = textStyle,
-                    singleLine = singleLine,
-                    maxLines = maxLines,
-                    keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-                    decorationBox = { innerTextField ->
-                        Box(contentAlignment = Alignment.CenterStart) {
-                            if (!targetShowAbove) {
+                        // STATE: ПОДСКАЗКА СВЕРХУ (Hint Above)
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            // 1. Текст подсказки (снаружи)
+                            Box(
+                                modifier = Modifier
+                                    .padding(start = 24.dp, bottom = 4.dp)
+                                    .height(16.dp)
+                            ) {
+                                TextAsIndividualLetters(
+                                    animatedContentScope = this@AnimatedContent,
+                                    text = placeholder,
+                                    style = hintStyleOuter,
+                                    textColor = MaterialTheme.colorScheme.primary
+                                )
+                            }
+
+                            // 2. Контейнер ввода
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .sharedElement(
+                                        rememberSharedContentState(key = "container"),
+                                        animatedVisibilityScope = this@AnimatedContent
+                                    )
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(containerColor)
+                                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                innerTextField()
+                            }
+                        }
+                    } else {
+                        // STATE: ПОДСКАЗКА ВНУТРИ (Hint Inside)
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            // Пустой Box наверху, чтобы сохранить структуру (опционально) или просто сразу контейнер
+                            // Используем sharedElement для контейнера
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .sharedElement(
+                                        rememberSharedContentState(key = "container"),
+                                        animatedVisibilityScope = this@AnimatedContent
+                                    )
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(containerColor)
+                                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                // Подсказка внутри, рядом с текстом
                                 TextAsIndividualLetters(
                                     animatedContentScope = this@AnimatedContent,
                                     text = placeholder,
                                     style = hintStyleInner,
                                     textColor = hintColor
                                 )
+                                innerTextField()
                             }
-                            innerTextField()
                         }
                     }
-                )
+                }
             }
         }
-    }
+    )
 }
 
 @Composable
@@ -1252,7 +1283,14 @@ fun AddEditScreen(nav: NavController, vm: AnimeViewModel, id: String?, sharedTra
         Scaffold(modifier = Modifier.fillMaxSize().then(sharedModifier), containerColor = Color.Transparent, topBar = { Row(modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(top = 16.dp, start = 16.dp, end = 16.dp, bottom = 16.dp), verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = textC, modifier = if (id == null) Modifier.sharedElement(rememberSharedContentState(key = "fab_icon"), animatedVisibilityScope = animatedVisibilityScope) else Modifier) }; Spacer(Modifier.width(16.dp)); Text(text = if (id == null) "Add title" else "Edit title", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = textC) } }, floatingActionButton = { AnimatedSaveFab(isEnabled = hasChanges, onClick = { performHaptic(view, "success"); if (title.isNotEmpty()) { scope.launch { delay(600); if (id != null) vm.updateAnime(ctx, id, title, ep.toIntOrNull()?:0, rate, uri) else vm.addAnime(ctx, title, ep.toIntOrNull()?:0, rate, uri); nav.popBackStack() } } else { Toast.makeText(ctx, "Enter title", Toast.LENGTH_SHORT).show() } }) }) { innerPadding ->
             Box(modifier = Modifier.fillMaxSize()) {
                 Box(modifier = Modifier.fillMaxSize().background(bg))
-                Column(modifier = Modifier.padding(innerPadding).padding(horizontal = 24.dp).fillMaxSize().verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
+                // ИСПРАВЛЕНИЕ: Добавил .imePadding() к скролл-контейнеру.
+                // Теперь клавиатура не будет перекрывать поле ввода.
+                Column(modifier = Modifier
+                    .padding(innerPadding)
+                    .imePadding() // <--- ВАЖНО: Учитываем клавиатуру
+                    .padding(horizontal = 24.dp)
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
                     Spacer(Modifier.height(16.dp))
                     Box(modifier = Modifier.width(180.dp).aspectRatio(0.7f).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(32.dp)).clickable { performHaptic(view, "light"); launcher.launch("image/*") }, contentAlignment = Alignment.Center) {
                         val imageModifier = if (id != null) Modifier.sharedElement(rememberSharedContentState(key = "image_${id}"), animatedVisibilityScope = animatedVisibilityScope) else Modifier
@@ -1264,7 +1302,7 @@ fun AddEditScreen(nav: NavController, vm: AnimeViewModel, id: String?, sharedTra
                     }
                     Spacer(Modifier.height(32.dp))
 
-                    // --- АНИМИРОВАННЫЕ ПОЛЯ (Исправлено) ---
+                    // --- ИСПРАВЛЕННЫЙ БЛОК ВВОДА ---
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(modifier = Modifier.weight(1f)) {
                             AnimatedOneUiTextField(
