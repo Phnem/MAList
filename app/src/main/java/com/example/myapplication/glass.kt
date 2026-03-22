@@ -24,6 +24,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,12 +35,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -48,8 +52,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.Settings
@@ -71,6 +74,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.graphicsLayer
@@ -81,6 +85,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
@@ -92,6 +97,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import android.os.Build
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -105,14 +111,15 @@ import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.ui.home.WorkspaceSortNotificationActions
 import com.example.myapplication.ui.navigation.navigateToAddEdit
 import com.example.myapplication.ui.navigation.navigateToSettings
-import com.example.myapplication.ui.shared.components.GenreSelectionSection
+import com.example.myapplication.ui.shared.components.GenreFilterPillSelection
 import com.example.myapplication.ui.shared.components.GlassIconButton
 import com.example.myapplication.ui.shared.fluidClickable
 import com.example.myapplication.ui.shared.gradientHighlightBorder
 import com.example.myapplication.ui.shared.theme.BrandBlue
 import com.example.myapplication.ui.shared.theme.DarkBackground
-import com.example.myapplication.ui.shared.theme.DarkSurface
 import com.example.myapplication.ui.shared.theme.DarkSurfaceVariant
+import com.example.myapplication.ui.shared.theme.OverlayThemeTokens
+import com.example.myapplication.ui.settings.tileGlow
 import com.example.myapplication.ui.shared.theme.SnProFamily
 import com.example.myapplication.ui.shared.CollisionDirection
 import com.example.myapplication.ui.shared.inertialCollision
@@ -674,6 +681,11 @@ val HeroiconsRectangleStack: ImageVector
 private val CustomDarkBorder = Color.White.copy(alpha = 0.08f)
 private val IconFilterColor = Color(0xFFE91E63)
 
+private sealed interface SortGridSelection {
+    data class Sort(val option: SortOption, val isAscending: Boolean) : SortGridSelection
+    data object Genres : SortGridSelection
+}
+
 fun SortOption.getLabel(strings: UiStrings): String = when (this) {
     SortOption.RATING -> strings.ratingHigh
     SortOption.EPISODES -> strings.episodesHigh
@@ -692,6 +704,17 @@ fun SortOption.getAccentColor(): Color = when (this) {
     SortOption.TITLE -> Color(0xFF5E5CE6)
 }
 
+private val SortIconDimBlendDark = Color(0xFF070B10)
+private val SortIconDimBlendLight = Color(0xFFEEF1F6)
+
+/** Неактивная плитка: тот же оттенок иконки, но ниже светимость (без ухода в серый монохром). */
+private fun sortIconTintInactive(accent: Color, isDark: Boolean): Color =
+    lerp(accent, if (isDark) SortIconDimBlendDark else SortIconDimBlendLight, 0.58f)
+
+/** Активная плитка: лёгкий подъём светимости, оттенок сохраняем. */
+private fun sortIconTintActive(accent: Color): Color =
+    lerp(accent, Color.White, 0.2f)
+
 // ==========================================
 // SORT & FILTER OVERLAYS
 // ==========================================
@@ -703,27 +726,30 @@ fun SortFilterOverlay(
     sortOption: SortOption,
     sortAscending: Boolean = false,
     filterSelectedTags: List<String>,
-    filterCategoryType: String,
-    currentLanguage: AppLanguage,
     onDismiss: () -> Unit,
-    onSortSelected: (SortOption) -> Unit,
-    onOpenGenreFilter: () -> Unit
+    onApplySort: (SortOption, Boolean) -> Unit,
+    onApplyOpenGenreFilter: () -> Unit
 ) {
+    val view = LocalView.current
     val isDark = isAppInDarkTheme()
-    val panelBgColor = if (isDark) DarkSurface else MaterialTheme.colorScheme.surface
-    val itemCardColor = if (isDark) DarkSurfaceVariant else MaterialTheme.colorScheme.surfaceVariant
-    val itemBorderColor = if (isDark) CustomDarkBorder else MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)
+    val panelBg = if (isDark) DarkBackground else MaterialTheme.colorScheme.surface
+    val rim = if (isDark) OverlayThemeTokens.RimDark else MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)
+    val muted = if (isDark) OverlayThemeTokens.LabelMutedDark else MaterialTheme.colorScheme.onSurfaceVariant
+    val onCard = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
+    val cardBg = if (isDark) {
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
 
-    val collisionState = rememberInertialCollisionState()
+    val isOpening = visibleState.targetState
+    var draftSelection by remember(sortOption, sortAscending, isOpening) {
+        mutableStateOf<SortGridSelection>(SortGridSelection.Sort(sortOption, sortAscending))
+    }
 
-    LaunchedEffect(visibleState.targetState) {
-        if (visibleState.targetState) {
-            collisionState.triggerCollision(
-                impactForce = 45f,
-                stiffness = 220f,
-                dampingRatio = 0.45f
-            )
-        }
+    val updateSelection: (SortGridSelection) -> Unit = {
+        performHaptic(view, "light")
+        draftSelection = it
     }
 
     BackHandler { onDismiss() }
@@ -731,13 +757,13 @@ fun SortFilterOverlay(
     Box(modifier = Modifier.fillMaxSize()) {
         AnimatedVisibility(
             visibleState = visibleState,
-            enter = fadeIn(animationSpec = tween(220)),
-            exit = fadeOut(animationSpec = tween(180))
+            enter = fadeIn(animationSpec = tween(300)),
+            exit = fadeOut(animationSpec = tween(300))
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.35f))
+                    .background(Color.Black.copy(alpha = OverlayThemeTokens.ScrimAlpha))
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
@@ -749,7 +775,7 @@ fun SortFilterOverlay(
             visibleState = visibleState,
             enter = scaleIn(
                 transformOrigin = TransformOrigin(1f, 0f),
-                animationSpec = spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMediumLow)
+                animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
             ) + fadeIn(),
             exit = scaleOut(
                 transformOrigin = TransformOrigin(1f, 0f),
@@ -760,113 +786,204 @@ fun SortFilterOverlay(
             Column(
                 modifier = Modifier
                     .statusBarsPadding()
-                    .padding(top = 90.dp, end = 16.dp)
-                    .width(280.dp)
+                    .padding(top = OverlayThemeTokens.PanelPaddingTop, end = OverlayThemeTokens.PanelPaddingEnd)
+                    .width(OverlayThemeTokens.PanelWidth)
+                    .wrapContentHeight()
             ) {
                 Card(
-                    shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = panelBgColor),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
-                    border = BorderStroke(0.5.dp, if (isDark) itemBorderColor else Color.Black.copy(alpha = 0.06f)),
-                    modifier = Modifier.clickable(enabled = false) {}
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "Sort by",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.secondary,
-                            modifier = Modifier
-                                .padding(bottom = 12.dp, start = 4.dp)
-                                .inertialCollision(
-                                    state = collisionState,
-                                    index = 0,
-                                    direction = CollisionDirection.TopDown
-                                )
+                    shape = RoundedCornerShape(OverlayThemeTokens.PanelCornerRadius),
+                    colors = CardDefaults.cardColors(containerColor = panelBg),
+                    elevation = CardDefaults.cardElevation(defaultElevation = OverlayThemeTokens.CardElevation),
+                    border = BorderStroke(1.dp, rim),
+                    modifier = Modifier
+                        .padding(
+                            top = OverlayThemeTokens.CardOuterPaddingTop,
+                            end = OverlayThemeTokens.CardOuterPaddingEnd
                         )
-
-                        SortOption.entries.forEachIndexed { sortIndex, option ->
-                            val isSelected = sortOption == option
-                            val accentColor = option.getAccentColor()
-                            val directionIcon = if (isSelected) {
-                                if (sortAscending) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown
-                            } else null
-
-                            SortPillCard(
-                                icon = option.getIcon(),
-                                title = option.getLabel(strings),
-                                isSelected = isSelected,
-                                cardColor = if (isSelected) accentColor.copy(alpha = 0.1f) else itemCardColor,
-                                borderColor = if (isSelected) accentColor.copy(alpha = 0.4f) else itemBorderColor,
-                                iconBgColor = if (isSelected) accentColor else accentColor.copy(alpha = 0.12f),
-                                iconTintColor = if (isSelected) Color.White else accentColor,
-                                modifier = Modifier.inertialCollision(
-                                    state = collisionState,
-                                    index = sortIndex + 1,
-                                    baseMultiplier = 4.5f,
-                                    direction = CollisionDirection.TopDown
-                                ),
+                        .pointerInput(Unit) {
+                            detectTapGestures { /* поглощаем тап, без семантики clickable */ }
+                        }
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .padding(
+                                start = OverlayThemeTokens.PanelInnerPaddingStart,
+                                top = OverlayThemeTokens.PanelInnerPaddingTop,
+                                end = OverlayThemeTokens.PanelInnerPaddingEnd,
+                                bottom = OverlayThemeTokens.PanelInnerPaddingBottom
+                            )
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = strings.sortSheetTitle,
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = onCard,
+                                    fontSize = 22.sp
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = strings.sortSheetSubtitle,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = muted
+                                )
+                            }
+                            IconButton(
                                 onClick = {
-                                    onSortSelected(option)
+                                    performHaptic(view, "light")
                                     onDismiss()
                                 },
-                                contentEnd = {
-                                    if (directionIcon != null) {
-                                        Icon(
-                                            imageVector = directionIcon,
-                                            contentDescription = null,
-                                            tint = accentColor,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
-                                }
-                            )
-                            Spacer(Modifier.height(8.dp))
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = strings.nottifCloseCd,
+                                    tint = muted,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
 
-                        HorizontalDivider(
-                            modifier = Modifier.padding(vertical = 12.dp),
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
-                        )
+                        Spacer(Modifier.height(18.dp))
 
                         val activeFiltersCount = filterSelectedTags.size
-                        val filterIndex = SortOption.entries.size + 1
-                        SortPillCard(
-                            icon = Icons.Outlined.FilterList,
-                            title = strings.filterByGenre,
-                            isSelected = activeFiltersCount > 0,
-                            cardColor = itemCardColor,
-                            borderColor = itemBorderColor,
-                            iconBgColor = IconFilterColor.copy(alpha = 0.12f),
-                            iconTintColor = IconFilterColor,
-                            modifier = Modifier.inertialCollision(
-                                state = collisionState,
-                                index = filterIndex,
-                                baseMultiplier = 4.5f,
-                                direction = CollisionDirection.TopDown
-                            ),
+
+                        Column(verticalArrangement = Arrangement.spacedBy(OverlayThemeTokens.GridSpacing)) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(IntrinsicSize.Max),
+                                horizontalArrangement = Arrangement.spacedBy(OverlayThemeTokens.GridSpacing)
+                            ) {
+                                SortSortTile(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight(),
+                                    option = SortOption.RATING,
+                                    title = strings.ratingHigh,
+                                    subtitle = strings.sortSubtitleRating,
+                                    icon = SortOption.RATING.getIcon(),
+                                    accentColor = SortOption.RATING.getAccentColor(),
+                                    selection = draftSelection,
+                                    strings = strings,
+                                    isDark = isDark,
+                                    rim = rim,
+                                    cardBg = cardBg,
+                                    muted = muted,
+                                    onSelect = updateSelection
+                                )
+                                SortSortTile(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight(),
+                                    option = SortOption.EPISODES,
+                                    title = strings.sortTileEpisodesTitle,
+                                    subtitle = strings.sortSubtitleEpisodes,
+                                    icon = SortOption.EPISODES.getIcon(),
+                                    accentColor = SortOption.EPISODES.getAccentColor(),
+                                    selection = draftSelection,
+                                    strings = strings,
+                                    isDark = isDark,
+                                    rim = rim,
+                                    cardBg = cardBg,
+                                    muted = muted,
+                                    onSelect = updateSelection
+                                )
+                            }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(IntrinsicSize.Max),
+                                horizontalArrangement = Arrangement.spacedBy(OverlayThemeTokens.GridSpacing)
+                            ) {
+                                SortSortTile(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight(),
+                                    option = SortOption.TITLE,
+                                    title = strings.titleAZ,
+                                    subtitle = strings.sortSubtitleTitle,
+                                    icon = SortOption.TITLE.getIcon(),
+                                    accentColor = SortOption.TITLE.getAccentColor(),
+                                    selection = draftSelection,
+                                    strings = strings,
+                                    isDark = isDark,
+                                    rim = rim,
+                                    cardBg = cardBg,
+                                    muted = muted,
+                                    onSelect = updateSelection
+                                )
+                                GenreSortTile(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight(),
+                                    title = strings.filterByGenre,
+                                    subtitle = strings.sortSubtitleGenres,
+                                    icon = Icons.Outlined.FilterList,
+                                    selection = draftSelection,
+                                    isDark = isDark,
+                                    rim = rim,
+                                    cardBg = cardBg,
+                                    muted = muted,
+                                    badgeCount = activeFiltersCount,
+                                    onSelect = updateSelection
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(16.dp))
+
+                        Button(
                             onClick = {
-                                onOpenGenreFilter()
-                                onDismiss()
-                            },
-                            contentEnd = {
-                                if (activeFiltersCount > 0) {
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(CircleShape)
-                                            .background(IconFilterColor)
-                                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                                    ) {
-                                        Text(
-                                            text = activeFiltersCount.toString(),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color.White,
-                                            fontSize = 11.sp
-                                        )
+                                when (val d = draftSelection) {
+                                    SortGridSelection.Genres -> {
+                                        onApplyOpenGenreFilter()
+                                        onDismiss()
+                                    }
+                                    is SortGridSelection.Sort -> {
+                                        if (d.option == sortOption && d.isAscending == sortAscending) {
+                                            onDismiss()
+                                        } else {
+                                            onApplySort(d.option, d.isAscending)
+                                            onDismiss()
+                                        }
                                     }
                                 }
-                            }
-                        )
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp),
+                            shape = RoundedCornerShape(OverlayThemeTokens.ApplyButtonCornerRadius),
+                            colors = if (isDark) {
+                                ButtonDefaults.buttonColors(
+                                    containerColor = OverlayThemeTokens.ApplyButtonContainerDark,
+                                    contentColor = OverlayThemeTokens.ApplyButtonLabelSoft
+                                )
+                            } else {
+                                ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+                                    contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.82f)
+                                )
+                            },
+                            elevation = ButtonDefaults.buttonElevation(
+                                defaultElevation = 0.dp,
+                                pressedElevation = 0.dp,
+                                focusedElevation = 0.dp,
+                                hoveredElevation = 0.dp
+                            )
+                        ) {
+                            Text(
+                                text = strings.sortApply,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 15.sp
+                            )
+                        }
                     }
                 }
             }
@@ -874,75 +991,234 @@ fun SortFilterOverlay(
     }
 }
 
-// ==========================================
-// КОМПОНЕНТ КАРТОЧКИ СОРТИРОВКИ
-// ==========================================
 @Composable
-private fun SortPillCard(
-    icon: ImageVector,
+private fun SortSortTile(
+    option: SortOption,
     title: String,
-    subtitle: String? = null,
-    isSelected: Boolean,
-    cardColor: Color,
-    borderColor: Color,
-    iconBgColor: Color,
-    iconTintColor: Color,
+    subtitle: String,
+    icon: ImageVector,
+    accentColor: Color,
+    selection: SortGridSelection,
+    strings: UiStrings,
+    isDark: Boolean,
+    rim: Color,
+    cardBg: Color,
+    muted: Color,
     modifier: Modifier = Modifier,
-    contentEnd: (@Composable () -> Unit)? = null,
-    onClick: () -> Unit
+    onSelect: (SortGridSelection) -> Unit
 ) {
-    Row(
+    val isActive = selection is SortGridSelection.Sort && selection.option == option
+    val isAscending =
+        if (selection is SortGridSelection.Sort) selection.isAscending else true
+
+    val animatedGlowAlpha by animateFloatAsState(
+        targetValue = if (isActive) 0.38f else 0f,
+        animationSpec = tween(300),
+        label = "sortGlowAlpha"
+    )
+    val targetIconTint =
+        if (isActive) sortIconTintActive(accentColor) else sortIconTintInactive(accentColor, isDark)
+    val animatedIconTint by animateColorAsState(
+        targetValue = targetIconTint,
+        animationSpec = tween(300),
+        label = "sortIconTint"
+    )
+
+    val shape = RoundedCornerShape(OverlayThemeTokens.TileCornerRadius)
+    val tileBg = if (isDark) OverlayThemeTokens.TileBackgroundDark else cardBg
+    val glowStrength =
+        if (isDark) animatedGlowAlpha
+        else animatedGlowAlpha * OverlayThemeTokens.SortTileGlowLightFactor
+
+    Box(
         modifier = modifier
-            .fillMaxWidth()
-            .clip(CircleShape)
-            .background(cardColor)
-            .border(1.dp, borderColor, CircleShape)
-            .clickable { onClick() }
-            .padding(vertical = 12.dp, horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .fillMaxHeight()
+            .defaultMinSize(minHeight = OverlayThemeTokens.SortTileMinHeight)
+            .clip(shape)
+            .background(tileBg)
+            .tileGlow(accentColor, glowStrength)
+            .border(1.dp, rim, shape)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) {
+                onSelect(
+                    if (isActive) {
+                        SortGridSelection.Sort(option, !isAscending)
+                    } else {
+                        SortGridSelection.Sort(option, isAscending = false)
+                    }
+                )
+            }
+            .padding(12.dp)
     ) {
-        Box(
-            modifier = Modifier
-                .size(42.dp)
-                .clip(CircleShape)
-                .background(iconBgColor),
-            contentAlignment = Alignment.Center
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = iconTintColor,
-                modifier = Modifier.size(22.dp)
-            )
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(OverlayThemeTokens.IconBoxCorner))
+                    .background(
+                        if (isDark) OverlayThemeTokens.TileIconBgDark
+                        else MaterialTheme.colorScheme.surface.copy(alpha = 0.65f)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = animatedIconTint,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            Column {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = if (isActive) {
+                        if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
+                    } else {
+                        muted
+                    },
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (isActive) {
+                    Text(
+                        text = if (isAscending) strings.sortOrderAscending else strings.sortOrderDescending,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (isDark) {
+                            Color.White.copy(alpha = 0.68f)
+                        } else {
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f)
+                        },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                } else {
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = muted,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
         }
-        Spacer(Modifier.width(16.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            if (subtitle != null) {
-                Spacer(Modifier.height(2.dp))
+    }
+}
+
+@Composable
+private fun GenreSortTile(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    selection: SortGridSelection,
+    isDark: Boolean,
+    rim: Color,
+    cardBg: Color,
+    muted: Color,
+    modifier: Modifier = Modifier,
+    badgeCount: Int = 0,
+    onSelect: (SortGridSelection) -> Unit
+) {
+    val isActive = selection == SortGridSelection.Genres
+
+    val animatedGlowAlpha by animateFloatAsState(
+        targetValue = if (isActive) 0.38f else 0f,
+        animationSpec = tween(300),
+        label = "genreGlowAlpha"
+    )
+    val targetIconTint =
+        if (isActive) sortIconTintActive(IconFilterColor) else sortIconTintInactive(IconFilterColor, isDark)
+    val animatedIconTint by animateColorAsState(
+        targetValue = targetIconTint,
+        animationSpec = tween(300),
+        label = "genreIconTint"
+    )
+
+    val shape = RoundedCornerShape(OverlayThemeTokens.TileCornerRadius)
+    val tileBg = if (isDark) OverlayThemeTokens.TileBackgroundDark else cardBg
+    val glowStrength =
+        if (isDark) animatedGlowAlpha
+        else animatedGlowAlpha * OverlayThemeTokens.SortTileGlowLightFactor
+
+    Box(
+        modifier = modifier
+            .fillMaxHeight()
+            .defaultMinSize(minHeight = OverlayThemeTokens.SortTileMinHeight)
+            .clip(shape)
+            .background(tileBg)
+            .tileGlow(IconFilterColor, glowStrength)
+            .border(1.dp, rim, shape)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { onSelect(SortGridSelection.Genres) }
+            .padding(12.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(OverlayThemeTokens.IconBoxCorner))
+                    .background(
+                        if (isDark) OverlayThemeTokens.TileIconBgDark
+                        else MaterialTheme.colorScheme.surface.copy(alpha = 0.65f)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = animatedIconTint,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            Column {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = if (isActive) {
+                        if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
+                    } else {
+                        muted
+                    },
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.secondary,
-                    maxLines = 1
+                    color = muted,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
+                if (badgeCount > 0) {
+                    Spacer(Modifier.height(6.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(IconFilterColor.copy(alpha = 0.35f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = badgeCount.toString(),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                }
             }
-        }
-        if (contentEnd != null) {
-            Spacer(Modifier.width(8.dp))
-            contentEnd()
-        } else if (isSelected) {
-            Icon(
-                imageVector = Icons.Default.Check,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.size(20.dp)
-            )
         }
     }
 }
@@ -960,7 +1236,7 @@ fun GenreFilterOverlay(
 ) {
     val genreRepository: GenreRepository = org.koin.compose.koinInject()
     val isDark = isAppInDarkTheme()
-    val panelBg = if (isDark) DarkSurface else MaterialTheme.colorScheme.surface
+    val panelBg = if (isDark) DarkBackground else MaterialTheme.colorScheme.surface
     val borderColor = if (isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.06f)
 
     val collisionState = rememberInertialCollisionState()
@@ -1035,7 +1311,7 @@ fun GenreFilterOverlay(
                             .fillMaxWidth()
                             .inertialCollision(state = collisionState, index = 1, baseMultiplier = 2.5f)
                     ) {
-                        GenreSelectionSection(
+                        GenreFilterPillSelection(
                             strings = strings,
                             currentLanguage = currentLanguage,
                             selectedTags = filterSelectedTags,
@@ -1059,15 +1335,16 @@ fun GenreFilterOverlay(
                                 .height(52.dp),
                             shape = RoundedCornerShape(24.dp),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary
+                                containerColor = OverlayThemeTokens.IconSyncBlue,
+                                contentColor = Color.White
                             ),
                             border = null
                         ) {
                             Text(
-                                "Done",
+                                text = strings.genreFilterDone,
                                 fontWeight = FontWeight.Bold,
-                                fontFamily = SnProFamily
+                                fontFamily = SnProFamily,
+                                color = Color.White
                             )
                         }
                     }

@@ -23,12 +23,12 @@ Vetra is a powerful yet minimal **local-first media manager**.
 
 Originally built as a personal anime tracker, it evolved into a flexible and scalable system with:
 
-• modern glass UI  
-• strict unidirectional data flow (UDF / MVI)  
-• clean architecture (Domain-driven)  
-• reactive data layer (Flow + SQLDelight)  
-• optional cloud sync  
-• advanced search (API + image recognition)
+- modern glass UI
+- strict unidirectional data flow (UDF / MVI)
+- clean architecture (Domain-driven)
+- reactive data layer (Flow + SQLDelight)
+- optional cloud sync
+- advanced search (API + image recognition)
 
 ---
 
@@ -77,7 +77,7 @@ Originally built as a personal anime tracker, it evolved into a flexible and sca
 - API search (movies + anime)
 - Auto-fetch metadata (cover, description, rating)
 
-<h4>🧠 Image-based search (v3.1.x)</h4>
+<h4>🧠 Image-based search (v3.1.x family)</h4>
 
 - Identify content from a screenshot
 - Anime → trace.moe
@@ -110,11 +110,28 @@ Vetra 3.x introduces a fully reimagined UI system:
 - Hardware-accelerated blur with fallback
 - GlassActionDock & Bottom Navigation
 - Unified GlassIconButton system
-- Tile-based settings (3.1.x)
+- Tile-based settings (3.1.x family)
 - Redesigned Details screen
 - Predictive Back support
 - Physics-based animations
-- Calm, spacious layout system (3.1.x)
+- Calm, spacious layout system (3.1.x family)
+
+### 🔮 Next Design Language (3.2.x family)
+
+**Codename: _The Depth of Light_**
+
+The upcoming 3.2.x family evolves the glass paradigm into a deeper, more layered visual system:
+
+- enhanced depth perception through light and translucency
+- more physically accurate motion and layering
+- refined contrast between foreground and background elements
+- focus on light-driven hierarchy instead of flat glass surfaces
+
+Result:
+
+- deeper visual immersion
+- stronger spatial hierarchy
+- more natural interaction feedback
 
 Result:
 
@@ -133,7 +150,6 @@ Result:
   - SaveAnimeUseCase
   - UpdateCommentUseCase
   - GetAnimeForEditUseCase
-
 - DTO layer (SaveAnimeParams)
 - No Android dependencies in ViewModels
 
@@ -161,7 +177,7 @@ Result:
 
 - Ktor (CIO)
 - Apollo GraphQL
-- Improved API pipeline (3.1.x)
+- Improved API pipeline (3.1.x family)
 - Structured error handling
 
 ---
@@ -206,3 +222,14 @@ Architecture remains local-first.
 - No hidden network calls
 
 Local folder:
+
+<p align="center">
+  <img src="1000008355.png" width="700">
+</p>
+
+---
+
+<h2>📄 License</h2>
+
+This project is licensed under the **MIT License**.  
+See the [LICENSE](LICENSE) file for details.

@@ -72,7 +72,9 @@ fun ApiSearchResultCard(
     addLabel: String = "Add",
     addedLabel: String = "Added",
     onAddClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** На экранах с локальной тёмной темой (Visual Search) глобальный [isAppInDarkTheme] может быть false — форсируем тёмный вид карточки. */
+    forceDarkCardStyle: Boolean = false
 ) {
     val state = remember(result, isAdded, isLoading, displayGenres) {
         val r10 = result.rating?.let { if (it > 10) it / 10 else it } ?: 0
@@ -91,7 +93,7 @@ fun ApiSearchResultCard(
         )
     }
 
-    val isDark = isAppInDarkTheme()
+    val isDark = forceDarkCardStyle || isAppInDarkTheme()
     val cardBg = if (isDark) Color(0xFF1C1F28) else Color.White
     val cardShadowColor = if (isDark) Color.Black.copy(alpha = 0.5f) else Color.Black.copy(alpha = 0.08f)
     val subtitleColor = if (isDark) Color(0xFF9898A0) else Color(0xFF8E8E93)

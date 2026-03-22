@@ -1,0 +1,338 @@
+package com.example.myapplication.ui.addedit
+
+import android.net.Uri
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
+import com.example.myapplication.isAppInDarkTheme
+import com.example.myapplication.ui.shared.theme.BrandBlue
+import com.example.myapplication.ui.shared.theme.SnProFamily
+
+@Composable
+fun AddEditSectionLabel(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text = text,
+        style = TextStyle(
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            fontFamily = SnProFamily,
+            letterSpacing = 1.6.sp,
+            color = AddEditColors.SectionLabel
+        ),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(bottom = 10.dp)
+    )
+}
+
+@OptIn(ExperimentalSharedTransitionApi::class)
+@Composable
+fun SharedTransitionScope.AddEditCoverPhotoSlot(
+    imageUri: Uri?,
+    imageFilePath: String?,
+    coverPhotoCta: String,
+    animeId: String?,
+    animatedVisibilityScope: AnimatedVisibilityScope,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val ctx = LocalContext.current
+    val hasImage = imageUri != null || imageFilePath != null
+    val isDark = isAppInDarkTheme()
+    val scheme = MaterialTheme.colorScheme
+    val coverBrush = if (isDark) {
+        CoverGradientBrush
+    } else {
+        Brush.linearGradient(
+            colors = listOf(
+                scheme.surfaceVariant,
+                lerp(scheme.primaryContainer, scheme.surfaceVariant, 0.5f)
+            ),
+            start = Offset.Zero,
+            end = Offset(0f, Float.POSITIVE_INFINITY)
+        )
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth(0.5f)
+            .aspectRatio(0.7f)
+            .clip(RoundedCornerShape(28.dp))
+            .background(coverBrush)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        val imageModifier = if (animeId != null) Modifier.sharedElement(
+            rememberSharedContentState(key = "anime_${animeId}"),
+            animatedVisibilityScope = animatedVisibilityScope
+        ) else Modifier
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(imageModifier)
+                .clip(RoundedCornerShape(28.dp))
+        ) {
+            if (imageUri != null) {
+                AsyncImage(
+                    model = ImageRequest.Builder(ctx)
+                        .data(imageUri)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else if (imageFilePath != null) {
+                AsyncImage(
+                    model = ImageRequest.Builder(ctx)
+                        .data(imageFilePath)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+
+        if (!hasImage) {
+            val iconCircleBg =
+                if (isDark) AddEditColors.CoverIconCircle.copy(alpha = 0.6f)
+                else scheme.primary.copy(alpha = 0.12f)
+            val cameraTint = if (isDark) BrandBlue else scheme.primary
+            val ctaColor =
+                if (isDark) Color.White.copy(alpha = 0.7f) else scheme.onSurfaceVariant
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(iconCircleBg),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.CameraAlt,
+                        contentDescription = null,
+                        tint = cameraTint,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = coverPhotoCta,
+                    style = TextStyle(
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        fontFamily = SnProFamily,
+                        letterSpacing = 1.4.sp,
+                        color = ctaColor
+                    )
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun PillTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+    keyboardType: KeyboardType = KeyboardType.Text,
+    singleLine: Boolean = true,
+    maxLines: Int = 1,
+    trailingIcon: @Composable (() -> Unit)? = null
+) {
+    val isDark = isAppInDarkTheme()
+    var isFocused by remember { mutableStateOf(false) }
+    val bgColor = if (isDark) AddEditColors.PillBackground else AddEditColors.PillBackgroundLight
+    val borderColor by animateColorAsState(
+        targetValue = if (isFocused) BrandBlue.copy(alpha = 0.5f) else Color.Transparent,
+        label = "pillBorder"
+    )
+
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier
+            .fillMaxWidth()
+            .onFocusChanged { isFocused = it.isFocused },
+        singleLine = singleLine,
+        maxLines = maxLines,
+        textStyle = TextStyle(
+            fontSize = 16.sp,
+            fontFamily = SnProFamily,
+            color = MaterialTheme.colorScheme.onSurface
+        ),
+        cursorBrush = SolidColor(BrandBlue),
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        decorationBox = { innerTextField ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(50))
+                    .background(bgColor)
+                    .then(
+                        if (borderColor != Color.Transparent)
+                            Modifier.background(Color.Transparent)
+                        else Modifier
+                    )
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(modifier = Modifier.weight(1f)) {
+                    if (value.isEmpty()) {
+                        Text(
+                            text = placeholder,
+                            style = TextStyle(
+                                fontSize = 16.sp,
+                                fontFamily = SnProFamily,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
+                            )
+                        )
+                    }
+                    innerTextField()
+                }
+                if (trailingIcon != null) {
+                    Spacer(Modifier.width(8.dp))
+                    trailingIcon()
+                }
+            }
+        }
+    )
+}
+
+@Composable
+fun PillTextFieldWithCopy(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+    singleLine: Boolean = false,
+    maxLines: Int = 4
+) {
+    val clipboardManager = LocalClipboardManager.current
+    val ctx = LocalContext.current
+
+    PillTextField(
+        value = value,
+        onValueChange = onValueChange,
+        placeholder = placeholder,
+        modifier = modifier,
+        singleLine = singleLine,
+        maxLines = maxLines,
+        trailingIcon = if (value.isNotEmpty()) {
+            {
+                Icon(
+                    Icons.Default.ContentCopy,
+                    contentDescription = "Copy",
+                    tint = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier
+                        .size(18.dp)
+                        .clickable {
+                            clipboardManager.setText(AnnotatedString(value))
+                            @Suppress("DEPRECATION")
+                            android.widget.Toast
+                                .makeText(ctx, "Copied!", android.widget.Toast.LENGTH_SHORT)
+                                .show()
+                        }
+                )
+            }
+        } else null
+    )
+}
+
+@Composable
+fun AddEditEpisodeQuickSelect(
+    selectedEpisodes: String,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val suggestions = listOf("12", "13", "24", "36", "48")
+
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)
+    ) {
+        suggestions.forEach { ep ->
+            val isSelected = ep == selectedEpisodes
+            Box(contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .then(
+                            if (isSelected) Modifier.neonGlow(
+                                color = AddEditColors.QuickSelectGlow,
+                                radius = 14.dp,
+                                alpha = 0.6f
+                            ) else Modifier
+                        )
+                        .clip(CircleShape)
+                        .then(
+                            if (isSelected) {
+                                Modifier.background(AddEditColors.QuickSelectActiveBg)
+                            } else {
+                                Modifier
+                                    .background(Color.Transparent)
+                                    .border(
+                                        width = 1.dp,
+                                        color = Color.White.copy(alpha = 0.35f),
+                                        shape = CircleShape
+                                    )
+                            }
+                        )
+                        .clickable { onSelect(ep) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = ep,
+                        style = TextStyle(
+                            fontSize = 13.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            fontFamily = SnProFamily,
+                            color = if (isSelected) Color.White
+                            else Color.White.copy(alpha = 0.85f)
+                        )
+                    )
+                }
+            }
+        }
+    }
+}

@@ -20,6 +20,7 @@ class SQLDelightDatabaseFactory(private val context: Context) {
 
     private fun getDriver(): SqlDriver {
         if (cachedDriver == null) {
+            alignLegacyAnimeDbUserVersion()
             cachedDriver = AndroidSqliteDriver(
                 schema = AnimeDatabase.Schema,
                 context = context,
@@ -27,6 +28,35 @@ class SQLDelightDatabaseFactory(private val context: Context) {
             )
         }
         return cachedDriver!!
+    }
+
+    /**
+     * Legacy installs where columns were added outside SQLDelight may have new columns but stale `user_version`.
+     * Bump version so SQLDelight does not re-run ALTER (duplicate column).
+     */
+    private fun alignLegacyAnimeDbUserVersion() {
+        val dbFile = context.getDatabasePath("anime.db")
+        if (!dbFile.exists()) return
+        val targetVersion = AnimeDatabase.Schema.version
+        SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READWRITE).use { db ->
+            val ver = db.rawQuery("PRAGMA user_version", null).use { c ->
+                if (c.moveToFirst()) c.getLong(0) else 0L
+            }
+            if (ver >= targetVersion) return@use
+            val cols = db.rawQuery("PRAGMA table_info(anime)", null).use { c ->
+                buildSet {
+                    while (c.moveToNext()) add(c.getString(1))
+                }
+            }
+            val hasSync = cols.contains("sync_status")
+            val hasComment = cols.contains("comment")
+            when {
+                hasSync && hasComment ->
+                    db.execSQL("PRAGMA user_version = $targetVersion")
+                hasSync && !hasComment && targetVersion > 1 ->
+                    db.execSQL("PRAGMA user_version = ${targetVersion - 1}")
+            }
+        }
     }
 
     fun getDatabase(): AnimeDatabase {

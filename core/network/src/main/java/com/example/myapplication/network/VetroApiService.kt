@@ -6,9 +6,6 @@ import io.ktor.client.request.url
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.URLProtocol
 import io.ktor.http.appendPathSegments
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -23,15 +20,17 @@ import kotlinx.serialization.json.jsonPrimitive
 class VetroApiService(
     private val httpClient: HttpClient,
     private val shikimori: ShikimoriRemoteDataSource,
-    private val aniList: AniListRemoteDataSource
+    private val aniList: AniListRemoteDataSource,
+    private val heavyRate: TokenBucketRateLimiter,
+    private val searchRate: TokenBucketRateLimiter,
+    private val burstRate: TokenBucketRateLimiter
 ) : ApiService {
 
-    private val rateLimit = Mutex()
     private val json = Json { ignoreUnknownKeys = true }
 
     override suspend fun fetchDetails(title: String, language: AppLanguage): Result<AnimeDetails?> {
         return runCatching {
-            rateLimit.withLock { delay(1200) }
+            heavyRate.acquire()
             val query = title.trim()
             when (language) {
                 AppLanguage.EN -> aniList.fetchAnimeDetails(query).getOrNull()
@@ -48,7 +47,7 @@ class VetroApiService(
         appContentType: AppContentType
     ): Result<Pair<Int, String>?> {
         return runCatching {
-            rateLimit.withLock { delay(1200) }
+            heavyRate.acquire()
             when (appContentType) {
                 AppContentType.ANIME -> {
                     aniList.findTotalEpisodes(title.trim()).getOrNull()
@@ -62,7 +61,7 @@ class VetroApiService(
 
     override suspend fun searchApi(query: String, contentType: AppContentType, language: AppLanguage): Result<List<ApiSearchResult>> {
         return runCatching {
-            rateLimit.withLock { delay(400) }
+            searchRate.acquire()
             val q = query.trim()
             if (q.isEmpty()) return@runCatching emptyList<ApiSearchResult>()
             when (contentType) {
@@ -75,7 +74,7 @@ class VetroApiService(
 
     override suspend fun searchAnimeShikimoriOnly(query: String, language: AppLanguage): Result<List<ApiSearchResult>> {
         return runCatching {
-            rateLimit.withLock { delay(400) }
+            searchRate.acquire()
             val q = query.trim()
             if (q.isEmpty()) return@runCatching emptyList()
             val raw = shikimori.searchAnime(q, 20, language).getOrThrow()
@@ -115,7 +114,7 @@ class VetroApiService(
 
     override suspend fun mediaByAnilistId(id: Int): Result<ApiSearchResult?> {
         return runCatching {
-            rateLimit.withLock { delay(400) }
+            searchRate.acquire()
             aniList.mediaByAnilistId(id).getOrThrow()
         }
     }
@@ -167,9 +166,9 @@ class VetroApiService(
             raw.add(r)
         }
         shikimori.searchAnime(query, 20, language).getOrNull()?.forEach { addIfNew(it) }
-        rateLimit.withLock { delay(300) }
+        burstRate.acquire()
         aniList.searchAnime(query, 20, language).getOrNull()?.forEach { addIfNew(it) }
-        rateLimit.withLock { delay(300) }
+        burstRate.acquire()
         searchJikan(query, language).forEach { addIfNew(it) }
         return filterAndRankByQuery(query, raw)
     }

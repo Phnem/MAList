@@ -2,7 +2,6 @@ package com.example.myapplication
 
 import android.app.Application
 import android.content.Context
-import android.database.sqlite.SQLiteDatabase
 import android.os.Environment
 import android.util.Log
 import com.example.myapplication.di.appModule
@@ -25,8 +24,6 @@ class VetroApplication : Application(), SingletonImageLoader.Factory {
     override fun onCreate() {
         super.onCreate()
         runVetroDbMigrationIfNeeded()
-        runSyncStatusMigration()
-        runCommentColumnMigration()
         startKoin {
             androidContext(this@VetroApplication)
             modules(
@@ -90,29 +87,4 @@ class VetroApplication : Application(), SingletonImageLoader.Factory {
         }
     }
 
-    /** One-time migration: add sync_status column for Delta Sync (existing DBs). */
-    private fun runSyncStatusMigration() {
-        try {
-            val dbPath = getDatabasePath("anime.db")
-            if (!dbPath.exists()) return
-            SQLiteDatabase.openDatabase(dbPath.absolutePath, null, SQLiteDatabase.OPEN_READWRITE).use { db ->
-                db.execSQL("ALTER TABLE anime ADD COLUMN sync_status TEXT NOT NULL DEFAULT 'SYNCED'")
-            }
-        } catch (e: Exception) {
-            if (!e.message.orEmpty().contains("duplicate column name")) throw e
-        }
-    }
-
-    /** One-time migration: add comment column (existing DBs). */
-    private fun runCommentColumnMigration() {
-        try {
-            val dbPath = getDatabasePath("anime.db")
-            if (!dbPath.exists()) return
-            SQLiteDatabase.openDatabase(dbPath.absolutePath, null, SQLiteDatabase.OPEN_READWRITE).use { db ->
-                db.execSQL("ALTER TABLE anime ADD COLUMN comment TEXT NOT NULL DEFAULT ''")
-            }
-        } catch (e: Exception) {
-            if (!e.message.orEmpty().contains("duplicate column name")) throw e
-        }
-    }
 }

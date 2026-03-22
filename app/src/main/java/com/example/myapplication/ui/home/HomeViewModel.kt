@@ -228,13 +228,9 @@ class HomeViewModel(
         }
     }
 
-    fun updateSortOption(option: SortOption) {
-        _uiState.update {
-            if (it.sortOption == option) {
-                it.copy(sortAscending = !it.sortAscending)
-            } else {
-                it.copy(sortOption = option, sortAscending = false)
-            }
+    fun applySort(option: SortOption, isAscending: Boolean) {
+        _uiState.update { current ->
+            current.copy(sortOption = option, sortAscending = isAscending)
         }
     }
 

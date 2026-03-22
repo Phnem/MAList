@@ -2,6 +2,8 @@ package com.example.myapplication.ui.home
 
 import android.app.Activity
 import android.content.pm.PackageManager
+import android.graphics.RenderEffect
+import android.graphics.Shader
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -33,13 +35,17 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asComposeRenderEffect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
@@ -237,16 +243,13 @@ fun HomeScreen(
                         sortOption = uiState.sortOption,
                         sortAscending = uiState.sortAscending,
                         filterSelectedTags = uiState.filterTags,
-                        filterCategoryType = uiState.filterCategory,
-                        currentLanguage = currentLanguage,
                         onDismiss = { showSortOverlay = false },
-                        onSortSelected = { option ->
+                        onApplySort = { option, isAscending ->
                             performHaptic(view, "light")
-                            viewModel.updateSortOption(option)
+                            viewModel.applySort(option, isAscending)
                         },
-                        onOpenGenreFilter = {
+                        onApplyOpenGenreFilter = {
                             performHaptic(view, "light")
-                            showSortOverlay = false
                             viewModel.toggleGenreFilter()
                         }
                     )
@@ -280,7 +283,7 @@ fun HomeScreen(
                 }
             }
 
-            Column(modifier = Modifier.fillMaxSize().blur(blurAmount)) {
+            Column(modifier = Modifier.fillMaxSize().homeScrollBlur(blurAmount)) {
                 Box(modifier = Modifier.fillMaxSize().weight(1f).background(bgColor)) {
                     val list by viewModel.animeListFlow.collectAsStateWithLifecycle()
                     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
@@ -625,6 +628,24 @@ fun HomeScreen(
                 onDismiss = { showCSheet = false }
             )
         }
+    }
+}
+
+private fun Modifier.homeScrollBlur(blur: Dp): Modifier = composed {
+    when {
+        blur == 0.dp -> Modifier
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+            val px = with(LocalDensity.current) { blur.toPx() }
+            Modifier.graphicsLayer {
+                renderEffect = RenderEffect.createBlurEffect(
+                    px,
+                    px,
+                    Shader.TileMode.CLAMP
+                ).asComposeRenderEffect()
+                clip = true
+            }
+        }
+        else -> Modifier.blur(blur)
     }
 }
 

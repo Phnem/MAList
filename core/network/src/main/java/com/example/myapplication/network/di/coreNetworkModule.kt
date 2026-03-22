@@ -8,7 +8,7 @@ import com.example.myapplication.network.ShikimoriRemoteDataSource
 import com.example.myapplication.network.TraceMoeRemoteDataSource
 import com.example.myapplication.network.VetroApiService
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.cio.CIO
+import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.UserAgent
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
@@ -17,11 +17,21 @@ import io.ktor.client.plugins.logging.Logger
 import io.ktor.client.plugins.logging.Logging
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
+import com.example.myapplication.network.TokenBucketRateLimiter
+import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
+private val rateHeavy = named("api_rate_heavy")
+private val rateSearch = named("api_rate_search")
+private val rateBurst = named("api_rate_burst")
+
 val coreNetworkModule = module {
+    single(rateHeavy) { TokenBucketRateLimiter(maxTokens = 1.0, refillTokensPerSecond = 1.0 / 1.2) }
+    single(rateSearch) { TokenBucketRateLimiter(maxTokens = 1.0, refillTokensPerSecond = 1.0 / 0.4) }
+    single(rateBurst) { TokenBucketRateLimiter(maxTokens = 1.0, refillTokensPerSecond = 1.0 / 0.3) }
+
     single {
-        HttpClient(CIO) {
+        HttpClient(OkHttp) {
             install(ContentNegotiation) {
                 json(Json {
                     ignoreUnknownKeys = true
@@ -50,14 +60,17 @@ val coreNetworkModule = module {
             .addHttpHeader("Content-Type", "application/json")
             .build()
     }
-    single { ShikimoriRemoteDataSource(get<HttpClient>()) }
+    single { ShikimoriRemoteDataSource(get<HttpClient>(), get(rateBurst)) }
     single { TraceMoeRemoteDataSource(get<HttpClient>()) }
     single { AniListRemoteDataSource(get<ApolloClient>()) }
     single<ApiService> {
         VetroApiService(
             httpClient = get<HttpClient>(),
             shikimori = get(),
-            aniList = get()
+            aniList = get(),
+            heavyRate = get(rateHeavy),
+            searchRate = get(rateSearch),
+            burstRate = get(rateBurst)
         )
     }
 }

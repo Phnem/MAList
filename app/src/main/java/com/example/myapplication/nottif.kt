@@ -22,6 +22,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -75,6 +76,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -91,6 +93,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.myapplication.ui.shared.theme.DarkBackground
+import com.example.myapplication.ui.shared.theme.OverlayThemeTokens
 import com.example.myapplication.ui.settings.tileGlow
 import com.example.myapplication.utils.performHaptic
 import kotlinx.coroutines.launch
@@ -100,20 +103,16 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.max
 
-// —— Тёмная тема: фон панели = DarkBackground; плитки как в настройках (tileGlow) ——
-private val NottifRimDark = Color.White.copy(alpha = 0.09f)
-private val LabelMutedDark = Color(0xFF94A3B8)
+/** Как у плиток Sort/Genres: тёмный «стеклянный» квадрат или светлая подложка под иконку. */
+@Composable
+private fun nottifOverlayIconBoxBg(isDark: Boolean): Color =
+    if (isDark) OverlayThemeTokens.TileIconBgDark
+    else MaterialTheme.colorScheme.surface.copy(alpha = 0.65f)
 
-/** Иконки панели: фиксированные оттенки по запросу */
-private val NottifIconSyncBlue = Color(0xFF38BDF8)
-private val NottifIconSignalGreen = Color(0xFF34C759)
-private val NottifIconAccountYellow = Color(0xFFFFC400)
-
-/** Текст/иконки на яркой кнопке синхронизации */
-private val OnSyncBlueButton = Color.White
-
-/** Сплошная «выход» как на референсе (коралловый) */
-private val LogoutIconTint = Color(0xFFFF5A4D)
+@Composable
+private fun nottifOverlayCircleControlBg(isDark: Boolean): Color =
+    if (isDark) Color.Black.copy(alpha = 0.28f)
+    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)
 
 /** Пилюля метрик: без рамки AssistChip, полностью скруглённый контейнер. */
 @Composable
@@ -179,9 +178,9 @@ fun NotificationSyncOverlay(
         MaterialTheme.colorScheme.surfaceVariant
     }
     val darkTileBase = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-    val rim = if (isDark) NottifRimDark else MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)
+    val rim = if (isDark) OverlayThemeTokens.RimDark else MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)
     val onCard = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
-    val muted = if (isDark) LabelMutedDark else MaterialTheme.colorScheme.onSurfaceVariant
+    val muted = if (isDark) OverlayThemeTokens.LabelMutedDark else MaterialTheme.colorScheme.onSurfaceVariant
 
     val lastSyncTs = remember(syncState, visibleState.currentState, visibleState.targetState) {
         context.getSharedPreferences("dropbox_prefs", android.content.Context.MODE_PRIVATE)
@@ -206,7 +205,7 @@ fun NotificationSyncOverlay(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.45f))
+                    .background(Color.Black.copy(alpha = OverlayThemeTokens.ScrimAlpha))
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
@@ -229,23 +228,33 @@ fun NotificationSyncOverlay(
             Column(
                 modifier = Modifier
                     .statusBarsPadding()
-                    .padding(top = 88.dp, end = 12.dp)
-                    .width(340.dp)
+                    .padding(top = OverlayThemeTokens.PanelPaddingTop, end = OverlayThemeTokens.PanelPaddingEnd)
+                    .width(OverlayThemeTokens.PanelWidth)
                     .wrapContentHeight()
             ) {
                 // Небольшой внешний отступ, чтобы скругление Card не обрезало круглую кнопку закрытия
                 Card(
-                    shape = RoundedCornerShape(28.dp),
+                    shape = RoundedCornerShape(OverlayThemeTokens.PanelCornerRadius),
                     colors = CardDefaults.cardColors(containerColor = panelBg),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 16.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = OverlayThemeTokens.CardElevation),
                     border = BorderStroke(1.dp, rim),
                     modifier = Modifier
-                        .padding(top = 10.dp, end = 6.dp)
-                        .clickable(enabled = false) {}
+                        .padding(
+                            top = OverlayThemeTokens.CardOuterPaddingTop,
+                            end = OverlayThemeTokens.CardOuterPaddingEnd
+                        )
+                        .pointerInput(Unit) {
+                            detectTapGestures { /* поглощаем тап, без семантики clickable */ }
+                        }
                 ) {
                     Column(
                         modifier = Modifier
-                            .padding(start = 18.dp, top = 30.dp, end = 22.dp, bottom = 18.dp)
+                            .padding(
+                                start = OverlayThemeTokens.PanelInnerPaddingStart,
+                                top = OverlayThemeTokens.PanelInnerPaddingTop,
+                                end = OverlayThemeTokens.PanelInnerPaddingEnd,
+                                bottom = OverlayThemeTokens.PanelInnerPaddingBottom
+                            )
                             .verticalScroll(rememberScrollState())
                     ) {
                         // —— Header —— //
@@ -297,17 +306,14 @@ fun NotificationSyncOverlay(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .wrapContentHeight()
-                                .clip(RoundedCornerShape(22.dp))
-                                .then(
-                                    if (isDark) {
-                                        Modifier
-                                            .background(darkTileBase)
-                                            .tileGlow(NottifIconSyncBlue)
-                                    } else {
-                                        Modifier.background(cardBg)
-                                    }
+                                .clip(RoundedCornerShape(OverlayThemeTokens.MainTileCornerRadius))
+                                .background(if (isDark) darkTileBase else cardBg)
+                                .tileGlow(
+                                    OverlayThemeTokens.IconSyncBlue,
+                                    if (isDark) OverlayThemeTokens.TileGlowAlphaDark
+                                    else OverlayThemeTokens.TileGlowAlphaLight
                                 )
-                                .border(1.dp, rim, RoundedCornerShape(22.dp))
+                                .border(1.dp, rim, RoundedCornerShape(OverlayThemeTokens.MainTileCornerRadius))
                                 .padding(horizontal = 12.dp, vertical = 10.dp)
                         ) {
                             Row(
@@ -327,7 +333,7 @@ fun NotificationSyncOverlay(
                                     text = badgeText,
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = NottifIconSyncBlue,
+                                    color = OverlayThemeTokens.IconSyncBlue,
                                     letterSpacing = 0.8.sp,
                                     textAlign = TextAlign.End
                                 )
@@ -351,13 +357,13 @@ fun NotificationSyncOverlay(
                                     modifier = Modifier
                                         .size(40.dp)
                                         .clip(RoundedCornerShape(10.dp))
-                                        .background(Color.Black.copy(alpha = 0.35f)),
+                                        .background(nottifOverlayIconBoxBg(isDark)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.CloudSync,
                                         contentDescription = null,
-                                        tint = NottifIconSyncBlue,
+                                        tint = OverlayThemeTokens.IconSyncBlue,
                                         modifier = Modifier.size(22.dp)
                                     )
                                 }
@@ -394,8 +400,8 @@ fun NotificationSyncOverlay(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                val pillBg = NottifIconSyncBlue.copy(alpha = 0.28f)
-                                val pillContent = OnSyncBlueButton
+                                val pillBg = OverlayThemeTokens.IconSyncBlue.copy(alpha = 0.28f)
+                                val pillContent = OverlayThemeTokens.OnSyncBlueButton
                                 Row(
                                     modifier = Modifier
                                         .weight(1f)
@@ -427,7 +433,7 @@ fun NotificationSyncOverlay(
                                     modifier = Modifier
                                         .size(44.dp)
                                         .clip(CircleShape)
-                                        .background(Color.Black.copy(alpha = 0.28f))
+                                        .background(nottifOverlayCircleControlBg(isDark))
                                 ) {
                                     val infiniteTransition = rememberInfiniteTransition(label = "chk")
                                     val angle by infiniteTransition.animateFloat(
@@ -442,7 +448,7 @@ fun NotificationSyncOverlay(
                                     Icon(
                                         imageVector = Icons.Default.Refresh,
                                         contentDescription = strings.nottifCheckUpdatesCd,
-                                        tint = NottifIconSyncBlue,
+                                        tint = OverlayThemeTokens.IconSyncBlue,
                                         modifier = Modifier
                                             .size(22.dp)
                                             .graphicsLayer {
@@ -468,24 +474,24 @@ fun NotificationSyncOverlay(
                                     .weight(1f)
                                     .fillMaxHeight(),
                                 isDark = isDark,
-                                glowAccent = NottifIconSignalGreen,
+                                glowAccent = OverlayThemeTokens.IconSignalGreen,
                                 cardBg = cardBg,
                                 rim = rim,
                                 onCard = onCard,
                                 muted = muted,
-                                accentColor = NottifIconSignalGreen,
+                                accentColor = OverlayThemeTokens.IconSignalGreen,
                                 icon = {
                                     Box(
                                         modifier = Modifier
                                             .size(36.dp)
                                             .clip(RoundedCornerShape(10.dp))
-                                            .background(Color.Black.copy(alpha = 0.35f)),
+                                            .background(nottifOverlayIconBoxBg(isDark)),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
                                             imageVector = Icons.Outlined.SignalCellularAlt,
                                             contentDescription = null,
-                                            tint = NottifIconSignalGreen,
+                                            tint = OverlayThemeTokens.IconSignalGreen,
                                             modifier = Modifier.size(20.dp)
                                         )
                                     }
@@ -504,24 +510,24 @@ fun NotificationSyncOverlay(
                                     .weight(1f)
                                     .fillMaxHeight(),
                                 isDark = isDark,
-                                glowAccent = NottifIconAccountYellow,
+                                glowAccent = OverlayThemeTokens.IconAccountYellow,
                                 cardBg = cardBg,
                                 rim = rim,
                                 onCard = onCard,
                                 muted = muted,
-                                accentColor = NottifIconAccountYellow,
+                                accentColor = OverlayThemeTokens.IconAccountYellow,
                                 icon = {
                                     Box(
                                         modifier = Modifier
                                             .size(36.dp)
                                             .clip(RoundedCornerShape(10.dp))
-                                            .background(Color.Black.copy(alpha = 0.35f)),
+                                            .background(nottifOverlayIconBoxBg(isDark)),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Person,
                                             contentDescription = null,
-                                            tint = NottifIconAccountYellow,
+                                            tint = OverlayThemeTokens.IconAccountYellow,
                                             modifier = Modifier.size(20.dp)
                                         )
                                     }
@@ -540,7 +546,7 @@ fun NotificationSyncOverlay(
                                         Icon(
                                             imageVector = Icons.AutoMirrored.Rounded.ExitToApp,
                                             contentDescription = strings.nottifLogoutConfirmTitle,
-                                            tint = LogoutIconTint,
+                                            tint = OverlayThemeTokens.LogoutIconTint,
                                             modifier = Modifier.size(26.dp)
                                         )
                                     }
@@ -565,13 +571,13 @@ fun NotificationSyncOverlay(
                                 val epLine = String.format(Locale.getDefault(), strings.nottifNewEpisodesFormat, delta)
                                 NottifUpdateRow(
                                     isDark = isDark,
-                                    glowAccent = NottifIconSyncBlue,
+                                    glowAccent = OverlayThemeTokens.IconSyncBlue,
                                     cardBg = cardBg,
                                     darkTileBase = darkTileBase,
                                     rim = rim,
                                     onCard = onCard,
-                                    accentColor = NottifIconSyncBlue,
-                                    onAccentColor = OnSyncBlueButton,
+                                    accentColor = OverlayThemeTokens.IconSyncBlue,
+                                    onAccentColor = OverlayThemeTokens.OnSyncBlueButton,
                                     title = update.title,
                                     subtitle = epLine,
                                     onAccept = {
@@ -636,17 +642,17 @@ private fun NottifMiniCard(
     Column(
         modifier = modifier
             .fillMaxHeight()
-            .clip(RoundedCornerShape(20.dp))
-            .then(
-                if (isDark) {
-                    Modifier
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                        .tileGlow(glowAccent)
-                } else {
-                    Modifier.background(cardBg)
-                }
+            .clip(RoundedCornerShape(OverlayThemeTokens.TileCornerRadius))
+            .background(
+                if (isDark) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                else cardBg
             )
-            .border(1.dp, rim, RoundedCornerShape(20.dp))
+            .tileGlow(
+                glowAccent,
+                if (isDark) OverlayThemeTokens.TileGlowAlphaDark
+                else OverlayThemeTokens.TileGlowAlphaLight
+            )
+            .border(1.dp, rim, RoundedCornerShape(OverlayThemeTokens.TileCornerRadius))
             .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
         Row(
@@ -752,17 +758,14 @@ private fun NottifUpdateRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .then(
-                if (isDark) {
-                    Modifier
-                        .background(darkTileBase)
-                        .tileGlow(glowAccent)
-                } else {
-                    Modifier.background(cardBg)
-                }
+            .clip(RoundedCornerShape(OverlayThemeTokens.TileCornerRadius))
+            .background(if (isDark) darkTileBase else cardBg)
+            .tileGlow(
+                glowAccent,
+                if (isDark) OverlayThemeTokens.TileGlowAlphaDark
+                else OverlayThemeTokens.TileGlowAlphaLight
             )
-            .border(1.dp, rim, RoundedCornerShape(20.dp))
+            .border(1.dp, rim, RoundedCornerShape(OverlayThemeTokens.TileCornerRadius))
             .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -770,7 +773,7 @@ private fun NottifUpdateRow(
             modifier = Modifier
                 .size(44.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(Color.Black.copy(alpha = 0.35f)),
+                .background(nottifOverlayIconBoxBg(isDark)),
             contentAlignment = Alignment.Center
         ) {
             Icon(

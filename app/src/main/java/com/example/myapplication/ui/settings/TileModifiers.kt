@@ -17,14 +17,34 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
-fun Modifier.tileGlow(accentColor: Color): Modifier {
+fun Modifier.tileGlow(accentColor: Color, glowAlpha: Float = 0.15f): Modifier {
     return this.drawWithCache {
-        val brush = Brush.radialGradient(
-            colors = listOf(accentColor.copy(alpha = 0.15f), Color.Transparent),
-            center = Offset(size.width, 0f),
-            radius = size.maxDimension * 0.8f
-        )
-        onDrawBehind { drawRect(brush = brush) }
+        if (glowAlpha <= 0f) {
+            onDrawBehind { }
+        } else {
+            val brush = Brush.radialGradient(
+                colors = listOf(accentColor.copy(alpha = glowAlpha), Color.Transparent),
+                center = Offset(size.width, 0f),
+                radius = size.maxDimension * 0.8f
+            )
+            onDrawBehind { drawRect(brush = brush) }
+        }
+    }
+}
+
+/** Radial glow от левого края (оверлеи «по жанрам» и т.п.). */
+fun Modifier.tileGlowLeading(accentColor: Color, glowAlpha: Float = 0.15f): Modifier {
+    return this.drawWithCache {
+        if (glowAlpha <= 0f) {
+            onDrawBehind { }
+        } else {
+            val brush = Brush.radialGradient(
+                colors = listOf(accentColor.copy(alpha = glowAlpha), Color.Transparent),
+                center = Offset(0f, size.height * 0.42f),
+                radius = size.maxDimension * 0.92f
+            )
+            onDrawBehind { drawRect(brush = brush) }
+        }
     }
 }
 

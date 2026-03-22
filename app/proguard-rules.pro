@@ -19,3 +19,30 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+-keepattributes SourceFile,LineNumberTable
+-keepattributes Signature,*Annotation*,InnerClasses,EnclosingMethod
+
+-keep class kotlin.Metadata { *; }
+-dontwarn org.jetbrains.annotations.**
+
+-keepclassmembers class **$$serializer { *; }
+-keepclassmembers class kotlinx.serialization.json.** { *; }
+-keep,includedescriptorclasses class com.example.myapplication.**$$serializer { *; }
+
+-keep class org.koin.** { *; }
+-keep class * extends org.koin.core.module.Module { *; }
+
+-keepnames class androidx.compose.** { *; }
+-keep class app.cash.sqldelight.** { *; }
+-keep class com.example.myapplication.data.local.** { *; }
+
+-keep class io.ktor.** { *; }
+-keep class okhttp3.** { *; }
+-keep interface okhttp3.** { *; }
+-dontwarn okhttp3.internal.platform.**
+
+-dontwarn java.lang.management.ManagementFactory
+-dontwarn java.lang.management.RuntimeMXBean
+
+-keepnames class com.apollographql.apollo.** { *; }

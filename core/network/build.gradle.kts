@@ -38,13 +38,14 @@ apollo {
 dependencies {
     api(platform(libs.ktor.bom))
     api(libs.ktor.client.core)
-    api(libs.ktor.client.cio)
+    api(libs.ktor.client.okhttp)
     api(libs.ktor.client.content.negotiation)
     api(libs.ktor.serialization.kotlinx.json)
     api(libs.kotlinx.serialization.json)
     api(libs.apollo.runtime)
 
     implementation(libs.ktor.client.logging)
+    implementation(libs.okhttp)
     implementation(platform(libs.koin.bom))
     implementation(libs.koin.android)
 }
