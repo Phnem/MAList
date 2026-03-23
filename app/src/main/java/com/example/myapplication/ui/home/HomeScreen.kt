@@ -633,10 +633,10 @@ fun HomeScreen(
 
 private fun Modifier.homeScrollBlur(blur: Dp): Modifier = composed {
     when {
-        blur == 0.dp -> Modifier
+        blur == 0.dp -> this
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val px = with(LocalDensity.current) { blur.toPx() }
-            Modifier.graphicsLayer {
+            this.graphicsLayer {
                 renderEffect = RenderEffect.createBlurEffect(
                     px,
                     px,
@@ -645,7 +645,7 @@ private fun Modifier.homeScrollBlur(blur: Dp): Modifier = composed {
                 clip = true
             }
         }
-        else -> Modifier.blur(blur)
+        else -> this.then(Modifier.blur(blur))
     }
 }
 
