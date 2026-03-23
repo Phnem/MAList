@@ -2,12 +2,12 @@
 
 <p align="center">
   <a href="images/001BG.png">
-    <img src="images/001BG.png" width="900">
+    <img src="images/001BG.png" width="900" alt="Vetra preview">
   </a>
 </p>
 
 <p align="center">
-  <b>Offline-first media tracker with modern glass UI and clean architecture.</b><br>
+  <b>Offline-first media tracker built on The Depth of Light design language.</b><br>
   Anime · Movies · TV Shows · Anything structured
 </p>
 
@@ -19,11 +19,11 @@
 
 <h2 align="center">✨ What is Vetra?</h2>
 
-Vetra is a powerful yet minimal **local-first media manager**.
+Vetra is a powerful yet minimal <b>local-first media manager</b>.
 
 Originally built as a personal anime tracker, it evolved into a flexible and scalable system with:
 
-- modern glass UI
+- The Depth of Light design language (3.2.x family)
 - strict unidirectional data flow (UDF / MVI)
 - clean architecture (Domain-driven)
 - reactive data layer (Flow + SQLDelight)
@@ -35,12 +35,12 @@ Originally built as a personal anime tracker, it evolved into a flexible and sca
 <h2 align="center">📸 Screenshots</h2>
 
 <p align="center">
-  <a href="images/002BG.png"><img src="images/002SM.png" width="220"></a>
-  <a href="images/003BG.png"><img src="images/003SM.png" width="220"></a>
-  <a href="images/004BG.png"><img src="images/004SM.png" width="220"></a>
-  <a href="images/005BG.png"><img src="images/005SM.png" width="220"></a>
-  <a href="images/006BG.png"><img src="images/006SM.png" width="220"></a>
-  <a href="images/007BG.png"><img src="images/007SM.png" width="220"></a>
+  <a href="images/002BG.png"><img src="images/002SM.png" width="220" alt="Screenshot 1"></a>
+  <a href="images/003BG.png"><img src="images/003SM.png" width="220" alt="Screenshot 2"></a>
+  <a href="images/004BG.png"><img src="images/004SM.png" width="220" alt="Screenshot 3"></a>
+  <a href="images/005BG.png"><img src="images/005SM.png" width="220" alt="Screenshot 4"></a>
+  <a href="images/006BG.png"><img src="images/006SM.png" width="220" alt="Screenshot 5"></a>
+  <a href="images/007BG.png"><img src="images/007SM.png" width="220" alt="Screenshot 6"></a>
 </p>
 
 <p align="center">
@@ -65,7 +65,6 @@ Originally built as a personal anime tracker, it evolved into a flexible and sca
 <h3>📋 Content Management</h3>
 
 - Custom lists (anime, movies, shows, etc.)
-- Episode / progress tracking
 - Rating system
 - Favorites
 - Comments & notes
@@ -97,47 +96,26 @@ Workflow:
 - Haptic feedback
 
 <p align="center">
-  <img src="swipe.png" width="350" style="border-radius:16px;">
+  <img src="swipe.png" width="350" style="border-radius:16px;" alt="Swipe gestures">
 </p>
 
 ---
 
-<h2>🎨 UI / UX — Glass Era</h2>
+<h2>🎨 Design Language — The Depth of Light</h2>
 
-Vetra 3.x introduces a fully reimagined UI system:
+Introduced in the 3.2.x family, <b>The Depth of Light</b> defines the visual and interaction system of Vetra:
 
-- Glassmorphism (Haze)
-- Hardware-accelerated blur with fallback
-- GlassActionDock & Bottom Navigation
-- Unified GlassIconButton system
-- Tile-based settings (3.1.x family)
-- Redesigned Details screen
-- Predictive Back support
-- Physics-based animations
-- Calm, spacious layout system (3.1.x family)
-
-### 🔮 Next Design Language (3.2.x family)
-
-**Codename: _The Depth of Light_**
-
-The upcoming 3.2.x family evolves the glass paradigm into a deeper, more layered visual system:
-
-- enhanced depth perception through light and translucency
-- more physically accurate motion and layering
-- refined contrast between foreground and background elements
-- focus on light-driven hierarchy instead of flat glass surfaces
+- light-driven hierarchy instead of flat layers
+- depth through translucency and spatial separation
+- physically consistent motion and feedback
+- refined contrast between foreground and background
+- emphasis on clarity, focus, and visual calm
 
 Result:
 
 - deeper visual immersion
 - stronger spatial hierarchy
 - more natural interaction feedback
-
-Result:
-
-- smoother perception
-- cleaner hierarchy
-- modern tactile feel
 
 ---
 
@@ -189,7 +167,7 @@ Key improvements since 3.0:
 - Removed Paging3 → no pagination lag
 - Reduced recompositions
 - Optimized LazyColumn behavior
-- Haze GPU optimization
+- GPU optimization
 - Image loading optimization (Coil 3.x)
 - XML removal → no runtime parsing cost
 
@@ -208,7 +186,6 @@ Dropbox-based sync:
 - File hashing (DropboxContentHasher)
 - No delta sync complexity
 - Safe DB restore (WAL fix)
-- Migration: `/MAList → /Vetro`
 
 Architecture remains local-first.
 
@@ -221,15 +198,9 @@ Architecture remains local-first.
 - No tracking
 - No hidden network calls
 
-Local folder:
-
-<p align="center">
-  <img src="1000008355.png" width="700">
-</p>
-
 ---
 
 <h2>📄 License</h2>
 
-This project is licensed under the **MIT License**.  
-See the [LICENSE](LICENSE) file for details.
+This project is licensed under the <b>MIT License</b>.  
+See the <a href="LICENSE">LICENSE</a> file for details.
