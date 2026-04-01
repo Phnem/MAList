@@ -49,6 +49,7 @@ import coil3.request.crossfade
 import com.example.myapplication.isAppInDarkTheme
 import com.example.myapplication.ui.shared.fluidClickable
 import com.example.myapplication.ui.shared.theme.SnProFamily
+import com.example.myapplication.ui.shared.theme.LightBorder
 import com.example.myapplication.ui.shared.theme.getRatingColor
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
@@ -79,8 +80,8 @@ fun SharedTransitionScope.OneUiAnimeCard(
 ) {
     val localHazeState = remember { HazeState() }
     val isDark = isAppInDarkTheme()
-    val borderStroke = if (isDark) Color.White.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.4f)
-    val cardBg = if (isDark) Color(0xFF1C1F28) else Color.White
+    val borderStroke = if (isDark) Color.White.copy(alpha = 0.15f) else LightBorder
+    val cardBg = if (isDark) Color(0xFF1C1F28) else MaterialTheme.colorScheme.surface
     val cardShadowColor = if (isDark) Color.Black.copy(alpha = 0.5f) else Color.Black.copy(alpha = 0.08f)
     val subtitleColor = if (isDark) Color(0xFF9898A0) else Color(0xFF8E8E93)
     val chipBg = if (isDark) Color.Black.copy(alpha = 0.35f) else Color.Black.copy(alpha = 0.08f)
@@ -104,7 +105,7 @@ fun SharedTransitionScope.OneUiAnimeCard(
             .clip(RoundedCornerShape(24.dp))
             .background(cardBg)
             .border(
-                BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
+                BorderStroke(1.dp, borderStroke),
                 RoundedCornerShape(24.dp)
             )
     ) {

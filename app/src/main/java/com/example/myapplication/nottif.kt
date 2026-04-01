@@ -94,7 +94,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.myapplication.ui.shared.theme.DarkBackground
 import com.example.myapplication.ui.shared.theme.OverlayThemeTokens
-import com.example.myapplication.ui.settings.tileGlow
 import com.example.myapplication.utils.performHaptic
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -302,18 +301,23 @@ fun NotificationSyncOverlay(
                             SyncMode.MANUAL -> strings.nottifBadgeManual
                         }
                         val syncingCloud = syncState == SyncState.SYNCING
+                        val lastSyncAccent =
+                            if (isDark) OverlayThemeTokens.IconSyncBlue
+                            else MaterialTheme.colorScheme.primary
+                        val lastSyncOnAccent =
+                            if (isDark) OverlayThemeTokens.OnSyncBlueButton
+                            else MaterialTheme.colorScheme.onPrimary
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .wrapContentHeight()
                                 .clip(RoundedCornerShape(OverlayThemeTokens.MainTileCornerRadius))
                                 .background(if (isDark) darkTileBase else cardBg)
-                                .tileGlow(
-                                    OverlayThemeTokens.IconSyncBlue,
-                                    if (isDark) OverlayThemeTokens.TileGlowAlphaDark
-                                    else OverlayThemeTokens.TileGlowAlphaLight
+                                .border(
+                                    1.5.dp,
+                                    lastSyncAccent,
+                                    RoundedCornerShape(OverlayThemeTokens.MainTileCornerRadius)
                                 )
-                                .border(1.dp, rim, RoundedCornerShape(OverlayThemeTokens.MainTileCornerRadius))
                                 .padding(horizontal = 12.dp, vertical = 10.dp)
                         ) {
                             Row(
@@ -333,7 +337,7 @@ fun NotificationSyncOverlay(
                                     text = badgeText,
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = OverlayThemeTokens.IconSyncBlue,
+                                    color = lastSyncAccent,
                                     letterSpacing = 0.8.sp,
                                     textAlign = TextAlign.End
                                 )
@@ -363,7 +367,7 @@ fun NotificationSyncOverlay(
                                     Icon(
                                         imageVector = Icons.Default.CloudSync,
                                         contentDescription = null,
-                                        tint = OverlayThemeTokens.IconSyncBlue,
+                                        tint = lastSyncAccent,
                                         modifier = Modifier.size(22.dp)
                                     )
                                 }
@@ -400,8 +404,8 @@ fun NotificationSyncOverlay(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                val pillBg = OverlayThemeTokens.IconSyncBlue.copy(alpha = 0.28f)
-                                val pillContent = OverlayThemeTokens.OnSyncBlueButton
+                                val pillBg = lastSyncAccent.copy(alpha = 0.28f)
+                                val pillContent = lastSyncOnAccent
                                 Row(
                                     modifier = Modifier
                                         .weight(1f)
@@ -448,7 +452,7 @@ fun NotificationSyncOverlay(
                                     Icon(
                                         imageVector = Icons.Default.Refresh,
                                         contentDescription = strings.nottifCheckUpdatesCd,
-                                        tint = OverlayThemeTokens.IconSyncBlue,
+                                        tint = lastSyncAccent,
                                         modifier = Modifier
                                             .size(22.dp)
                                             .graphicsLayer {
@@ -474,9 +478,7 @@ fun NotificationSyncOverlay(
                                     .weight(1f)
                                     .fillMaxHeight(),
                                 isDark = isDark,
-                                glowAccent = OverlayThemeTokens.IconSignalGreen,
                                 cardBg = cardBg,
-                                rim = rim,
                                 onCard = onCard,
                                 muted = muted,
                                 accentColor = OverlayThemeTokens.IconSignalGreen,
@@ -510,9 +512,7 @@ fun NotificationSyncOverlay(
                                     .weight(1f)
                                     .fillMaxHeight(),
                                 isDark = isDark,
-                                glowAccent = OverlayThemeTokens.IconAccountYellow,
                                 cardBg = cardBg,
-                                rim = rim,
                                 onCard = onCard,
                                 muted = muted,
                                 accentColor = OverlayThemeTokens.IconAccountYellow,
@@ -571,10 +571,8 @@ fun NotificationSyncOverlay(
                                 val epLine = String.format(Locale.getDefault(), strings.nottifNewEpisodesFormat, delta)
                                 NottifUpdateRow(
                                     isDark = isDark,
-                                    glowAccent = OverlayThemeTokens.IconSyncBlue,
                                     cardBg = cardBg,
                                     darkTileBase = darkTileBase,
-                                    rim = rim,
                                     onCard = onCard,
                                     accentColor = OverlayThemeTokens.IconSyncBlue,
                                     onAccentColor = OverlayThemeTokens.OnSyncBlueButton,
@@ -626,9 +624,7 @@ fun NotificationSyncOverlay(
 private fun NottifMiniCard(
     modifier: Modifier = Modifier,
     isDark: Boolean,
-    glowAccent: Color,
     cardBg: Color,
-    rim: Color,
     onCard: Color,
     muted: Color,
     accentColor: Color,
@@ -647,12 +643,11 @@ private fun NottifMiniCard(
                 if (isDark) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                 else cardBg
             )
-            .tileGlow(
-                glowAccent,
-                if (isDark) OverlayThemeTokens.TileGlowAlphaDark
-                else OverlayThemeTokens.TileGlowAlphaLight
+            .border(
+                1.5.dp,
+                accentColor,
+                RoundedCornerShape(OverlayThemeTokens.TileCornerRadius)
             )
-            .border(1.dp, rim, RoundedCornerShape(OverlayThemeTokens.TileCornerRadius))
             .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
         Row(
@@ -743,10 +738,8 @@ private fun NottifMiniCard(
 @Composable
 private fun NottifUpdateRow(
     isDark: Boolean,
-    glowAccent: Color,
     cardBg: Color,
     darkTileBase: Color,
-    rim: Color,
     onCard: Color,
     accentColor: Color,
     onAccentColor: Color,
@@ -760,12 +753,11 @@ private fun NottifUpdateRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(OverlayThemeTokens.TileCornerRadius))
             .background(if (isDark) darkTileBase else cardBg)
-            .tileGlow(
-                glowAccent,
-                if (isDark) OverlayThemeTokens.TileGlowAlphaDark
-                else OverlayThemeTokens.TileGlowAlphaLight
+            .border(
+                1.5.dp,
+                accentColor,
+                RoundedCornerShape(OverlayThemeTokens.TileCornerRadius)
             )
-            .border(1.dp, rim, RoundedCornerShape(OverlayThemeTokens.TileCornerRadius))
             .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

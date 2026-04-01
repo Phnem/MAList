@@ -6,7 +6,6 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -15,7 +14,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,23 +29,17 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.example.myapplication.isAppInDarkTheme
-import com.example.myapplication.safeHaze
+import com.example.myapplication.matteFabGlassHazeStyle
+import com.example.myapplication.SimpGlassCard
 import com.example.myapplication.utils.getStrings
 import com.example.myapplication.utils.performHaptic
 import com.example.myapplication.ui.shared.components.StarRatingBar
 import com.example.myapplication.ui.shared.InertialCollisionState
 import com.example.myapplication.ui.shared.inertialCollision
+import com.example.myapplication.ui.shared.icons.AddEditSaveFabCheck
 import com.example.myapplication.ui.shared.rememberInertialCollisionState
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.hazeSource
-
-/** Как у дока на главном: только blur, без tint и шума ([cleanHazeStyle] в glass.kt). */
-private val AddEditSaveFabGlassStyle = HazeStyle(
-    tints = emptyList(),
-    noiseFactor = 0f,
-    blurRadius = 20.dp
-)
 
 @Composable
 private fun AnimatedFormRow(
@@ -162,21 +154,22 @@ fun AddEditScreen(
                     animationSpec = spring(dampingRatio = 0.7f),
                     label = "fabAlpha"
                 )
-                val fabBorderStroke =
-                    if (isAppInDarkTheme()) Color.White.copy(alpha = 0.12f)
-                    else Color.White.copy(alpha = 0.8f)
-                val fabIconTint = Color.White
+                val fabIconTint =
+                    if (isAppInDarkTheme()) Color.White
+                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f)
+                val isDarkFab = isAppInDarkTheme()
+                val fabHazeStyle = remember(isDarkFab) { matteFabGlassHazeStyle(isDarkFab) }
                 Box(
                     modifier = Modifier
                         .inertialCollision(collisionState, index = 20, baseMultiplier = 2.5f)
                         .graphicsLayer { alpha = fabAlpha }
                 ) {
-                    Box(
+                    SimpGlassCard(
+                        hazeState = commentHazeState,
+                        shape = CircleShape,
+                        hazeStyle = fabHazeStyle,
                         modifier = Modifier
                             .size(64.dp)
-                            .clip(CircleShape)
-                            .safeHaze(commentHazeState, AddEditSaveFabGlassStyle)
-                            .border(0.5.dp, fabBorderStroke, CircleShape)
                             .clickable {
                                 if (uiState.isLoading) return@clickable
                                 performHaptic(view, "success")
@@ -189,11 +182,10 @@ fun AddEditScreen(
                                         android.widget.Toast.LENGTH_SHORT
                                     ).show()
                                 }
-                            },
-                        contentAlignment = Alignment.Center
+                            }
                     ) {
                         Icon(
-                            Icons.Default.Check,
+                            AddEditSaveFabCheck,
                             contentDescription = "Save",
                             tint = fabIconTint,
                             modifier = Modifier.size(28.dp)
@@ -229,7 +221,9 @@ fun AddEditScreen(
                         AddEditCoverPhotoSlot(
                             imageUri = uiState.imageUri,
                             imageFilePath = uiState.imageFilePath,
-                            coverPhotoCta = strings.addEditCoverPhotoCta,
+                            placeholderTitle = strings.addEditCoverPlaceholderTitle,
+                            placeholderSubtitle = strings.addEditCoverPlaceholderSubtitle,
+                            placeholderButtonLabel = strings.addEditCoverPlaceholderButton,
                             animeId = animeId,
                             animatedVisibilityScope = animatedVisibilityScope,
                             onClick = {

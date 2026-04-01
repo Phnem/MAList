@@ -85,7 +85,6 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
@@ -119,7 +118,6 @@ import com.example.myapplication.ui.shared.theme.BrandBlue
 import com.example.myapplication.ui.shared.theme.DarkBackground
 import com.example.myapplication.ui.shared.theme.DarkSurfaceVariant
 import com.example.myapplication.ui.shared.theme.OverlayThemeTokens
-import com.example.myapplication.ui.settings.tileGlow
 import com.example.myapplication.ui.shared.theme.SnProFamily
 import com.example.myapplication.ui.shared.CollisionDirection
 import com.example.myapplication.ui.shared.inertialCollision
@@ -127,6 +125,7 @@ import com.example.myapplication.ui.shared.rememberInertialCollisionState
 import com.example.myapplication.utils.performHaptic
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
+import dev.chrisbanes.haze.HazeTint
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.materials.CupertinoMaterials
 
@@ -137,6 +136,21 @@ fun isAppInDarkTheme(): Boolean {
 
 /** Стиль haze без подкрашивания и шума: только размытие (tint = transparent, noiseFactor = 0). */
 private val cleanHazeStyle = HazeStyle(tints = emptyList(), noiseFactor = 0f, blurRadius = 20.dp)
+
+/**
+ * «Матовое стекло» сильнее нижнего дока: выше blur, лёгкий белый tint и зерно
+ * (FAB сохранения на экране добавления/редактирования).
+ */
+fun matteFabGlassHazeStyle(isDark: Boolean): HazeStyle = HazeStyle(
+    tints = listOf(
+        HazeTint(
+            color = if (isDark) Color.White.copy(alpha = 0.14f)
+            else Color.White.copy(alpha = 0.42f)
+        )
+    ),
+    blurRadius = 32.dp,
+    noiseFactor = if (isDark) 0.06f else 0.095f
+)
 
 /** Безопасный Haze: на Android 12+ (API 31) — аппаратный RenderEffect; на старых — полупрозрачный фон (без тормозящего блюра). */
 fun Modifier.safeHaze(state: HazeState, style: HazeStyle = panelGlassHazeStyle): Modifier {
@@ -192,6 +206,7 @@ fun SimpGlassCard(
     hazeState: HazeState,
     modifier: Modifier = Modifier,
     shape: Shape = CircleShape,
+    hazeStyle: HazeStyle = cleanHazeStyle,
     content: @Composable BoxScope.() -> Unit
 ) {
     val isDark = isAppInDarkTheme()
@@ -201,7 +216,7 @@ fun SimpGlassCard(
     Box(
         modifier = modifier
             .clip(shape)
-            .safeHaze(state = hazeState, style = cleanHazeStyle)
+            .safeHaze(state = hazeState, style = hazeStyle)
             .border(0.5.dp, borderStroke, shape),
         contentAlignment = Alignment.Center
     ) {
@@ -704,17 +719,6 @@ fun SortOption.getAccentColor(): Color = when (this) {
     SortOption.TITLE -> Color(0xFF5E5CE6)
 }
 
-private val SortIconDimBlendDark = Color(0xFF070B10)
-private val SortIconDimBlendLight = Color(0xFFEEF1F6)
-
-/** Неактивная плитка: тот же оттенок иконки, но ниже светимость (без ухода в серый монохром). */
-private fun sortIconTintInactive(accent: Color, isDark: Boolean): Color =
-    lerp(accent, if (isDark) SortIconDimBlendDark else SortIconDimBlendLight, 0.58f)
-
-/** Активная плитка: лёгкий подъём светимости, оттенок сохраняем. */
-private fun sortIconTintActive(accent: Color): Color =
-    lerp(accent, Color.White, 0.2f)
-
 // ==========================================
 // SORT & FILTER OVERLAYS
 // ==========================================
@@ -1011,24 +1015,29 @@ private fun SortSortTile(
     val isAscending =
         if (selection is SortGridSelection.Sort) selection.isAscending else true
 
-    val animatedGlowAlpha by animateFloatAsState(
-        targetValue = if (isActive) 0.38f else 0f,
-        animationSpec = tween(300),
-        label = "sortGlowAlpha"
-    )
-    val targetIconTint =
-        if (isActive) sortIconTintActive(accentColor) else sortIconTintInactive(accentColor, isDark)
+    val scheme = MaterialTheme.colorScheme
+    val mutedIconTint = scheme.onSurfaceVariant.copy(alpha = 0.42f)
+    val targetIconTint = if (isActive) accentColor else mutedIconTint
     val animatedIconTint by animateColorAsState(
         targetValue = targetIconTint,
-        animationSpec = tween(300),
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
         label = "sortIconTint"
+    )
+    val targetBorderColor = if (isActive) accentColor else rim
+    val animatedBorderColor by animateColorAsState(
+        targetValue = targetBorderColor,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "sortTileBorder"
     )
 
     val shape = RoundedCornerShape(OverlayThemeTokens.TileCornerRadius)
     val tileBg = if (isDark) OverlayThemeTokens.TileBackgroundDark else cardBg
-    val glowStrength =
-        if (isDark) animatedGlowAlpha
-        else animatedGlowAlpha * OverlayThemeTokens.SortTileGlowLightFactor
 
     Box(
         modifier = modifier
@@ -1036,8 +1045,7 @@ private fun SortSortTile(
             .defaultMinSize(minHeight = OverlayThemeTokens.SortTileMinHeight)
             .clip(shape)
             .background(tileBg)
-            .tileGlow(accentColor, glowStrength)
-            .border(1.dp, rim, shape)
+            .border(1.5.dp, animatedBorderColor, shape)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null
@@ -1127,25 +1135,31 @@ private fun GenreSortTile(
     onSelect: (SortGridSelection) -> Unit
 ) {
     val isActive = selection == SortGridSelection.Genres
+    val genreAccent = if (isDark) IconFilterColor else MaterialTheme.colorScheme.primary
 
-    val animatedGlowAlpha by animateFloatAsState(
-        targetValue = if (isActive) 0.38f else 0f,
-        animationSpec = tween(300),
-        label = "genreGlowAlpha"
-    )
-    val targetIconTint =
-        if (isActive) sortIconTintActive(IconFilterColor) else sortIconTintInactive(IconFilterColor, isDark)
+    val scheme = MaterialTheme.colorScheme
+    val mutedIconTint = scheme.onSurfaceVariant.copy(alpha = 0.42f)
+    val targetIconTint = if (isActive) genreAccent else mutedIconTint
     val animatedIconTint by animateColorAsState(
         targetValue = targetIconTint,
-        animationSpec = tween(300),
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
         label = "genreIconTint"
+    )
+    val targetBorderColor = if (isActive) genreAccent else rim
+    val animatedBorderColor by animateColorAsState(
+        targetValue = targetBorderColor,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "genreSortTileBorder"
     )
 
     val shape = RoundedCornerShape(OverlayThemeTokens.TileCornerRadius)
     val tileBg = if (isDark) OverlayThemeTokens.TileBackgroundDark else cardBg
-    val glowStrength =
-        if (isDark) animatedGlowAlpha
-        else animatedGlowAlpha * OverlayThemeTokens.SortTileGlowLightFactor
 
     Box(
         modifier = modifier
@@ -1153,8 +1167,7 @@ private fun GenreSortTile(
             .defaultMinSize(minHeight = OverlayThemeTokens.SortTileMinHeight)
             .clip(shape)
             .background(tileBg)
-            .tileGlow(IconFilterColor, glowStrength)
-            .border(1.dp, rim, shape)
+            .border(1.5.dp, animatedBorderColor, shape)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null
@@ -1207,7 +1220,7 @@ private fun GenreSortTile(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
-                            .background(IconFilterColor.copy(alpha = 0.35f))
+                            .background(genreAccent.copy(alpha = 0.35f))
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {
                         Text(
@@ -1335,16 +1348,23 @@ fun GenreFilterOverlay(
                                 .height(52.dp),
                             shape = RoundedCornerShape(24.dp),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = OverlayThemeTokens.IconSyncBlue,
-                                contentColor = Color.White
+                                containerColor = if (isDark) {
+                                    OverlayThemeTokens.IconSyncBlue
+                                } else {
+                                    MaterialTheme.colorScheme.secondaryContainer
+                                },
+                                contentColor = if (isDark) {
+                                    Color.White
+                                } else {
+                                    MaterialTheme.colorScheme.onSecondaryContainer
+                                }
                             ),
                             border = null
                         ) {
                             Text(
                                 text = strings.genreFilterDone,
                                 fontWeight = FontWeight.Bold,
-                                fontFamily = SnProFamily,
-                                color = Color.White
+                                fontFamily = SnProFamily
                             )
                         }
                     }

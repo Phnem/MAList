@@ -14,18 +14,24 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -34,6 +40,9 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
@@ -65,7 +74,9 @@ fun AddEditSectionLabel(text: String, modifier: Modifier = Modifier) {
 fun SharedTransitionScope.AddEditCoverPhotoSlot(
     imageUri: Uri?,
     imageFilePath: String?,
-    coverPhotoCta: String,
+    placeholderTitle: String,
+    placeholderSubtitle: String,
+    placeholderButtonLabel: String,
     animeId: String?,
     animatedVisibilityScope: AnimatedVisibilityScope,
     onClick: () -> Unit,
@@ -87,14 +98,30 @@ fun SharedTransitionScope.AddEditCoverPhotoSlot(
             end = Offset(0f, Float.POSITIVE_INFINITY)
         )
     }
+    val placeholderBg = if (isDark) {
+        scheme.surface.copy(alpha = 0.38f)
+    } else {
+        scheme.surfaceVariant.copy(alpha = 0.5f)
+    }
+    val corner = 28.dp
+    val shape = RoundedCornerShape(corner)
+    val dashColor = scheme.outline.copy(alpha = if (isDark) 0.45f else 0.55f)
+    val slotModifier = modifier
+        .fillMaxWidth(0.5f)
+        .aspectRatio(9f / 16f)
+        .clip(shape)
+        .then(
+            if (hasImage) Modifier.background(coverBrush)
+            else Modifier.coverPlaceholderBackgroundAndDash(
+                fillColor = placeholderBg,
+                dashColor = dashColor,
+                cornerRadius = corner
+            )
+        )
+        .clickable(onClick = onClick)
 
     Box(
-        modifier = modifier
-            .fillMaxWidth(0.5f)
-            .aspectRatio(0.7f)
-            .clip(RoundedCornerShape(28.dp))
-            .background(coverBrush)
-            .clickable(onClick = onClick),
+        modifier = slotModifier,
         contentAlignment = Alignment.Center
     ) {
         val imageModifier = if (animeId != null) Modifier.sharedElement(
@@ -106,7 +133,7 @@ fun SharedTransitionScope.AddEditCoverPhotoSlot(
             modifier = Modifier
                 .fillMaxSize()
                 .then(imageModifier)
-                .clip(RoundedCornerShape(28.dp))
+                .clip(shape)
         ) {
             if (imageUri != null) {
                 AsyncImage(
@@ -132,41 +159,114 @@ fun SharedTransitionScope.AddEditCoverPhotoSlot(
         }
 
         if (!hasImage) {
-            val iconCircleBg =
-                if (isDark) AddEditColors.CoverIconCircle.copy(alpha = 0.6f)
-                else scheme.primary.copy(alpha = 0.12f)
-            val cameraTint = if (isDark) BrandBlue else scheme.primary
-            val ctaColor =
-                if (isDark) Color.White.copy(alpha = 0.7f) else scheme.onSurfaceVariant
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 14.dp, vertical = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
                 Box(
                     modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .background(iconCircleBg),
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(
+                            if (isDark) scheme.surfaceContainerHigh.copy(alpha = 0.85f)
+                            else scheme.surfaceContainerHighest.copy(alpha = 0.65f)
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        Icons.Default.CameraAlt,
+                        imageVector = Icons.Outlined.Image,
                         contentDescription = null,
-                        tint = cameraTint,
+                        tint = scheme.onSurface,
                         modifier = Modifier.size(24.dp)
                     )
                 }
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(16.dp))
                 Text(
-                    text = coverPhotoCta,
-                    style = TextStyle(
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
+                    text = placeholderTitle,
+                    style = MaterialTheme.typography.titleMedium.copy(
                         fontFamily = SnProFamily,
-                        letterSpacing = 1.4.sp,
-                        color = ctaColor
-                    )
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = scheme.onSurface,
+                    textAlign = TextAlign.Center
                 )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = placeholderSubtitle,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontFamily = SnProFamily,
+                        lineHeight = 18.sp
+                    ),
+                    color = scheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(22.dp))
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = if (isDark) scheme.surfaceContainerHigh
+                    else scheme.surfaceContainerHighest,
+                    shadowElevation = 0.dp,
+                    tonalElevation = 0.dp
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = null,
+                            tint = scheme.onSurface,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = placeholderButtonLabel,
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                fontFamily = SnProFamily,
+                                fontWeight = FontWeight.SemiBold
+                            ),
+                            color = scheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
             }
         }
     }
+}
+
+private fun Modifier.coverPlaceholderBackgroundAndDash(
+    fillColor: Color,
+    dashColor: Color,
+    cornerRadius: Dp,
+    strokeWidth: Dp = 1.dp,
+    dashLength: Dp = 5.dp,
+    gapLength: Dp = 4.dp
+): Modifier = drawBehind {
+    val rPx = cornerRadius.toPx()
+    val cr = CornerRadius(rPx, rPx)
+    drawRoundRect(color = fillColor, cornerRadius = cr)
+    val w = strokeWidth.toPx()
+    val inset = w / 2f
+    drawRoundRect(
+        color = dashColor,
+        topLeft = Offset(inset, inset),
+        size = Size(size.width - w, size.height - w),
+        cornerRadius = cr,
+        style = Stroke(
+            width = w,
+            pathEffect = PathEffect.dashPathEffect(
+                floatArrayOf(dashLength.toPx(), gapLength.toPx()),
+                0f
+            )
+        )
+    )
 }
 
 @Composable
@@ -285,6 +385,8 @@ fun AddEditEpisodeQuickSelect(
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isDark = isAppInDarkTheme()
+    val scheme = MaterialTheme.colorScheme
     val suggestions = listOf("12", "13", "24", "36", "48")
 
     Row(
@@ -307,13 +409,17 @@ fun AddEditEpisodeQuickSelect(
                         .clip(CircleShape)
                         .then(
                             if (isSelected) {
-                                Modifier.background(AddEditColors.QuickSelectActiveBg)
+                                Modifier.background(
+                                    if (isDark) AddEditColors.QuickSelectActiveBg
+                                    else scheme.surfaceVariant
+                                )
                             } else {
                                 Modifier
                                     .background(Color.Transparent)
                                     .border(
                                         width = 1.dp,
-                                        color = Color.White.copy(alpha = 0.35f),
+                                        color = if (isDark) Color.White.copy(alpha = 0.35f)
+                                        else scheme.outline.copy(alpha = 0.4f),
                                         shape = CircleShape
                                     )
                             }
@@ -327,8 +433,11 @@ fun AddEditEpisodeQuickSelect(
                             fontSize = 13.sp,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                             fontFamily = SnProFamily,
-                            color = if (isSelected) Color.White
-                            else Color.White.copy(alpha = 0.85f)
+                            color = if (isDark) {
+                                if (isSelected) Color.White else Color.White.copy(alpha = 0.85f)
+                            } else {
+                                if (isSelected) scheme.onSurface else scheme.onSurfaceVariant
+                            }
                         )
                     )
                 }

@@ -9,6 +9,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
@@ -221,7 +222,7 @@ fun SettingsScreen(
                                                     modifier = Modifier
                                                         .size(40.dp)
                                                         .clip(RoundedCornerShape(10.dp))
-                                                        .background(tile.accentColor.copy(alpha = 0.2f)),
+                                                        .background(settingsTileIconBoxBg()),
                                                     contentAlignment = Alignment.Center
                                                 ) {
                                                     Icon(
@@ -447,7 +448,7 @@ fun rememberSettingsTiles(
             title = strings.languageCardTitle,
             subtitle = if (uiState.language == AppLanguage.RU) "Язык интерфейса" else "Interface language",
             icon = Icons.Outlined.Language,
-            accentColor = EpisodesColor,
+            accentColor = SettingsAccentLangDarkBlue,
             span = 1,
             options = listOf(
                 SegmentedOption(label = "EN") { viewModel.setLanguage(AppLanguage.EN) },
@@ -460,7 +461,7 @@ fun rememberSettingsTiles(
             title = strings.themeTitle,
             subtitle = if (uiState.language == AppLanguage.RU) "Предпочтение темы" else "Theme preference",
             icon = Icons.Outlined.Palette,
-            accentColor = Color(0xFF00BFA6),
+            accentColor = SettingsAccentThemeDarkGreen,
             span = 1,
             options = listOf(
                 SegmentedOption(icon = Icons.Outlined.LightMode) { viewModel.setTheme(AppTheme.LIGHT) },
@@ -479,7 +480,7 @@ fun rememberSettingsTiles(
             title = strings.cloudSettingsTitle,
             subtitle = strings.cloudSettingsSubtitle,
             icon = Icons.Outlined.Cloud,
-            accentColor = BrandBlue,
+            accentColor = SettingsAccentCloudLightBlue,
             span = 2,
             onClick = onCloudClick
         ),
@@ -489,7 +490,7 @@ fun rememberSettingsTiles(
             title = strings.contentTypeTitle,
             subtitle = if (uiState.language == AppLanguage.RU) "Аниме или ТВ" else "Anime or TV",
             icon = Icons.Outlined.Category,
-            accentColor = Color(0xFFFF9500),
+            accentColor = SettingsAccentContentOrange,
             span = 1,
             options = listOf(
                 SegmentedOption(label = strings.typeAnime) { viewModel.setContentType(AppContentType.ANIME) },
@@ -523,7 +524,7 @@ fun rememberSettingsTiles(
             title = strings.contactTitle,
             subtitle = strings.contactSubtitle,
             icon = Icons.Outlined.Person,
-            accentColor = Color(0xFF3DDC84),
+            accentColor = SettingsAccentContactLightGreen,
             span = 2,
             onClick = onContactClick
         )
@@ -551,7 +552,12 @@ fun CapsuleChipRow(
         modifier = modifier
             .height(containerHeight)
             .clip(containerShape)
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f))
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                shape = containerShape
+            )
     ) {
         val innerWidth = maxWidth
         val contentHeight = containerHeight
@@ -573,7 +579,12 @@ fun CapsuleChipRow(
                     .width(pillWidth)
                     .fillMaxHeight()
                     .clip(innerShape)
-                    .background(accentColor.copy(alpha = 0.25f))
+                    .background(accentColor.copy(alpha = 0.22f))
+                    .border(
+                        width = 1.dp,
+                        color = accentColor.copy(alpha = 0.35f),
+                        shape = innerShape
+                    )
             )
             Row(
                 modifier = Modifier.fillMaxSize(),
@@ -626,7 +637,7 @@ fun ToggleTileItem(
                 modifier = Modifier
                     .size(40.dp)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(tile.accentColor.copy(alpha = 0.2f)),
+                    .background(settingsTileIconBoxBg()),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(tile.icon, contentDescription = null, tint = tile.accentColor, modifier = Modifier.size(22.dp))
@@ -694,7 +705,7 @@ fun ActionTileItem(
                 modifier = Modifier
                     .size(40.dp)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(tile.accentColor.copy(alpha = 0.2f)),
+                    .background(settingsTileIconBoxBg()),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(tile.icon, contentDescription = null, tint = tile.accentColor, modifier = Modifier.size(22.dp))
@@ -763,7 +774,7 @@ fun DetailTileItem(
                     modifier = Modifier
                         .size(40.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(tile.accentColor.copy(alpha = 0.2f)),
+                        .background(settingsTileIconBoxBg()),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(tile.icon, contentDescription = null, tint = tile.accentColor, modifier = Modifier.size(22.dp))

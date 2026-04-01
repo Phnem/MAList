@@ -23,8 +23,8 @@ internal object OverlayThemeTokens {
     val IconSyncBlue = Color(0xFF38BDF8)
     /** Алиас акцента синх-панели (не путать с мягкими токенами кнопки сортировки). */
     val AccentSyncBlue: Color get() = IconSyncBlue
-    val IconSignalGreen = Color(0xFF34C759)
-    val IconAccountYellow = Color(0xFFFFC400)
+    val IconSignalGreen = Color(0xFF40F090)
+    val IconAccountYellow = Color(0xFFFFDF45)
     val OnSyncBlueButton = Color.White
     val LogoutIconTint = Color(0xFFFF5A4D)
 
@@ -43,9 +43,6 @@ internal object OverlayThemeTokens {
 
     /** Radial glow на светлых плитках — сильнее, чем на тёмных, иначе на surface не читается. */
     const val TileGlowAlphaLight = 0.24f
-
-    /** Выбранная плитка сортировки: в светлой теме раньше множилось на 0.28 и почти пропадало. */
-    const val SortTileGlowLightFactor = 0.92f
 
     /** Кнопка «Применить»: тёмная подложка + приглушённый текст без «кислотного» cyan. */
     val ApplyButtonContainerDark = Color(0xFF1C2633)

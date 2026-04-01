@@ -1,6 +1,5 @@
 package com.example.myapplication.ui.inspect
 
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -92,8 +91,6 @@ fun InspectScreen(
     ) { uri ->
         uri?.let { viewModel.analyzeImage(context, it) }
     }
-
-    BackHandler { navController.popBackStack() }
 
     with(sharedTransitionScope) {
         Box(

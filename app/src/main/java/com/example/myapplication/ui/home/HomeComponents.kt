@@ -20,7 +20,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.layout.ContentScale
@@ -37,7 +36,6 @@ import coil3.compose.AsyncImage
 import com.example.myapplication.data.models.Anime
 import com.example.myapplication.data.models.UiStrings
 import com.example.myapplication.isAppInDarkTheme
-import com.example.myapplication.ui.settings.tileGlow
 import com.example.myapplication.ui.shared.inertialCollision
 import com.example.myapplication.ui.shared.rememberInertialCollisionState
 import com.example.myapplication.ui.shared.theme.*
@@ -667,8 +665,16 @@ fun StatsOverlay(
                                 .height(48.dp),
                             shape = RoundedCornerShape(50),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = OverlayThemeTokens.IconSyncBlue,
-                                contentColor = Color.Black
+                                containerColor = if (isDark) {
+                                    OverlayThemeTokens.IconSyncBlue
+                                } else {
+                                    MaterialTheme.colorScheme.secondaryContainer
+                                },
+                                contentColor = if (isDark) {
+                                    Color.Black
+                                } else {
+                                    MaterialTheme.colorScheme.onSecondaryContainer
+                                }
                             ),
                             elevation = ButtonDefaults.buttonElevation(
                                 defaultElevation = 0.dp,
@@ -703,23 +709,17 @@ private fun StatsMetricTile(
     val tileBg =
         if (isDark) OverlayThemeTokens.TileBackgroundDark
         else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-    val glowAlpha = if (isDark) 0.15f else 0.11f
     val labelMuted =
         if (isDark) OverlayThemeTokens.LabelMutedDark
         else MaterialTheme.colorScheme.onSurfaceVariant
-    val rim =
-        if (isDark) OverlayThemeTokens.RimDark
-        else MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)
-    val barColor = lerp(accent, Color.Black, 0.45f)
     val shape = RoundedCornerShape(OverlayThemeTokens.TileCornerRadius)
 
     Column(
         modifier = modifier
-            .defaultMinSize(minHeight = 118.dp)
+            .defaultMinSize(minHeight = 104.dp)
             .clip(shape)
             .background(tileBg)
-            .tileGlow(accent, glowAlpha)
-            .border(1.dp, rim, shape)
+            .border(1.5.dp, accent, shape)
             .padding(horizontal = 14.dp, vertical = 12.dp)
     ) {
         Row(
@@ -730,7 +730,7 @@ private fun StatsMetricTile(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = accent.copy(alpha = 0.9f),
+                tint = accent,
                 modifier = Modifier.size(18.dp)
             )
             Text(
@@ -759,18 +759,5 @@ private fun StatsMetricTile(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
-        Spacer(Modifier.height(14.dp))
-        Box(
-            modifier = Modifier.fillMaxWidth(),
-            contentAlignment = Alignment.Center
-        ) {
-            Box(
-                modifier = Modifier
-                    .width(42.dp)
-                    .height(3.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(barColor)
-            )
-        }
     }
 }

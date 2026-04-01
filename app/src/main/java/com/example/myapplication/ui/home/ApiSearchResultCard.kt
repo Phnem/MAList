@@ -1,6 +1,7 @@
 package com.example.myapplication.ui.home
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,7 +21,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -45,6 +45,8 @@ import com.example.myapplication.domain.search.rating10To5
 import com.example.myapplication.isAppInDarkTheme
 import com.example.myapplication.network.ApiSearchResult
 import com.example.myapplication.ui.shared.fluidClickable
+import com.example.myapplication.ui.shared.icons.HeroCheck
+import com.example.myapplication.ui.shared.theme.LightBorder
 import com.example.myapplication.ui.shared.theme.SnProFamily
 import com.example.myapplication.ui.shared.theme.getRatingColor
 import kotlinx.collections.immutable.PersistentList
@@ -94,7 +96,8 @@ fun ApiSearchResultCard(
     }
 
     val isDark = forceDarkCardStyle || isAppInDarkTheme()
-    val cardBg = if (isDark) Color(0xFF1C1F28) else Color.White
+    val cardBg = if (isDark) Color(0xFF1C1F28) else MaterialTheme.colorScheme.surface
+    val borderStroke = if (isDark) Color.White.copy(alpha = 0.15f) else LightBorder
     val cardShadowColor = if (isDark) Color.Black.copy(alpha = 0.5f) else Color.Black.copy(alpha = 0.08f)
     val subtitleColor = if (isDark) Color(0xFF9898A0) else Color(0xFF8E8E93)
     val chipBg = if (isDark) Color.Black.copy(alpha = 0.35f) else Color.Black.copy(alpha = 0.08f)
@@ -110,6 +113,7 @@ fun ApiSearchResultCard(
             )
             .clip(RoundedCornerShape(24.dp))
             .background(cardBg)
+            .border(1.dp, borderStroke, RoundedCornerShape(24.dp))
     ) {
         Row(
             modifier = Modifier
@@ -253,7 +257,7 @@ fun ApiSearchResultCard(
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Icon(
-                                imageVector = if (state.isAdded) Icons.Default.Check else Icons.Default.Add,
+                                imageVector = if (state.isAdded) HeroCheck else Icons.Default.Add,
                                 contentDescription = if (state.isAdded) addedLabel else addLabel,
                                 tint = if (state.isAdded) MaterialTheme.colorScheme.onPrimaryContainer
                                 else MaterialTheme.colorScheme.onPrimary,

@@ -7,9 +7,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.viewinterop.AndroidView
 import com.example.myapplication.R
-import com.google.android.material.color.DynamicColors
 
 val SnProFamily = FontFamily(
     Font(R.font.snpro_bold, FontWeight.Bold),
@@ -42,14 +40,18 @@ fun OneUiTheme(
             background = LightBackground,
             surface = LightSurface,
             surfaceVariant = LightSurfaceVariant,
-            primary = AccentMauveLight,
-            onPrimary = AccentOnMauveLight,
+            primary = BrandRed,
+            onPrimary = Color.White,
             onBackground = LightTextPrimary,
             onSurface = LightTextPrimary,
             secondary = LightTextSecondary,
+            secondaryContainer = BrandRed.copy(alpha = 0.14f),
+            onSecondaryContainer = BrandRed,
             outline = LightBorder,
             error = BrandRed,
-            surfaceContainer = Color(0xFFFFFFFF)
+            surfaceContainer = LightSurface,
+            surfaceContainerLow = LightSurface,
+            surfaceContainerHighest = LightSurfaceVariant
         )
     }
     
@@ -73,7 +75,6 @@ fun OneUiTheme(
             labelSmall = MaterialTheme.typography.labelSmall.copy(fontFamily = SnProFamily)
         )
     ) {
-        DynamicColors.applyToActivityIfAvailable(androidx.compose.ui.platform.LocalContext.current as android.app.Activity)
         content()
     }
 }
