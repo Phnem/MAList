@@ -1,8 +1,8 @@
 <h1 align="center">Vetra 🎬</h1>
 
 <p align="center">
-  <a href="multiSM.png">
-    <img src="multiBG.png" width="900" alt="Vetra preview">
+  <a href="images/multiSM.png">
+    <img src="images/multiBG.png" width="900" alt="Vetra preview">
   </a>
 </p>
 
@@ -35,8 +35,8 @@ Originally built as a personal anime tracker, it evolved into a flexible and sca
 <h2 align="center">📸 Screenshots</h2>
 
 <p align="center">
-  <a href="dkBG.png"><img src="dkSM.png" width="220" alt="Screenshot 1"></a>
-  <a href="ltBG.png"><img src="ltSM.png" width="220" alt="Screenshot 2"></a>
+  <a href="images/dkBG.png"><img src="images/dkSM.png" width="220" alt="Screenshot 1"></a>
+  <a href="images/ltBG.png"><img src="images/ltSM.png" width="220" alt="Screenshot 2"></a>
 </p>
 
 <p align="center">
