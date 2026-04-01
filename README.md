@@ -1,8 +1,8 @@
 <h1 align="center">Vetra 🎬</h1>
 
 <p align="center">
-  <a href="images/multiSM.png">
-    <img src="images/multiBG.png" width="900" alt="Vetra preview">
+  <a href="images/multiBG.png">
+    <img src="images/multiSM.png" width="900" alt="Vetra preview">
   </a>
 </p>
 
