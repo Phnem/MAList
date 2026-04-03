@@ -48,7 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import coil3.compose.AsyncImage
-import com.example.myapplication.R
+import com.phnem.vetro.R
 import com.example.myapplication.domain.inspect.InspectContentMode
 import com.example.myapplication.ui.home.ApiSearchResultCard
 import com.example.myapplication.ui.shared.theme.InspectVisualSearchTheme
@@ -321,14 +321,14 @@ fun InspectScreen(
                                                     result = r,
                                                     isAdded = uiModel.isAdded,
                                                     isLoading = addingId == addKey,
-                                                    displayGenres = null,
-                                                    addLabel = strings.addButton,
-                                                    addedLabel = strings.addedButton,
                                                     onAddClick = {
                                                         performHaptic(view, "light")
                                                         viewModel.addFromApi(r)
                                                     },
                                                     modifier = Modifier.fillMaxWidth(),
+                                                    displayGenres = null,
+                                                    addLabel = strings.addButton,
+                                                    addedLabel = strings.addedButton,
                                                     forceDarkCardStyle = true
                                                 )
                                             }

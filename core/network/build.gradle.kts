@@ -12,7 +12,7 @@ val localProperties = Properties().apply {
 }
 
 android {
-    namespace = "com.example.myapplication.network"
+    namespace = "com.phnem.vetro.network"
     buildFeatures {
         buildConfig = true
     }

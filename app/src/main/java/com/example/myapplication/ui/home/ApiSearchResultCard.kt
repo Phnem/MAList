@@ -69,12 +69,12 @@ fun ApiSearchResultCard(
     result: ApiSearchResult,
     isAdded: Boolean,
     isLoading: Boolean,
+    onAddClick: () -> Unit,
+    modifier: Modifier = Modifier,
     /** Localized genre labels; if null, raw API strings are used. */
     displayGenres: PersistentList<String>? = null,
     addLabel: String = "Add",
     addedLabel: String = "Added",
-    onAddClick: () -> Unit,
-    modifier: Modifier = Modifier,
     /** На экранах с локальной тёмной темой (Visual Search) глобальный [isAppInDarkTheme] может быть false — форсируем тёмный вид карточки. */
     forceDarkCardStyle: Boolean = false
 ) {

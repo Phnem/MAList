@@ -15,7 +15,8 @@ import kotlinx.coroutines.flow.map
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AnimeLocalDataSource(
-    private val factory: SQLDelightDatabaseFactory
+    private val factory: SQLDelightDatabaseFactory,
+    private val mirrorCoordinator: DeveloperMirrorCoordinator
 ) {
 
     private fun db(): AnimeDatabase = factory.getDatabase()
@@ -62,6 +63,7 @@ class AnimeLocalDataSource(
 
     suspend fun updateAnimeComment(id: String, comment: String) {
         db().animeQueries.updateAnimeComment(comment, System.currentTimeMillis(), id)
+        mirrorCoordinator.requestExportIfEnabled()
     }
 
     private fun mapRowToAnime(
@@ -114,6 +116,7 @@ class AnimeLocalDataSource(
                 )
             }
         }
+        mirrorCoordinator.requestExportIfEnabled()
     }
 
     suspend fun updateAnime(anime: Anime) {
@@ -141,6 +144,7 @@ class AnimeLocalDataSource(
                 )
             }
         }
+        mirrorCoordinator.requestExportIfEnabled()
     }
 
     suspend fun deleteAnime(id: String) {
@@ -148,6 +152,7 @@ class AnimeLocalDataSource(
             db().animeQueries.deleteAnimeTags(id)
             db().animeQueries.deleteAnime(id)
         }
+        mirrorCoordinator.requestExportIfEnabled()
     }
 
     suspend fun insertAllAnime(list: List<Anime>) {
@@ -175,6 +180,7 @@ class AnimeLocalDataSource(
                 }
             }
         }
+        mirrorCoordinator.requestExportIfEnabled()
     }
 
     fun getUpdates(): List<AnimeUpdate> {
@@ -210,6 +216,7 @@ class AnimeLocalDataSource(
                 )
             }
         }
+        mirrorCoordinator.requestExportIfEnabled()
     }
 
     suspend fun addIgnored(animeId: String, newEpisodes: Int) {
@@ -217,10 +224,12 @@ class AnimeLocalDataSource(
             anime_id = animeId,
             new_episodes = newEpisodes.toLong()
         )
+        mirrorCoordinator.requestExportIfEnabled()
     }
 
     suspend fun removeUpdate(animeId: String) {
         db().animeQueries.deleteUpdateByAnimeId(animeId)
+        mirrorCoordinator.requestExportIfEnabled()
     }
 
     private fun getTagsForAnime(animeId: String): ImmutableList<String> {

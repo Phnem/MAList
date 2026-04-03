@@ -16,7 +16,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -25,17 +24,14 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
-import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.composed
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -45,7 +41,6 @@ import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
@@ -72,7 +67,6 @@ import com.example.myapplication.data.repository.GenreRepository
 import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.utils.getStrings
 import com.example.myapplication.utils.performHaptic
-import com.example.myapplication.ui.details.AnimeDetailsSheet
 import com.example.myapplication.ui.navigation.navigateToAddEdit
 import com.example.myapplication.ui.navigation.navigateToDetails
 import com.example.myapplication.ui.navigation.navigateToInspect
@@ -157,13 +151,11 @@ fun HomeScreen(
     }
 
     BackHandler(enabled = isSearchVisible || uiState.searchQuery.isNotEmpty()) {
-        if (isSearchVisible) {
-            performHaptic(view, "light")
-            isSearchVisible = false
-            viewModel.updateSearchQuery("")
-            focusManager.clearFocus()
-            kbd?.hide()
-        }
+        performHaptic(view, "light")
+        isSearchVisible = false
+        viewModel.updateSearchQuery("")
+        focusManager.clearFocus()
+        kbd?.hide()
     }
 
     val listState = rememberLazyListState()
@@ -201,8 +193,8 @@ fun HomeScreen(
         }
     }
 
-    Scaffold(containerColor = Color.Transparent, bottomBar = {}, floatingActionButton = {}) { _ ->
-        Box(modifier = Modifier.fillMaxSize()) {
+    Scaffold(containerColor = Color.Transparent, bottomBar = {}, floatingActionButton = {}) { paddingValues ->
+        Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
             Box(modifier = Modifier.fillMaxSize().background(bgColor))
 
             if (notifVisibleState.currentState || notifVisibleState.targetState) {
@@ -264,7 +256,6 @@ fun HomeScreen(
                         filterSelectedTags = uiState.filterTags,
                         filterCategoryType = uiState.filterCategory,
                         currentLanguage = currentLanguage,
-                        getGenreName = { genreId -> genreRepository.getLabel(genreId, currentLanguage) },
                         onTagToggle = { tag, categoryType ->
                             val currentTags = uiState.filterTags.toMutableList()
                             if (currentTags.contains(tag)) {
@@ -429,7 +420,7 @@ fun HomeScreen(
                         }
                     }
                     CloudRestoreIndicator(
-                        isRestoring = uiState.isRestoringFromCloud && list.isEmpty(),
+                        isRestoring = uiState.isRestoringFromCloud && list.isEmpty() && uiState.isListLoaded,
                         strings = strings,
                         modifier = Modifier.align(Alignment.Center)
                     )
@@ -495,7 +486,7 @@ fun HomeScreen(
                         cursorBrush = SolidColor(BrandBlue),
                         decorationBox = { innerTextField ->
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Search, null, tint = BrandBlue)
+                                Icon(imageVector = Icons.Default.Search, contentDescription = null, tint = BrandBlue)
                                 Spacer(Modifier.width(12.dp))
                                 Box {
                                     if (uiState.searchQuery.isEmpty()) {
@@ -506,7 +497,10 @@ fun HomeScreen(
                             }
                         },
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = { kbd?.hide() })
+                        keyboardActions = KeyboardActions(onSearch = {
+                            kbd?.hide()
+                            focusManager.clearFocus()
+                        })
                     )
                 }
                 LaunchedEffect(Unit) {
@@ -518,6 +512,9 @@ fun HomeScreen(
             if (shouldBlur && animeToDelete == null && animeToFavorite == null && !showNotificationsOverlay && !showSortOverlay && !uiState.isGenreFilterVisible) {
                 Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
                     focusManager.clearFocus()
+                    if (isSearchVisible) {
+                        viewModel.updateSearchQuery("")
+                    }
                     isSearchVisible = false
                     kbd?.hide()
                 }.zIndex(2f))
@@ -606,7 +603,6 @@ fun HomeScreen(
                     GlassActionDock(
                         hazeState = hazeState,
                         isFloating = isHeaderFloating,
-                        sortOption = uiState.sortOption,
                         strings = strings,
                         filterSelectedTags = uiState.filterTags,
                         updates = uiState.updates,
@@ -620,7 +616,7 @@ fun HomeScreen(
 
         if (showCSheet) {
             LaunchedEffect(showCSheet) {
-                if (showCSheet) viewModel.loadStatsAnimeList()
+                viewModel.loadStatsAnimeList()
             }
             StatsOverlay(
                 animeList = uiState.statsAnimeList,
@@ -631,22 +627,20 @@ fun HomeScreen(
     }
 }
 
-private fun Modifier.homeScrollBlur(blur: Dp): Modifier = composed {
-    when {
-        blur == 0.dp -> this
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val px = with(LocalDensity.current) { blur.toPx() }
-            this.graphicsLayer {
-                renderEffect = RenderEffect.createBlurEffect(
-                    px,
-                    px,
-                    Shader.TileMode.CLAMP
-                ).asComposeRenderEffect()
-                clip = true
-            }
+private fun Modifier.homeScrollBlur(blur: Dp): Modifier = when {
+    blur == 0.dp -> this
+    Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> this.then(
+        Modifier.graphicsLayer {
+            val px = blur.toPx()
+            renderEffect = RenderEffect.createBlurEffect(
+                px,
+                px,
+                Shader.TileMode.CLAMP
+            ).asComposeRenderEffect()
+            clip = true
         }
-        else -> this.then(Modifier.blur(blur))
-    }
+    )
+    else -> this.then(Modifier.blur(blur))
 }
 
 private fun LazyListScope.apiSearchResultsSection(
@@ -739,14 +733,14 @@ private fun LazyListScope.apiSearchResultsSection(
             result = result,
             isAdded = uiModel.isAdded,
             isLoading = isLoading,
-            displayGenres = apiGenres,
-            addLabel = strings.addButton,
-            addedLabel = strings.addedButton,
             onAddClick = {
                 performHaptic(view, "light")
                 viewModel.addFromApi(result)
             },
-            modifier = Modifier.padding(horizontal = 16.dp)
+            modifier = Modifier.padding(horizontal = 16.dp),
+            displayGenres = apiGenres,
+            addLabel = strings.addButton,
+            addedLabel = strings.addedButton
         )
     }
 }

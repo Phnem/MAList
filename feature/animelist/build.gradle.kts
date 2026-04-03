@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.myapplication.feature.animelist"
+    namespace = "com.phnem.vetro.feature.animelist"
 }
 
 dependencies {

@@ -16,6 +16,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.myapplication.ui.shared.theme.SnProFamily
+import java.text.DateFormat
+import java.util.Date
+import java.util.Locale
 
 data class CloudStrings(
     val title: String = "Синхронизация с облаком",
@@ -41,7 +44,17 @@ fun CloudSettingsSection(
             modifier = Modifier.padding(bottom = 8.dp)
         )
         Text(
-            text = "${strings.lastSync} ${if (lastSyncTime > 0) java.text.SimpleDateFormat("dd/MM/yyyy HH:mm").format(java.util.Date(lastSyncTime)) else strings.neverSynced}",
+            text = "${strings.lastSync} ${
+                if (lastSyncTime > 0) {
+                    DateFormat.getDateTimeInstance(
+                        DateFormat.SHORT,
+                        DateFormat.SHORT,
+                        Locale.getDefault()
+                    ).format(Date(lastSyncTime))
+                } else {
+                    strings.neverSynced
+                }
+            }",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(bottom = 16.dp)

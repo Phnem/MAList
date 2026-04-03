@@ -30,6 +30,7 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -90,7 +91,9 @@ class HomeViewModel(
         sortOption = _uiState.map { it.sortOption },
         sortAscending = _uiState.map { it.sortAscending },
         filterTags = _uiState.map { it.filterTags }
-    ).map { it.toImmutableList() }.stateIn(
+    ).map { it.toImmutableList() }
+     .onEach { if (!_uiState.value.isListLoaded) _uiState.update { s -> s.copy(isListLoaded = true) } }
+     .stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = persistentListOf()

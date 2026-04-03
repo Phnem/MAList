@@ -4,14 +4,11 @@ import android.content.Context
 import android.content.Intent
 import com.example.myapplication.data.models.UiStrings
 import android.net.Uri
+import androidx.core.net.toUri
 import androidx.compose.animation.*
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
-import androidx.compose.foundation.Image
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -19,7 +16,6 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -29,6 +25,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,14 +37,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.activity.compose.BackHandler
 import androidx.navigation.NavController
+import com.example.myapplication.isAppInDarkTheme
 import com.example.myapplication.DropboxSyncManager
-import com.example.myapplication.R
+import com.phnem.vetro.R
 import com.example.myapplication.data.models.*
 import com.example.myapplication.network.AppContentType
 import com.example.myapplication.network.AppLanguage
@@ -63,7 +60,6 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
-import org.koin.compose.koinInject
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateDpAsState
@@ -97,6 +93,7 @@ fun SettingsScreen(
     )
     val collisionState = rememberInertialCollisionState()
     val settingsHazeState = remember { HazeState() }
+    var showDeveloperSection by rememberSaveable { mutableStateOf(false) }
 
     BackHandler(enabled = showCloudSheet || showContactSheet || showUpdateChangelogSheet) {
         showCloudSheet = false
@@ -274,7 +271,7 @@ fun SettingsScreen(
                                                                     context.startActivity(
                                                                         Intent(
                                                                             Intent.ACTION_VIEW,
-                                                                            Uri.parse(url)
+                                                                            url.toUri()
                                                                         )
                                                                     )
                                                                 }
@@ -325,29 +322,67 @@ fun SettingsScreen(
                             }
                         }
                     }
+                    item(
+                        key = "developer_section",
+                        span = { GridItemSpan(2) }
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .inertialCollision(collisionState, index = 7, baseMultiplier = 1.2f)
+                        ) {
+                            DeveloperSettingsSection(
+                                strings = strings,
+                                uiState = uiState,
+                                expanded = showDeveloperSection,
+                                onExpandToggle = {
+                                    performHaptic(view, "light")
+                                    showDeveloperSection = !showDeveloperSection
+                                },
+                                onMirrorDbToggle = {
+                                    performHaptic(view, "light")
+                                    viewModel.setDevMirrorDb(it)
+                                },
+                                onHideShareToggle = {
+                                    performHaptic(view, "light")
+                                    viewModel.setDevHideShare(it)
+                                },
+                                onFpsOverlayToggle = {
+                                    performHaptic(view, "light")
+                                    viewModel.setDevFpsOverlay(it)
+                                },
+                                onExportLogs = {
+                                    performHaptic(view, "light")
+                                    viewModel.exportLogs(context)
+                                }
+                            )
+                        }
+                    }
                 }
             }
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(bottom = 24.dp, end = 24.dp)
-                    .inertialCollision(collisionState, index = 6, baseMultiplier = 2.5f)
-            ) {
-                GlassIconButton(
-                icon = Icons.Default.Share,
-                onClick = {
-                    performHaptic(view, "light")
-                    viewModel.shareWithDb(context)
-                },
-                modifier = Modifier,
-                hazeState = settingsHazeState,
-                size = 58.dp,
-                iconSize = 29.dp,
-                backgroundColor = Color.Transparent,
-                contentDescription = "Share",
-                tint = textC,
-                iconOffsetX = (-2).dp
-            )
+            if (!uiState.devHideShareButton) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(bottom = 24.dp, end = 24.dp)
+                        .inertialCollision(collisionState, index = 6, baseMultiplier = 2.5f)
+                ) {
+                    GlassIconButton(
+                        icon = Icons.Default.Share,
+                        onClick = {
+                            performHaptic(view, "light")
+                            viewModel.shareWithDb(context)
+                        },
+                        modifier = Modifier,
+                        hazeState = settingsHazeState,
+                        size = 58.dp,
+                        iconSize = 29.dp,
+                        backgroundColor = Color.Transparent,
+                        contentDescription = "Share",
+                        tint = textC,
+                        iconOffsetX = (-2).dp
+                    )
+                }
             }
         }
     }
@@ -421,6 +456,193 @@ fun SettingsScreen(
             }
         }
     }
+    }
+}
+
+@Composable
+private fun DeveloperSettingsSection(
+    strings: UiStrings,
+    uiState: SettingsUiState,
+    expanded: Boolean,
+    onExpandToggle: () -> Unit,
+    onMirrorDbToggle: (Boolean) -> Unit,
+    onHideShareToggle: (Boolean) -> Unit,
+    onFpsOverlayToggle: (Boolean) -> Unit,
+    onExportLogs: () -> Unit
+) {
+    val isDark = isAppInDarkTheme()
+    val tileBg =
+        if (isDark) OverlayThemeTokens.TileBackgroundDark
+        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+    val accent = if (isDark) BrandBlueSoft else BrandRed
+    val cornerRadius by animateDpAsState(
+        targetValue = if (expanded) 24.dp else 999.dp,
+        animationSpec = tween(300),
+        label = "devSectionCorner"
+    )
+    val shape = RoundedCornerShape(cornerRadius)
+    Surface(
+        shape = shape,
+        color = tileBg,
+        tonalElevation = 0.dp,
+        border = BorderStroke(1.5.dp, accent),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { onExpandToggle() }
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = strings.devSectionTitle,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontFamily = SnProFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
+                )
+                Icon(
+                    imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    DeveloperSwitchRow(
+                        title = strings.devMirrorDbTitle,
+                        subtitle = strings.devMirrorDbSubtitle,
+                        checked = uiState.devMirrorDbToDocuments,
+                        accent = accent,
+                        onCheckedChange = onMirrorDbToggle
+                    )
+                    DeveloperSwitchRow(
+                        title = strings.devHideShareTitle,
+                        subtitle = strings.devHideShareSubtitle,
+                        checked = uiState.devHideShareButton,
+                        accent = accent,
+                        onCheckedChange = onHideShareToggle
+                    )
+                    DeveloperActionRow(
+                        title = strings.devExportLogsTitle,
+                        subtitle = strings.devExportLogsSubtitle,
+                        isLoading = uiState.isExportingLogs,
+                        iconDescription = strings.devExportLogsCd,
+                        accent = accent,
+                        onClick = onExportLogs
+                    )
+                    DeveloperSwitchRow(
+                        title = strings.devFpsOverlayTitle,
+                        subtitle = strings.devFpsOverlaySubtitle,
+                        checked = uiState.devFpsOverlay,
+                        accent = accent,
+                        onCheckedChange = onFpsOverlayToggle
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DeveloperSwitchRow(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    accent: Color,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontFamily = SnProFamily
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontFamily = SnProFamily
+            )
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = accent,
+                checkedTrackColor = accent.copy(alpha = 0.5f),
+                uncheckedTrackColor = accent.copy(alpha = 0.2f)
+            )
+        )
+    }
+}
+
+@Composable
+private fun DeveloperActionRow(
+    title: String,
+    subtitle: String,
+    isLoading: Boolean,
+    iconDescription: String,
+    accent: Color,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontFamily = SnProFamily
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontFamily = SnProFamily
+            )
+        }
+        IconButton(
+            onClick = onClick,
+            enabled = !isLoading
+        ) {
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    color = accent,
+                    strokeWidth = 2.dp
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Default.Share,
+                    contentDescription = iconDescription,
+                    tint = accent
+                )
+            }
+        }
     }
 }
 
@@ -509,7 +731,7 @@ fun rememberSettingsTiles(
                 when (uiState.updateStatus) {
                     AppUpdateStatus.IDLE, AppUpdateStatus.ERROR -> viewModel.checkAppUpdate(context)
                     AppUpdateStatus.UPDATE_AVAILABLE -> uiState.latestDownloadUrl?.let { url ->
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                        context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
                     }
                     else -> {}
                 }
@@ -560,10 +782,8 @@ fun CapsuleChipRow(
             )
     ) {
         val innerWidth = maxWidth
-        val contentHeight = containerHeight
         val segmentWidth = innerWidth / options.size
-        val pillWidth = segmentWidth
-        val pillCornerRadius = contentHeight / 2
+        val pillCornerRadius = containerHeight / 2
         val innerShape = RoundedCornerShape(pillCornerRadius)
         val pillOffset by animateDpAsState(
             targetValue = segmentWidth * selectedIndex,
@@ -576,7 +796,7 @@ fun CapsuleChipRow(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
                     .offset(x = pillOffset)
-                    .width(pillWidth)
+                    .width(segmentWidth)
                     .fillMaxHeight()
                     .clip(innerShape)
                     .background(accentColor.copy(alpha = 0.22f))
@@ -731,9 +951,10 @@ fun ActionTileItem(
                 )
             }
             Spacer(Modifier.weight(1f))
-            if (tile.updateStatus != null) {
+            val updateStatus = tile.updateStatus
+            if (updateStatus != null) {
                 UpdateStateButton(
-                    status = tile.updateStatus!!,
+                    status = updateStatus,
                     idleText = strings.checkButtonText,
                     onClick = tile.onClick
                 )

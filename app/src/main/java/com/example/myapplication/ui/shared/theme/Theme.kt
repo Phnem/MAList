@@ -7,7 +7,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import com.example.myapplication.R
+import com.phnem.vetro.R
 
 val SnProFamily = FontFamily(
     Font(R.font.snpro_bold, FontWeight.Bold),

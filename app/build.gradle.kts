@@ -23,15 +23,15 @@ sqldelight {
 }
 
 android {
-    namespace = "com.example.myapplication"
+    namespace = "com.phnem.vetro"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.example.myapplication"
+        applicationId = "com.phnem.vetro"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "v3.2.2-Beta"
+        versionCode = 323
+        versionName = "v3.2.3-Stable"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "GITHUB_OWNER", "\"Phnem\"")
@@ -150,5 +150,6 @@ dependencies {
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.androidx.ui.test.junit4)
+    androidTestImplementation(libs.fastlane.screengrab)
     debugImplementation(libs.androidx.ui.test.manifest)
 }

@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.myapplication.designsystem"
+    namespace = "com.phnem.vetro.designsystem"
 }
 
 dependencies {

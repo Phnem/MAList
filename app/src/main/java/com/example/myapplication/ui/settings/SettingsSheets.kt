@@ -33,7 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.myapplication.DropboxSyncManager
-import com.example.myapplication.R
+import com.phnem.vetro.R
 import com.example.myapplication.SyncState
 import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.utils.getStrings

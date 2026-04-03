@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.myapplication.feature.statistics"
+    namespace = "com.phnem.vetro.feature.statistics"
 }
 
 dependencies {

@@ -35,7 +35,7 @@ class ScreenshotsTest {
 
     // Правило для автоматической смены локалей (RU, EN) через fastlane
     @get:Rule
-    val localeTestRule = LocaleTestRule()
+    val localeTestRule: LocaleTestRule = LocaleTestRule()
 
     @Test
     fun takeScreenshots() {

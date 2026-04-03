@@ -5,8 +5,12 @@ import org.koin.android.ext.android.inject
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -14,6 +18,7 @@ import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.data.models.AppTheme
 import com.example.myapplication.DropboxSyncManager
 import com.example.myapplication.ui.navigation.AppNavGraph
+import com.example.myapplication.ui.debug.FpsOverlay
 import com.example.myapplication.ui.shared.theme.OneUiTheme
 import com.example.myapplication.ui.settings.SettingsViewModel
 import org.koin.androidx.compose.koinViewModel
@@ -42,7 +47,12 @@ class MainActivity : ComponentActivity() {
 
             OneUiTheme(darkTheme = useDarkTheme) {
                 val navController = rememberNavController()
-                AppNavGraph(navController = navController)
+                Box(modifier = Modifier.fillMaxSize()) {
+                    AppNavGraph(navController = navController)
+                    if (settingsState.devFpsOverlay) {
+                        FpsOverlay(modifier = Modifier.align(Alignment.TopStart))
+                    }
+                }
             }
         }
     }

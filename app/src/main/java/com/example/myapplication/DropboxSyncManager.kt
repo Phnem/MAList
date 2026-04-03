@@ -6,6 +6,7 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Environment
 import android.util.Log
+import androidx.core.content.edit
 import com.dropbox.core.DbxRequestConfig
 import com.dropbox.core.android.Auth
 import com.dropbox.core.http.HttpRequestor
@@ -38,7 +39,6 @@ import java.util.concurrent.TimeUnit
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response as OkHttpResponse
 import okhttp3.Request as OkHttpRequest
-import okhttp3.RequestBody as OkHttpRequestBody
 import com.dropbox.core.http.HttpRequestor.Response as DbxResponse
 
 sealed class SyncResult {
@@ -69,6 +69,7 @@ operator fun SyncReport.plus(other: SyncReport): SyncReport = SyncReport(
 )
 
 private const val TAG = "DropboxSync"
+/** Dropbox OAuth app key (opaque string; spell-check may flag a substring). */
 private const val APP_KEY = "0isabzy5qvb6owr"
 private const val PREFS_NAME = "dropbox_prefs"
 private const val REFRESH_TOKEN_KEY = "refresh_token"
@@ -89,20 +90,18 @@ class DropboxSyncManager(
     private val _hasTokenFlow = MutableStateFlow(false)
 
     var client: DbxClientV2? = null
-    lateinit var prefs: SharedPreferences
-    lateinit var rootDir: File
-    lateinit var appContext: Context
+    private val appContext: Context = context.applicationContext
+    private val prefs: SharedPreferences = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val rootDir: File =
+        File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), "Vetro")
+            .also { if (!it.exists()) it.mkdirs() }
     private var debounceJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     init {
-        appContext = context.applicationContext
-        prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        rootDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), "Vetro")
-        if (!rootDir.exists()) rootDir.mkdirs()
         _networkMode.value = getNetworkMode()
         val savedSyncMode = prefs.getString(PREF_SYNC_MODE, SyncMode.AUTO.name)
-        _syncMode.value = try { SyncMode.valueOf(savedSyncMode ?: SyncMode.AUTO.name) } catch (e: Exception) { SyncMode.AUTO }
+        _syncMode.value = try { SyncMode.valueOf(savedSyncMode ?: SyncMode.AUTO.name) } catch (_: Exception) { SyncMode.AUTO }
         val refreshToken = prefs.getString(REFRESH_TOKEN_KEY, null)
         _hasTokenFlow.value = refreshToken != null
         if (refreshToken != null) {
@@ -114,6 +113,7 @@ class DropboxSyncManager(
     }
 
     val syncMode: StateFlow<SyncMode> get() = _syncMode.asStateFlow()
+    @Suppress("unused")
     val networkMode: StateFlow<NetworkMode> get() = _networkMode.asStateFlow()
     val syncState: StateFlow<SyncState> get() = _syncState.asStateFlow()
     val hasTokenFlow: StateFlow<Boolean> get() = _hasTokenFlow.asStateFlow()
@@ -132,17 +132,19 @@ class DropboxSyncManager(
 
     fun getNetworkMode(): NetworkMode {
         val modeStr = prefs.getString(PREF_NETWORK_MODE, NetworkMode.WIFI_AND_MOBILE.name)
-        return try { NetworkMode.valueOf(modeStr ?: NetworkMode.WIFI_AND_MOBILE.name) } catch (e: Exception) { NetworkMode.WIFI_AND_MOBILE }
+        return try { NetworkMode.valueOf(modeStr ?: NetworkMode.WIFI_AND_MOBILE.name) } catch (_: Exception) { NetworkMode.WIFI_AND_MOBILE }
     }
 
+    @Suppress("unused")
     fun setNetworkMode(mode: NetworkMode) {
-        prefs.edit().putString(PREF_NETWORK_MODE, mode.name).apply()
+        prefs.edit { putString(PREF_NETWORK_MODE, mode.name) }
         _networkMode.value = mode
     }
 
+    @Suppress("unused")
     fun setSyncMode(mode: SyncMode) {
         _syncMode.value = mode
-        prefs.edit().putString(PREF_SYNC_MODE, mode.name).apply()
+        prefs.edit { putString(PREF_SYNC_MODE, mode.name) }
         if (mode == SyncMode.AUTO) scheduleAutoSync()
     }
 
@@ -158,6 +160,7 @@ class DropboxSyncManager(
         }
     }
 
+    @Suppress("unused")
     suspend fun calculateStorageStats(): StorageStats = withContext(Dispatchers.IO) {
         val dbFile = context.getDatabasePath(DB_NAME)
         var size = if (dbFile.exists()) dbFile.length() else 0L
@@ -175,7 +178,7 @@ class DropboxSyncManager(
     }
 
     fun scheduleAutoSync() {
-        if (client == null || !::appContext.isInitialized) return
+        if (client == null) return
         if (_syncMode.value == SyncMode.MANUAL) return
         debounceJob?.cancel()
         debounceJob = scope.launch {
@@ -198,7 +201,7 @@ class DropboxSyncManager(
             val accessToken = credential.accessToken
             Log.d(TAG, "OAuth result: hasRefreshToken=${!refreshToken.isNullOrBlank()}, hasAccessToken=${!accessToken.isNullOrBlank()}")
             if (!refreshToken.isNullOrBlank()) {
-                prefs.edit().putString(REFRESH_TOKEN_KEY, refreshToken).apply()
+                prefs.edit { putString(REFRESH_TOKEN_KEY, refreshToken) }
                 setupClient(refreshToken, accessToken ?: "")
                 _hasTokenFlow.value = true
                 Log.d(TAG, "Token saved, hasTokenFlow=true")
@@ -252,17 +255,19 @@ class DropboxSyncManager(
             SyncResult.Error(e.message ?: "Unknown")
         } finally {
             if (_syncState.value == SyncState.SYNCING) _syncState.value = SyncState.DONE
-            prefs.edit().putLong(LAST_SYNC_KEY, System.currentTimeMillis()).apply()
+            prefs.edit { putLong(LAST_SYNC_KEY, System.currentTimeMillis()) }
             Log.d(TAG, "✅ SYNC COMPLETED")
         }
     }
 
     private fun migrateRemoteFolderIfNeeded() {
         try {
-            try { client!!.files().getMetadata("/MAList") } catch (e: Exception) { return }
-            try { client!!.files().getMetadata("/Vetro"); return } catch (e: Exception) { }
+            try { client!!.files().getMetadata("/MAList") } catch (_: Exception) { return }
+            try { client!!.files().getMetadata("/Vetro"); return } catch (_: Exception) { }
             client!!.files().moveV2("/MAList", "/Vetro")
-        } catch (e: Exception) { Log.e(TAG, "Remote migration: ${e.message}") }
+        } catch (e: Exception) {
+            Log.e(TAG, "Remote migration: ${e.message}")
+        }
     }
 
     private fun syncCollection(remoteFiles: Map<String, FileMetadata>): SyncReport {
@@ -340,7 +345,7 @@ class DropboxSyncManager(
         databaseFactory.checkpoint()
 
         val localDb = context.getDatabasePath(DB_NAME)
-        val dbCount = try { animeLocalDataSource.getAnimeCount() } catch (e: Exception) { 0 }
+        val dbCount = try { animeLocalDataSource.getAnimeCount() } catch (_: Exception) { 0 }
 
         val tempDb = File(context.cacheDir, "sync_temp_$DB_NAME")
         if (localDb.exists()) {
@@ -378,6 +383,7 @@ class DropboxSyncManager(
                     newDb.copyTo(localDb, overwrite = true)
                     File(localDb.parent, "$DB_NAME-wal").delete()
                     File(localDb.parent, "$DB_NAME-shm").delete()
+                    databaseFactory.reconnectDatabase()
                     Log.d(TAG, "🔄 DB Replaced successfully.")
                 }.onSuccess { recordSuccess() }
                     .onFailure { recordError() }
@@ -434,7 +440,7 @@ class DropboxSyncManager(
     }
 
     fun logout() {
-        prefs.edit().remove(REFRESH_TOKEN_KEY).apply()
+        prefs.edit { remove(REFRESH_TOKEN_KEY) }
         client = null
         _syncState.value = SyncState.AUTH_REQUIRED
         _hasTokenFlow.value = false

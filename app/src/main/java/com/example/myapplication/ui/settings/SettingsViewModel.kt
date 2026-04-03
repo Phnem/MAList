@@ -2,9 +2,12 @@ package com.example.myapplication.ui.settings
 
 import android.content.Context
 import android.content.Intent
+import android.os.Process
+import android.util.Log
 import androidx.core.content.FileProvider
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.lifecycle.ViewModel
@@ -14,7 +17,7 @@ import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.data.models.AppTheme
 import com.example.myapplication.data.models.AppUpdateStatus
 import com.example.myapplication.data.models.SemanticVersion
-import com.example.myapplication.BuildConfig
+import com.phnem.vetro.BuildConfig
 import com.example.myapplication.data.local.SQLDelightDatabaseFactory
 import com.example.myapplication.data.repository.AnimeRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,6 +33,10 @@ import java.io.File
 private val KEY_LANG = stringPreferencesKey("lang")
 private val KEY_THEME = stringPreferencesKey("theme")
 private val KEY_CONTENT_TYPE = stringPreferencesKey("contentType")
+private val KEY_DEV_MIRROR_DB = booleanPreferencesKey("dev_mirror_db_to_documents")
+private val KEY_DEV_HIDE_SHARE = booleanPreferencesKey("dev_hide_share_button")
+private val KEY_DEV_FPS_OVERLAY = booleanPreferencesKey("dev_fps_overlay")
+private const val LOG_TAG = "SettingsViewModel"
 
 class SettingsViewModel(
     private val repository: AnimeRepository,
@@ -47,7 +54,10 @@ class SettingsViewModel(
                     it.copy(
                         language = AppLanguage.valueOf(prefs[KEY_LANG] ?: "EN"),
                         theme = runCatching { AppTheme.valueOf(prefs[KEY_THEME] ?: "SYSTEM") }.getOrElse { AppTheme.SYSTEM },
-                        contentType = runCatching { AppContentType.valueOf(prefs[KEY_CONTENT_TYPE] ?: "ANIME") }.getOrElse { AppContentType.ANIME }
+                        contentType = runCatching { AppContentType.valueOf(prefs[KEY_CONTENT_TYPE] ?: "ANIME") }.getOrElse { AppContentType.ANIME },
+                        devMirrorDbToDocuments = prefs[KEY_DEV_MIRROR_DB] ?: false,
+                        devHideShareButton = prefs[KEY_DEV_HIDE_SHARE] ?: false,
+                        devFpsOverlay = prefs[KEY_DEV_FPS_OVERLAY] ?: false
                     )
                 }
             }
@@ -72,6 +82,27 @@ class SettingsViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(contentType = contentType) }
             settingsDataStore.edit { it[KEY_CONTENT_TYPE] = contentType.name }
+        }
+    }
+
+    fun setDevMirrorDb(enabled: Boolean) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(devMirrorDbToDocuments = enabled) }
+            settingsDataStore.edit { it[KEY_DEV_MIRROR_DB] = enabled }
+        }
+    }
+
+    fun setDevHideShare(enabled: Boolean) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(devHideShareButton = enabled) }
+            settingsDataStore.edit { it[KEY_DEV_HIDE_SHARE] = enabled }
+        }
+    }
+
+    fun setDevFpsOverlay(enabled: Boolean) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(devFpsOverlay = enabled) }
+            settingsDataStore.edit { it[KEY_DEV_FPS_OVERLAY] = enabled }
         }
     }
 
@@ -195,6 +226,43 @@ class SettingsViewModel(
                 withContext(Dispatchers.Main) {
                     context.startActivity(Intent.createChooser(sendIntent, null))
                 }
+            }
+        }
+    }
+
+    fun exportLogs(context: Context) {
+        if (_uiState.value.isExportingLogs) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isExportingLogs = true) }
+            try {
+                val logFile = withContext(Dispatchers.IO) {
+                    val exportDir = File(context.cacheDir, "share").apply { mkdirs() }
+                    val exportFile = File(exportDir, "vetro_logcat.txt")
+                    val pid = Process.myPid().toString()
+                    val process = ProcessBuilder("logcat", "-d", "-v", "threadtime", "--pid", pid).start()
+                    val logs = process.inputStream.bufferedReader().use { it.readText() }
+                    process.waitFor()
+                    exportFile.writeText(logs)
+                    exportFile
+                }
+
+                val uri = FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    logFile
+                )
+                val sendIntent = Intent().apply {
+                    action = Intent.ACTION_SEND
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    putExtra(Intent.EXTRA_TEXT, "Vetro logs")
+                    type = "text/plain"
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                context.startActivity(Intent.createChooser(sendIntent, null))
+            } catch (e: Exception) {
+                Log.w(LOG_TAG, "Failed to export logs", e)
+            } finally {
+                _uiState.update { it.copy(isExportingLogs = false) }
             }
         }
     }

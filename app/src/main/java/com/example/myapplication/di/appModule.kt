@@ -1,6 +1,6 @@
 package com.example.myapplication.di
 
-import com.example.myapplication.BuildConfig
+import com.phnem.vetro.BuildConfig
 import com.example.myapplication.data.remote.GeminiStructuredClient
 import com.example.myapplication.data.repository.AnimeRepository
 import com.example.myapplication.data.repository.GenreRepository

@@ -62,7 +62,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -76,8 +75,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.Offset
@@ -101,11 +98,10 @@ import android.os.Build
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.painterResource
-import com.example.myapplication.R
+import com.phnem.vetro.R
 import com.example.myapplication.data.models.AnimeUpdate
 import com.example.myapplication.data.models.SortOption
 import com.example.myapplication.data.models.UiStrings
-import com.example.myapplication.data.repository.GenreRepository
 import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.ui.home.WorkspaceSortNotificationActions
 import com.example.myapplication.ui.navigation.navigateToAddEdit
@@ -116,10 +112,8 @@ import com.example.myapplication.ui.shared.fluidClickable
 import com.example.myapplication.ui.shared.gradientHighlightBorder
 import com.example.myapplication.ui.shared.theme.BrandBlue
 import com.example.myapplication.ui.shared.theme.DarkBackground
-import com.example.myapplication.ui.shared.theme.DarkSurfaceVariant
 import com.example.myapplication.ui.shared.theme.OverlayThemeTokens
 import com.example.myapplication.ui.shared.theme.SnProFamily
-import com.example.myapplication.ui.shared.CollisionDirection
 import com.example.myapplication.ui.shared.inertialCollision
 import com.example.myapplication.ui.shared.rememberInertialCollisionState
 import com.example.myapplication.utils.performHaptic
@@ -127,7 +121,6 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
 import dev.chrisbanes.haze.hazeEffect
-import dev.chrisbanes.haze.materials.CupertinoMaterials
 
 @Composable
 fun isAppInDarkTheme(): Boolean {
@@ -152,7 +145,7 @@ fun matteFabGlassHazeStyle(isDark: Boolean): HazeStyle = HazeStyle(
     noiseFactor = if (isDark) 0.06f else 0.095f
 )
 
-/** Безопасный Haze: на Android 12+ (API 31) — аппаратный RenderEffect; на старых — полупрозрачный фон (без тормозящего блюра). */
+/** Безопасный Haze: на Android 12+ (API 31) — аппаратный RenderEffect; на старых — полупрозрачный фон (без размытия на CPU). */
 fun Modifier.safeHaze(state: HazeState, style: HazeStyle = panelGlassHazeStyle): Modifier {
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         this.hazeEffect(state = state, style = style)
@@ -168,38 +161,8 @@ internal val panelGlassHazeStyle = HazeStyle(
     blurRadius = 20.dp
 )
 
-/** Градиентная обводка панели: белая как блик в тёмной теме, тёмная как тень в светлой. */
-internal fun Modifier.panelGradientBorder(cornerRadiusDp: androidx.compose.ui.unit.Dp, isDark: Boolean): Modifier =
-    drawWithContent {
-        drawContent()
-        val strokeWidth = 1.5.dp.toPx()
-        val cornerRadius = (cornerRadiusDp.toPx() - strokeWidth / 2f).coerceAtLeast(0f)
-        val topLeft = Offset(strokeWidth / 2f, strokeWidth / 2f)
-        val rectSize = Size(size.width - strokeWidth, size.height - strokeWidth)
-        val gradientBrush = if (isDark) Brush.verticalGradient(
-            colors = listOf(
-                Color.White.copy(alpha = 0.38f),
-                Color.White.copy(alpha = 0.18f),
-                Color.White.copy(alpha = 0.1f)
-            )
-        ) else Brush.verticalGradient(
-            colors = listOf(
-                Color.Black.copy(alpha = 0.06f),
-                Color.Black.copy(alpha = 0.12f),
-                Color.Black.copy(alpha = 0.08f)
-            )
-        )
-        drawRoundRect(
-            brush = gradientBrush,
-            topLeft = topLeft,
-            size = rectSize,
-            cornerRadius = CornerRadius(cornerRadius),
-            style = Stroke(width = strokeWidth)
-        )
-    }
-
 // ==========================================
-// КОМПОНЕНТ "СИМП-СТЕКЛО"
+// Simple glass card ("simp glass" style)
 // ==========================================
 @Composable
 fun SimpGlassCard(
@@ -244,13 +207,12 @@ fun SimpGlassCard(
 }
 
 // ==========================================
-// GLASSACTIONDOCK (Обновленный)
+// GlassActionDock
 // ==========================================
 @Composable
 fun GlassActionDock(
     hazeState: HazeState,
     isFloating: Boolean,
-    sortOption: SortOption,
     strings: UiStrings,
     filterSelectedTags: List<String>,
     updates: List<AnimeUpdate>,
@@ -259,8 +221,6 @@ fun GlassActionDock(
     modifier: Modifier = Modifier
 ) {
     val isDark = isAppInDarkTheme()
-    val glassOpaque = isFloating
-
     val topPadding by animateDpAsState(
         targetValue = if (isFloating) 16.dp else 0.dp,
         animationSpec = spring(stiffness = Spring.StiffnessLow),
@@ -268,12 +228,12 @@ fun GlassActionDock(
     )
     val borderStrokeBase = if (isDark) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.8f)
     val borderColor by animateColorAsState(
-        targetValue = if (glassOpaque) borderStrokeBase else Color.Transparent,
+        targetValue = if (isFloating) borderStrokeBase else Color.Transparent,
         label = "border"
     )
     val shineColorBase = if (isDark) Color.White.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.6f)
     val shineAlpha by animateFloatAsState(
-        targetValue = if (glassOpaque) 1f else 0f,
+        targetValue = if (isFloating) 1f else 0f,
         label = "shineAlpha"
     )
     val buttonBgColor by animateColorAsState(
@@ -341,6 +301,7 @@ fun GlassActionDock(
 // ==========================================
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
+@Suppress("UNUSED_PARAMETER")
 fun GlassBottomNavigation(
     hazeState: HazeState,
     nav: androidx.navigation.NavController,
@@ -546,14 +507,14 @@ fun GlassBottomNavigation(
 }
 
 // ==========================================
-// ВСТРОЕННЫЕ ИКОНКИ (Heroicons)
+// Built-in vector icons (Heroicons-style paths)
 // ==========================================
 
-private var _HeroiconsPlus: ImageVector? = null
+private var heroiconsPlusCached: ImageVector? = null
 val HeroiconsPlus: ImageVector
     get() {
-        if (_HeroiconsPlus != null) return _HeroiconsPlus!!
-        _HeroiconsPlus = ImageVector.Builder(
+        if (heroiconsPlusCached != null) return heroiconsPlusCached!!
+        heroiconsPlusCached = ImageVector.Builder(
             name = "plus",
             defaultWidth = 24.dp,
             defaultHeight = 24.dp,
@@ -577,14 +538,14 @@ val HeroiconsPlus: ImageVector
                 close()
             }
         }.build()
-        return _HeroiconsPlus!!
+        return heroiconsPlusCached!!
     }
 
-private var _HeroiconsSquaresPlus: ImageVector? = null
+private var heroiconsSquaresPlusCached: ImageVector? = null
 val HeroiconsSquaresPlus: ImageVector
     get() {
-        if (_HeroiconsSquaresPlus != null) return _HeroiconsSquaresPlus!!
-        _HeroiconsSquaresPlus = ImageVector.Builder(
+        if (heroiconsSquaresPlusCached != null) return heroiconsSquaresPlusCached!!
+        heroiconsSquaresPlusCached = ImageVector.Builder(
             name = "squares-plus",
             defaultWidth = 24.dp,
             defaultHeight = 24.dp,
@@ -637,14 +598,14 @@ val HeroiconsSquaresPlus: ImageVector
                 close()
             }
         }.build()
-        return _HeroiconsSquaresPlus!!
+        return heroiconsSquaresPlusCached!!
     }
 
-private var _HeroiconsRectangleStack: ImageVector? = null
+private var heroiconsRectangleStackCached: ImageVector? = null
 val HeroiconsRectangleStack: ImageVector
     get() {
-        if (_HeroiconsRectangleStack != null) return _HeroiconsRectangleStack!!
-        _HeroiconsRectangleStack = ImageVector.Builder(
+        if (heroiconsRectangleStackCached != null) return heroiconsRectangleStackCached!!
+        heroiconsRectangleStackCached = ImageVector.Builder(
             name = "rectangle-stack",
             defaultWidth = 24.dp,
             defaultHeight = 24.dp,
@@ -687,24 +648,17 @@ val HeroiconsRectangleStack: ImageVector
                 curveToRelative(0f, -0.98f, 0.626f, -1.813f, 1.5f, -2.122f)
             }
         }.build()
-        return _HeroiconsRectangleStack!!
+        return heroiconsRectangleStackCached!!
     }
 
 // ==========================================
 // ЦВЕТА И РАСШИРЕНИЯ ДЛЯ СТАРОГО ДИЗАЙНА
 // ==========================================
-private val CustomDarkBorder = Color.White.copy(alpha = 0.08f)
 private val IconFilterColor = Color(0xFFE91E63)
 
 private sealed interface SortGridSelection {
     data class Sort(val option: SortOption, val isAscending: Boolean) : SortGridSelection
     data object Genres : SortGridSelection
-}
-
-fun SortOption.getLabel(strings: UiStrings): String = when (this) {
-    SortOption.RATING -> strings.ratingHigh
-    SortOption.EPISODES -> strings.episodesHigh
-    SortOption.TITLE -> strings.titleAZ
 }
 
 fun SortOption.getIcon(): ImageVector = when (this) {
@@ -1243,11 +1197,9 @@ fun GenreFilterOverlay(
     filterSelectedTags: List<String>,
     filterCategoryType: String,
     currentLanguage: AppLanguage,
-    getGenreName: (String) -> String,
     onTagToggle: (String, String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val genreRepository: GenreRepository = org.koin.compose.koinInject()
     val isDark = isAppInDarkTheme()
     val panelBg = if (isDark) DarkBackground else MaterialTheme.colorScheme.surface
     val borderColor = if (isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.06f)

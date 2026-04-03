@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.myapplication.database"
+    namespace = "com.phnem.vetro.database"
 }
 
 dependencies {

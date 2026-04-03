@@ -5,10 +5,12 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.myapplication.data.local.AnimeLocalDataSource
+import com.example.myapplication.data.local.DeveloperMirrorCoordinator
 import com.example.myapplication.data.local.ImageStorageRepositoryImpl
 import com.example.myapplication.data.local.LegacyMigrationRepositoryImpl
 import com.example.myapplication.data.local.MigrationManager
 import com.example.myapplication.data.local.SQLDelightDatabaseFactory
+import com.example.myapplication.data.local.VetroPublicDbExporter
 import com.example.myapplication.data.repository.ImageStorageRepository
 import com.example.myapplication.data.repository.LegacyMigrationRepository
 import com.example.myapplication.data.local.AndroidPermissionChecker
@@ -28,7 +30,9 @@ private val Context.settingsDataStore: DataStore<Preferences> by preferencesData
 
 val databaseModule = module {
     single { SQLDelightDatabaseFactory(androidContext()) }
-    single { AnimeLocalDataSource(get()) }
+    single { VetroPublicDbExporter(androidContext(), get()) }
+    single { DeveloperMirrorCoordinator(settingsDataStore = get(named("settings")), exporter = get()) }
+    single { AnimeLocalDataSource(get(), get()) }
     single<ImageStorageRepository> { ImageStorageRepositoryImpl(context = androidContext(), httpClient = get()) }
     single<PermissionChecker> { AndroidPermissionChecker(androidContext()) }
     single<IdGenerator> { RealIdGenerator() }

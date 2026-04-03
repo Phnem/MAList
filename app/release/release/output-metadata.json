@@ -4,15 +4,15 @@
     "type": "APK",
     "kind": "Directory"
   },
-  "applicationId": "com.example.myapplication",
+  "applicationId": "com.phnem.vetro",
   "variantName": "release",
   "elements": [
     {
       "type": "SINGLE",
       "filters": [],
       "attributes": [],
-      "versionCode": 1,
-      "versionName": "v3.2.2-Beta",
+      "versionCode": 323,
+      "versionName": "v3.2.3-Stable",
       "outputFile": "app-release.apk"
     }
   ],
