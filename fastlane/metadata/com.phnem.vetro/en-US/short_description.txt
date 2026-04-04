@@ -1,1 +1,0 @@
-Minimal local-first media manager
