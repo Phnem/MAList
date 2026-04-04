@@ -12,14 +12,7 @@ pluginManagement {
         }
         mavenCentral()
         gradlePluginPortal()
-        maven("https://maven.pkg.jetbrains.space/kotlin/p/kotlin/bootstrap")
     }
-}
-
-// !!! ДОБАВЬТЕ ЭТОТ БЛОК ПЛАГИНОВ СЮДА !!!
-plugins {
-    // Этот плагин позволяет Gradle самому скачать Java 17
-    id("org.gradle.toolchains.foojay-resolver-convention") version "0.8.0"
 }
 
 dependencyResolutionManagement {
