@@ -1,0 +1,13 @@
+Vetro is a minimal, privacy-focused media manager for organizing and managing movies, TV shows, anime, and other content.
+
+The app follows a local-first approach and works fully offline without requiring an account. All user data is stored locally and remains under full user control.
+
+Originally created as an anime tracker, Vetro evolved into a flexible media manager for different types of content libraries.
+
+Features:
+- Fully offline support
+- No mandatory accounts or tracking
+- Optional cloud sync
+- Clean architecture (MVI)
+- Reactive data layer (Flow + SQLDelight)
+- Advanced search (API-based and image recognition)
