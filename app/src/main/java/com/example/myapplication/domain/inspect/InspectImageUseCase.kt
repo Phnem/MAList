@@ -22,17 +22,29 @@ class InspectImageUseCase(
     private val gemini: GeminiStructuredClient
 ) {
 
+    suspend fun validateGeminiApiKey(apiKey: String): Result<Unit> = withContext(Dispatchers.IO) {
+        gemini.validateApiKey(apiKey.trim())
+    }
+
     suspend operator fun invoke(
         imageBytes: ByteArray,
         mimeTypeForTrace: ContentType,
         mimeTypeForGemini: String,
         contentMode: InspectContentMode,
-        appLanguage: AppLanguage
+        appLanguage: AppLanguage,
+        geminiApiKey: String
     ): Result<List<ApiSearchResult>> = withContext(Dispatchers.IO) {
         runCatching {
             when (contentMode) {
-                InspectContentMode.Anime -> inspectAnime(imageBytes, mimeTypeForTrace, mimeTypeForGemini, appLanguage)
-                InspectContentMode.MoviesSeries -> inspectMoviesSeries(imageBytes, mimeTypeForGemini, appLanguage)
+                InspectContentMode.Anime ->
+                    inspectAnime(
+                        imageBytes,
+                        mimeTypeForTrace,
+                        mimeTypeForGemini,
+                        appLanguage,
+                        geminiApiKey
+                    )
+                InspectContentMode.MoviesSeries -> inspectMoviesSeries(imageBytes, mimeTypeForGemini, appLanguage, geminiApiKey)
             }
         }
     }
@@ -41,7 +53,8 @@ class InspectImageUseCase(
         imageBytes: ByteArray,
         traceContentType: ContentType,
         geminiMime: String,
-        appLanguage: AppLanguage
+        appLanguage: AppLanguage,
+        geminiApiKey: String
     ): List<ApiSearchResult> {
         return when (appLanguage) {
             AppLanguage.EN -> {
@@ -51,7 +64,7 @@ class InspectImageUseCase(
                 listOf(item)
             }
             AppLanguage.RU -> {
-                if (!gemini.isConfigured()) {
+                if (geminiApiKey.isBlank()) {
                     throw InspectGeminiRequiredException(InspectGeminiRequirement.RU_ANIME_PATH)
                 }
                 val trace = traceMoe.search(imageBytes, traceContentType, withAnilistInfo = true).getOrThrow()
@@ -59,7 +72,8 @@ class InspectImageUseCase(
                 if (trace.similarity <= 0.5) return emptyList()
                 val ru = gemini.russianAnimeTitle(
                     romaji = trace.romajiTitle,
-                    english = trace.englishTitle
+                    english = trace.englishTitle,
+                    apiKey = geminiApiKey
                 ).getOrThrow()
                 // Только Shikimori — без AniList/Jikan в ранжировании (путь inspect: Gemini → Shikimori)
                 animeRepository.searchAnimeShikimoriOnly(ru, AppLanguage.RU).getOrThrow()
@@ -70,13 +84,18 @@ class InspectImageUseCase(
     private suspend fun inspectMoviesSeries(
         imageBytes: ByteArray,
         geminiMime: String,
-        appLanguage: AppLanguage
+        appLanguage: AppLanguage,
+        geminiApiKey: String
     ): List<ApiSearchResult> {
-        if (!gemini.isConfigured()) {
+        if (geminiApiKey.isBlank()) {
             throw InspectGeminiRequiredException(InspectGeminiRequirement.MOVIES_TV)
         }
         val b64 = Base64.getEncoder().encodeToString(imageBytes)
-        val (title, contentType) = gemini.identifyMovieOrTvFromImage(b64, geminiMime).getOrThrow()
+        val (title, contentType) = gemini.identifyMovieOrTvFromImage(
+            imageBase64 = b64,
+            mimeType = geminiMime,
+            apiKey = geminiApiKey
+        ).getOrThrow()
         return animeRepository.searchApi(title, contentType, appLanguage).getOrThrow()
     }
 }

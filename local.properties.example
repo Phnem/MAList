@@ -1,7 +1,21 @@
 # Copy to local.properties (not committed) and fill in as needed.
 
-# Google AI Studio — RU anime titles (Shikimori) & movie/TV identification from screenshots
-GEMINI_API_KEY=
+# Shikimori / MAL / AniList — OAuth для плиток «онлайн БД».
+# После добавления ключей сделайте Rebuild Project (BuildConfig).
+#
+# Redirect URI укажите на сайте сервиса ТОЧНО так (для каждого своё):
+#   Shikimori:  vetro://oauth/shikimori/callback
+#   MAL:        vetro://oauth/myanimelist/callback
+#   AniList:    vetro://oauth/anilist/callback
+#
+# Регистрация приложений:
+#   https://shikimori.one/oauth/applications
+#   https://myanimelist.net/apiconfig
+#   https://anilist.co/settings/developer
+SHIKIMORI_CLIENT_ID=
+SHIKIMORI_CLIENT_SECRET=
+MAL_CLIENT_ID=
+MAL_CLIENT_SECRET=
+ANILIST_CLIENT_ID=
+ANILIST_CLIENT_SECRET=
 
-# TMDB — used by core:network for movie/TV search (BuildConfig in network module)
-TMDB_API_KEY=

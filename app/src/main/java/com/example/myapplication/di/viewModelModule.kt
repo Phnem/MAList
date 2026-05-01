@@ -27,7 +27,8 @@ val viewModelModule = module {
             dropboxSyncManager = get(),
             imageStorage = get(),
             settingsDataStore = get(named("settings")),
-            addFromApiUseCase = get()
+            addFromApiUseCase = get(),
+            statsFooterPhraseUseCase = get()
         )
     }
     viewModel {
@@ -39,13 +40,22 @@ val viewModelModule = module {
             settingsDataStore = get(named("settings"))
         )
     }
-    viewModel { SettingsViewModel(repository = get(), settingsDataStore = get(named("settings")), databaseFactory = get()) }
+    viewModel {
+        SettingsViewModel(
+            repository = get(),
+            settingsDataStore = get(named("settings")),
+            databaseFactory = get(),
+            importAnimeDbUseCase = get(),
+            collectionPdfGenerator = get()
+        )
+    }
     viewModel {
         InspectViewModel(
             inspectImageUseCase = get(),
             localDataSource = get(),
             addFromApiUseCase = get(),
-            settingsDataStore = get(named("settings"))
+            settingsDataStore = get(named("settings")),
+            geminiApiKeyRepository = get()
         )
     }
     viewModel {

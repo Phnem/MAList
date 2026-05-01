@@ -19,7 +19,6 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -112,8 +111,11 @@ import com.example.myapplication.ui.shared.fluidClickable
 import com.example.myapplication.ui.shared.gradientHighlightBorder
 import com.example.myapplication.ui.shared.theme.BrandBlue
 import com.example.myapplication.ui.shared.theme.DarkBackground
+import com.example.myapplication.ui.shared.theme.OverlayGlassPanel
 import com.example.myapplication.ui.shared.theme.OverlayThemeTokens
 import com.example.myapplication.ui.shared.theme.SnProFamily
+import com.example.myapplication.ui.shared.theme.glassEdge
+import com.example.myapplication.ui.shared.theme.glassFill
 import com.example.myapplication.ui.shared.inertialCollision
 import com.example.myapplication.ui.shared.rememberInertialCollisionState
 import com.example.myapplication.utils.performHaptic
@@ -750,9 +752,8 @@ fun SortFilterOverlay(
             ) {
                 Card(
                     shape = RoundedCornerShape(OverlayThemeTokens.PanelCornerRadius),
-                    colors = CardDefaults.cardColors(containerColor = panelBg),
+                    colors = CardDefaults.cardColors(containerColor = Color.Transparent),
                     elevation = CardDefaults.cardElevation(defaultElevation = OverlayThemeTokens.CardElevation),
-                    border = BorderStroke(1.dp, rim),
                     modifier = Modifier
                         .padding(
                             top = OverlayThemeTokens.CardOuterPaddingTop,
@@ -762,6 +763,12 @@ fun SortFilterOverlay(
                             detectTapGestures { /* поглощаем тап, без семантики clickable */ }
                         }
                 ) {
+                    OverlayGlassPanel(
+                        isDark = isDark,
+                        panelBg = panelBg,
+                        cornerRadius = OverlayThemeTokens.PanelCornerRadius,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
                     Column(
                         modifier = Modifier
                             .padding(
@@ -783,7 +790,8 @@ fun SortFilterOverlay(
                                     style = MaterialTheme.typography.headlineSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = onCard,
-                                    fontSize = 22.sp
+                                    fontSize = 22.sp,
+                                    letterSpacing = (-0.2).sp
                                 )
                                 Spacer(Modifier.height(4.dp))
                                 Text(
@@ -897,7 +905,9 @@ fun SortFilterOverlay(
 
                         Spacer(Modifier.height(16.dp))
 
-                        Button(
+                        SortApplyButton(
+                            isDark = isDark,
+                            label = strings.sortApply,
                             onClick = {
                                 when (val d = draftSelection) {
                                     SortGridSelection.Genres -> {
@@ -913,39 +923,55 @@ fun SortFilterOverlay(
                                         }
                                     }
                                 }
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp),
-                            shape = RoundedCornerShape(OverlayThemeTokens.ApplyButtonCornerRadius),
-                            colors = if (isDark) {
-                                ButtonDefaults.buttonColors(
-                                    containerColor = OverlayThemeTokens.ApplyButtonContainerDark,
-                                    contentColor = OverlayThemeTokens.ApplyButtonLabelSoft
-                                )
-                            } else {
-                                ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
-                                    contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.82f)
-                                )
-                            },
-                            elevation = ButtonDefaults.buttonElevation(
-                                defaultElevation = 0.dp,
-                                pressedElevation = 0.dp,
-                                focusedElevation = 0.dp,
-                                hoveredElevation = 0.dp
-                            )
-                        ) {
-                            Text(
-                                text = strings.sortApply,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 15.sp
-                            )
-                        }
+                            }
+                        )
                     }
+                    } // OverlayGlassPanel
                 }
             }
         }
+    }
+}
+
+/**
+ * Кнопка применения для SortFilterOverlay. Вынесена из тела [SortFilterOverlay],
+ * чтобы декомпозировать большой composable и не превращать glass.kt в God Object.
+ */
+@Composable
+private fun SortApplyButton(
+    isDark: Boolean,
+    label: String,
+    onClick: () -> Unit
+) {
+    Button(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp),
+        shape = RoundedCornerShape(OverlayThemeTokens.ApplyButtonCornerRadius),
+        colors = if (isDark) {
+            ButtonDefaults.buttonColors(
+                containerColor = OverlayThemeTokens.ApplyButtonContainerDark,
+                contentColor = OverlayThemeTokens.ApplyButtonLabelSoft
+            )
+        } else {
+            ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+                contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.82f)
+            )
+        },
+        elevation = ButtonDefaults.buttonElevation(
+            defaultElevation = 0.dp,
+            pressedElevation = 0.dp,
+            focusedElevation = 0.dp,
+            hoveredElevation = 0.dp
+        )
+    ) {
+        Text(
+            text = label,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 15.sp
+        )
     }
 }
 
@@ -992,6 +1018,10 @@ private fun SortSortTile(
 
     val shape = RoundedCornerShape(OverlayThemeTokens.TileCornerRadius)
     val tileBg = if (isDark) OverlayThemeTokens.TileBackgroundDark else cardBg
+    val glowAlpha = if (isActive) {
+        if (isDark) 0.22f else 0.18f
+    } else 0f
+    val accentGlow = accentColor.copy(alpha = glowAlpha)
 
     Box(
         modifier = modifier
@@ -999,7 +1029,16 @@ private fun SortSortTile(
             .defaultMinSize(minHeight = OverlayThemeTokens.SortTileMinHeight)
             .clip(shape)
             .background(tileBg)
-            .border(1.5.dp, animatedBorderColor, shape)
+            .background(
+                Brush.radialGradient(
+                    colors = listOf(accentGlow, Color.Transparent),
+                    center = Offset(0f, 0f),
+                    radius = 320f
+                )
+            )
+            .glassFill(isDark)
+            .glassEdge(OverlayThemeTokens.TileCornerRadius, isDark)
+            .border(1.dp, animatedBorderColor, shape)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null
@@ -1039,7 +1078,7 @@ private fun SortSortTile(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
+                    fontWeight = FontWeight.SemiBold,
                     color = if (isActive) {
                         if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
                     } else {
@@ -1051,9 +1090,9 @@ private fun SortSortTile(
                 if (isActive) {
                     Text(
                         text = if (isAscending) strings.sortOrderAscending else strings.sortOrderDescending,
-                        style = MaterialTheme.typography.labelSmall,
+                        style = OverlayThemeTokens.MetricLabel,
                         color = if (isDark) {
-                            Color.White.copy(alpha = 0.68f)
+                            Color.White.copy(alpha = 0.7f)
                         } else {
                             MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f)
                         },
@@ -1063,7 +1102,7 @@ private fun SortSortTile(
                 } else {
                     Text(
                         text = subtitle,
-                        style = MaterialTheme.typography.bodySmall,
+                        style = OverlayThemeTokens.MetricLabel,
                         color = muted,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
@@ -1114,6 +1153,10 @@ private fun GenreSortTile(
 
     val shape = RoundedCornerShape(OverlayThemeTokens.TileCornerRadius)
     val tileBg = if (isDark) OverlayThemeTokens.TileBackgroundDark else cardBg
+    val glowAlpha = if (isActive || badgeCount > 0) {
+        if (isDark) 0.22f else 0.18f
+    } else 0f
+    val accentGlow = genreAccent.copy(alpha = glowAlpha)
 
     Box(
         modifier = modifier
@@ -1121,7 +1164,16 @@ private fun GenreSortTile(
             .defaultMinSize(minHeight = OverlayThemeTokens.SortTileMinHeight)
             .clip(shape)
             .background(tileBg)
-            .border(1.5.dp, animatedBorderColor, shape)
+            .background(
+                Brush.radialGradient(
+                    colors = listOf(accentGlow, Color.Transparent),
+                    center = Offset(0f, 0f),
+                    radius = 320f
+                )
+            )
+            .glassFill(isDark)
+            .glassEdge(OverlayThemeTokens.TileCornerRadius, isDark)
+            .border(1.dp, animatedBorderColor, shape)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null
@@ -1153,7 +1205,7 @@ private fun GenreSortTile(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
+                    fontWeight = FontWeight.SemiBold,
                     color = if (isActive) {
                         if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
                     } else {
@@ -1164,7 +1216,7 @@ private fun GenreSortTile(
                 )
                 Text(
                     text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = OverlayThemeTokens.MetricLabel,
                     color = muted,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
@@ -1202,7 +1254,6 @@ fun GenreFilterOverlay(
 ) {
     val isDark = isAppInDarkTheme()
     val panelBg = if (isDark) DarkBackground else MaterialTheme.colorScheme.surface
-    val borderColor = if (isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.06f)
 
     val collisionState = rememberInertialCollisionState()
     LaunchedEffect(visibleState.targetState) {
@@ -1248,10 +1299,15 @@ fun GenreFilterOverlay(
                     .navigationBarsPadding()
                     .padding(16.dp),
                 shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 28.dp, bottomEnd = 28.dp),
-                colors = CardDefaults.cardColors(containerColor = panelBg),
-                elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
-                border = if (isDark) BorderStroke(1.dp, borderColor) else null
+                colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
             ) {
+                OverlayGlassPanel(
+                    isDark = isDark,
+                    panelBg = panelBg,
+                    cornerRadius = 28.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                 Column(
                     modifier = Modifier
                         .padding(24.dp)
@@ -1321,6 +1377,7 @@ fun GenreFilterOverlay(
                         }
                     }
                 }
+                } // OverlayGlassPanel
             }
         }
     }

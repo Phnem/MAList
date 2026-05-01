@@ -45,6 +45,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.IntOffset
@@ -54,6 +55,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import com.example.myapplication.ui.shared.ListSyncLoadingOverlay
 import com.example.myapplication.ui.shared.customOverscroll
 import com.example.myapplication.DropboxSyncManager
 import com.example.myapplication.GlassActionDock
@@ -65,6 +67,7 @@ import com.example.myapplication.SortFilterOverlay
 import com.example.myapplication.data.models.*
 import com.example.myapplication.data.repository.GenreRepository
 import com.example.myapplication.network.AppLanguage
+import com.example.myapplication.sync.ExternalListSyncCoordinator
 import com.example.myapplication.utils.getStrings
 import com.example.myapplication.utils.performHaptic
 import com.example.myapplication.ui.navigation.navigateToAddEdit
@@ -89,6 +92,8 @@ fun HomeScreen(
     animatedVisibilityScope: AnimatedVisibilityScope
 ) {
     val genreRepository: GenreRepository = koinInject()
+    val listSyncCoordinator: ExternalListSyncCoordinator = koinInject()
+    val listSyncUi by listSyncCoordinator.syncUiState.collectAsStateWithLifecycle()
     val currentLanguage by viewModel.uiLanguage.collectAsStateWithLifecycle()
     val strings = getStrings(currentLanguage)
     val syncReport by viewModel.syncReport.collectAsStateWithLifecycle()
@@ -102,6 +107,7 @@ fun HomeScreen(
     var showCSheet by remember { mutableStateOf(false) }
     var isSearchVisible by remember { mutableStateOf(false) }
     var showNotificationsOverlay by remember { mutableStateOf(false) }
+    var notificationsBlockingChildDialog by remember { mutableStateOf(false) }
     val notifVisibleState = remember { MutableTransitionState(false) }
     notifVisibleState.targetState = showNotificationsOverlay
 
@@ -115,6 +121,7 @@ fun HomeScreen(
     val searchFocusRequester = remember { FocusRequester() }
     var animeToDelete by remember { mutableStateOf<Anime?>(null) }
     var animeToFavorite by remember { mutableStateOf<Anime?>(null) }
+    var pendingSwipeReset by remember { mutableStateOf<(suspend () -> Unit)?>(null) }
     val scope = rememberCoroutineScope()
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -166,8 +173,15 @@ fun HomeScreen(
 
     val shouldBlur = (isSearchVisible && uiState.searchQuery.isBlank()) ||
             showCSheet || animeToDelete != null || animeToFavorite != null ||
-            uiState.isGenreFilterVisible || showNotificationsOverlay || showSortOverlay
-    val blurAmount by animateDpAsState(targetValue = if (shouldBlur) 10.dp else 0.dp, label = "blur")
+            uiState.isGenreFilterVisible || showNotificationsOverlay || showSortOverlay || listSyncUi.isRunning
+    val blurAmount by animateDpAsState(
+        targetValue = when {
+            notificationsBlockingChildDialog -> 20.dp
+            shouldBlur -> 10.dp
+            else -> 0.dp
+        },
+        label = "blur"
+    )
 
     // Кнопка «вверх» опускается к низу, когда док скрыт (как кнопка поиска), и поднимается вместе с доком
     val scrollToTopBottomPadding by animateDpAsState(
@@ -222,7 +236,8 @@ fun HomeScreen(
                         onDismissUpdate = { update ->
                             performHaptic(view, "light")
                             viewModel.dismissUpdate(update)
-                        }
+                        },
+                        onBlockingChildDialogChange = { notificationsBlockingChildDialog = it }
                     )
                 }
             }
@@ -274,6 +289,27 @@ fun HomeScreen(
                 }
             }
 
+            if (listSyncUi.isRunning) {
+                Box(
+                    modifier = Modifier
+                        .zIndex(9f)
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = OverlayThemeTokens.ScrimAlpha)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    ListSyncLoadingOverlay(
+                        message = listSyncUi.message,
+                        processed = listSyncUi.processed,
+                        total = listSyncUi.total,
+                        strings = strings,
+                        onDismiss = {
+                            performHaptic(view, "light")
+                            listSyncCoordinator.cancelListSync()
+                        }
+                    )
+                }
+            }
+
             Column(modifier = Modifier.fillMaxSize().homeScrollBlur(blurAmount)) {
                 Box(modifier = Modifier.fillMaxSize().weight(1f).background(bgColor)) {
                     val list by viewModel.animeListFlow.collectAsStateWithLifecycle()
@@ -318,17 +354,36 @@ fun HomeScreen(
                                             viewModel = viewModel,
                                             topPadding = 8.dp
                                         )
-                                        item {
-                                            Box(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(vertical = 32.dp),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                EmptyStateView(
-                                                    title = strings.noResults,
-                                                    subtitle = ""
-                                                )
+                                        when {
+                                            uiState.apiSearchLoading -> Unit
+                                            uiState.apiSearchError != null -> Unit
+                                            apiSearchModels.isNotEmpty() -> item {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(vertical = 24.dp, horizontal = 16.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Text(
+                                                        text = strings.noResultsInLibrary,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        textAlign = TextAlign.Center
+                                                    )
+                                                }
+                                            }
+                                            else -> item {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(vertical = 32.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    EmptyStateView(
+                                                        title = strings.noResults,
+                                                        subtitle = ""
+                                                    )
+                                                }
                                             }
                                         }
                                     } else if (list.isNotEmpty()) {
@@ -345,12 +400,12 @@ fun HomeScreen(
                                                     SwipeToDismissBoxValue.StartToEnd -> {
                                                         performHaptic(view, "success")
                                                         animeToFavorite = anime
-                                                        dismissState.reset()
+                                                        pendingSwipeReset = { dismissState.reset() }
                                                     }
                                                     SwipeToDismissBoxValue.EndToStart -> {
                                                         performHaptic(view, "warning")
                                                         animeToDelete = anime
-                                                        dismissState.reset()
+                                                        pendingSwipeReset = { dismissState.reset() }
                                                     }
                                                     SwipeToDismissBoxValue.Settled -> Unit
                                                 }
@@ -427,7 +482,7 @@ fun HomeScreen(
                 }
             }
 
-            if (!isSearchVisible && animeToDelete == null && animeToFavorite == null) {
+            if (!isSearchVisible && animeToDelete == null && animeToFavorite == null && !showCSheet) {
                 Box(modifier = Modifier.align(Alignment.BottomCenter).zIndex(3f).navigationBarsPadding()) {
                     AnimatedVisibility(
                         visible = finalDockVisible,
@@ -532,7 +587,12 @@ fun HomeScreen(
                             is AnimeMenuEvent.OnCancel -> { }
                         }
                     },
-                    onDismiss = { animeToDelete = null }
+                    onDismiss = {
+                        val reset = pendingSwipeReset
+                        pendingSwipeReset = null
+                        animeToDelete = null
+                        if (reset != null) scope.launch { reset() }
+                    }
                 )
             }
             if (animeToFavorite != null) {
@@ -547,7 +607,12 @@ fun HomeScreen(
                             is AnimeMenuEvent.OnCancel -> { }
                         }
                     },
-                    onDismiss = { animeToFavorite = null }
+                    onDismiss = {
+                        val reset = pendingSwipeReset
+                        pendingSwipeReset = null
+                        animeToFavorite = null
+                        if (reset != null) scope.launch { reset() }
+                    }
                 )
             }
 
@@ -621,6 +686,8 @@ fun HomeScreen(
             StatsOverlay(
                 animeList = uiState.statsAnimeList,
                 strings = getStrings(currentLanguage),
+                appLanguage = currentLanguage,
+                footerPhrase = uiState.statsFooterPhrase,
                 onDismiss = { showCSheet = false }
             )
         }

@@ -1,0 +1,20 @@
+query MediaListCollectionChunk($userId: Int, $chunk: Int, $perChunk: Int) {
+  MediaListCollection(userId: $userId, type: ANIME, chunk: $chunk, perChunk: $perChunk) {
+    hasNextChunk
+    lists {
+      entries {
+        id
+        mediaId
+        status
+        progress
+        media {
+          id
+          title {
+            romaji
+            english
+          }
+        }
+      }
+    }
+  }
+}

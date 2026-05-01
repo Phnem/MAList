@@ -11,7 +11,9 @@ import com.example.myapplication.data.models.Anime
 import com.example.myapplication.data.models.AnimeUpdate
 import com.example.myapplication.data.repository.AnimeRepository
 import com.example.myapplication.data.repository.ImageStorageRepository
+import com.example.myapplication.domain.normalizeForSearch
 import com.example.myapplication.domain.search.AddFromApiUseCase
+import com.example.myapplication.domain.stats.ResolveStatsFooterPhraseUseCase
 import com.example.myapplication.network.ApiSearchResult
 import com.example.myapplication.network.AppContentType
 import com.example.myapplication.network.AppLanguage
@@ -35,16 +37,14 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.Dispatchers
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 import androidx.work.*
 import com.example.myapplication.worker.AnimeUpdateWorker
 
 private val KEY_CONTENT_TYPE = stringPreferencesKey("contentType")
 private val KEY_LANG = stringPreferencesKey("lang")
-private val SEARCH_NORMALIZE_REGEX = Regex("[^\\p{L}\\p{N}]")
-
-private fun String.normalizeForSearch(): String =
-    lowercase().replace(SEARCH_NORMALIZE_REGEX, "")
 
 class HomeViewModel(
     private val repository: AnimeRepository,
@@ -53,10 +53,12 @@ class HomeViewModel(
     private val dropboxSyncManager: DropboxSyncManager,
     private val imageStorage: ImageStorageRepository,
     private val settingsDataStore: DataStore<Preferences>,
-    private val addFromApiUseCase: AddFromApiUseCase
+    private val addFromApiUseCase: AddFromApiUseCase,
+    private val statsFooterPhraseUseCase: ResolveStatsFooterPhraseUseCase
 ) : ViewModel() {
 
     private var apiSearchJob: Job? = null
+    private var pullToRefreshJob: Job? = null
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
@@ -127,15 +129,20 @@ class HomeViewModel(
                 }
             } catch (_: Exception) { }
         }
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { statsFooterPhraseUseCase.warmCatalog() }
+        }
     }
 
-    /** Hot swap: закрывает старый коннект, открывает новый (после .copyTo миграции), UI переподписывается. */
     fun refreshList() {
-        viewModelScope.launch {
+        if (pullToRefreshJob?.isActive == true) return
+        pullToRefreshJob = viewModelScope.launch {
             _isRefreshing.value = true
-            localDataSource.reconnectDatabase()
-            delay(500)
-            _isRefreshing.value = false
+            try {
+                checkForUpdates(force = true)
+            } finally {
+                _isRefreshing.value = false
+            }
         }
     }
 
@@ -335,7 +342,27 @@ class HomeViewModel(
 
     fun loadStatsAnimeList() {
         viewModelScope.launch {
-            _uiState.update { it.copy(statsAnimeList = localDataSource.getAllAnimeList().toImmutableList()) }
+            val list = localDataSource.getAllAnimeList().toImmutableList()
+            val avgRating = if (list.isEmpty()) {
+                0.0
+            } else {
+                list.map { it.rating.toDouble() }.average()
+            }
+            val totalEpisodes = list.sumOf { it.episodes }
+            val language = uiLanguage.value
+            val ratingFormatted = String.format(Locale.getDefault(), "%.1f", avgRating)
+            val footer = statsFooterPhraseUseCase(
+                language = language,
+                avgRating = avgRating,
+                totalEpisodes = totalEpisodes,
+                ratingFormattedForUi = ratingFormatted
+            )
+            _uiState.update {
+                it.copy(
+                    statsAnimeList = list,
+                    statsFooterPhrase = footer
+                )
+            }
         }
     }
 }

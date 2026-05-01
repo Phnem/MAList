@@ -205,7 +205,10 @@ class DropboxSyncManager(
                 setupClient(refreshToken, accessToken ?: "")
                 _hasTokenFlow.value = true
                 Log.d(TAG, "Token saved, hasTokenFlow=true")
-                scope.launch { syncNow(); SyncWorker.enqueue(appContext) }
+                scope.launch {
+                    syncNow()
+                    SyncWorker.enqueue(appContext)
+                }
             }
         } else {
             Log.d(TAG, "OAuth result: no credential returned")
@@ -440,7 +443,9 @@ class DropboxSyncManager(
     }
 
     fun logout() {
-        prefs.edit { remove(REFRESH_TOKEN_KEY) }
+        prefs.edit {
+            remove(REFRESH_TOKEN_KEY)
+        }
         client = null
         _syncState.value = SyncState.AUTH_REQUIRED
         _hasTokenFlow.value = false

@@ -20,7 +20,9 @@ class AddFromApiUseCase(
     private val idGenerator: IdGenerator,
     private val genreRepository: GenreRepository
 ) {
-    suspend operator fun invoke(result: ApiSearchResult): Result<Unit> = runCatching {
+    suspend operator fun invoke(
+        result: ApiSearchResult
+    ): Result<Unit> = runCatching {
         val animeId = idGenerator.generateUuid()
         val imageFileName = result.posterUrl?.let { url ->
             imageStorage.saveImageFromUrl(url, animeId).getOrNull()

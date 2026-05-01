@@ -39,6 +39,21 @@ class SQLDelightDatabaseFactory(private val context: Context) {
         if (!dbFile.exists()) return
         val targetVersion = AnimeDatabase.Schema.version
         SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READWRITE).use { db ->
+            val colsInitial = db.rawQuery("PRAGMA table_info(anime)", null).use { c ->
+                buildSet {
+                    while (c.moveToNext()) add(c.getString(1))
+                }
+            }
+            // Не полагаться только на .sqm: старая логика могла поднять user_version без ALTER (см. колонка isAiRecommendation).
+            if (!colsInitial.contains("isAiRecommendation")) {
+                try {
+                    db.execSQL(
+                        "ALTER TABLE anime ADD COLUMN isAiRecommendation INTEGER NOT NULL DEFAULT 0"
+                    )
+                } catch (e: Exception) {
+                    Log.w("SQLDelight", "alignLegacy: isAiRecommendation", e)
+                }
+            }
             val ver = db.rawQuery("PRAGMA user_version", null).use { c ->
                 if (c.moveToFirst()) c.getLong(0) else 0L
             }

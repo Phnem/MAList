@@ -28,10 +28,7 @@ android {
 apollo {
     service("anilist") {
         packageName.set("com.example.myapplication.network.anilist")
-        introspection {
-            endpointUrl.set("https://graphql.anilist.co")
-            schemaFile.set(file("src/main/graphql/schema.graphqls"))
-        }
+        schemaFile.set(file("src/main/graphql/schema.json"))
     }
 }
 

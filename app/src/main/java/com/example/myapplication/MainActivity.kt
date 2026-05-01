@@ -1,7 +1,7 @@
 package com.example.myapplication
 
+import android.content.Intent
 import android.os.Build
-import org.koin.android.ext.android.inject
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -17,17 +17,22 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.data.models.AppTheme
 import com.example.myapplication.DropboxSyncManager
+import com.example.myapplication.sync.ExternalListSyncCoordinator
 import com.example.myapplication.ui.navigation.AppNavGraph
 import com.example.myapplication.ui.debug.FpsOverlay
 import com.example.myapplication.ui.shared.theme.OneUiTheme
 import com.example.myapplication.ui.settings.SettingsViewModel
 import org.koin.androidx.compose.koinViewModel
+import org.koin.android.ext.android.inject
 
 class MainActivity : ComponentActivity() {
 
     private val dropboxSyncManager: DropboxSyncManager by inject()
+    private val externalListSyncCoordinator: ExternalListSyncCoordinator by inject()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        handleExternalListOAuthIntent(intent)
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
         checkPerms()
@@ -55,6 +60,17 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleExternalListOAuthIntent(intent)
+    }
+
+    private fun handleExternalListOAuthIntent(intent: Intent?) {
+        val uri = intent?.data ?: return
+        externalListSyncCoordinator.handleOAuthRedirect(uri)
     }
 
     private fun checkPerms() {

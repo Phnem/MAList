@@ -73,32 +73,36 @@ class VetroApiService(
         }
     }
 
-    override suspend fun searchAnimeShikimoriOnly(query: String, language: AppLanguage): Result<List<ApiSearchResult>> {
+    override suspend fun searchAnimeShikimoriOnly(
+        query: String,
+        language: AppLanguage,
+        allowZeroEpisodes: Boolean
+    ): Result<List<ApiSearchResult>> {
         return runCatching {
             searchRate.acquire()
             val q = query.trim()
             if (q.isEmpty()) return@runCatching emptyList()
             val raw = shikimori.searchAnime(q, 20, language).getOrThrow()
-            // Inspect: выкидываем результаты Shikimori с 0 серий (episodes == 0)
-            val rawNonZeroEpisodes = raw.filter { it.episodes > 0 }
-            if (rawNonZeroEpisodes.isEmpty()) return@runCatching emptyList()
+            // Inspect: обычно убираем 0 эпизодов; AI — оставляем, иначе пусто у анонсов/некоторых записей
+            val pool = if (allowZeroEpisodes) raw else raw.filter { it.episodes > 0 }
+            if (pool.isEmpty()) return@runCatching emptyList()
 
             // Для Inspect RU-аниме нам критично "не получить пусто" из-за слишком строгого fuzzy:
             // Gemini часто даёт близкое, но не 1:1 совпадение. Поэтому делаем мягкую фильтрацию.
             val normQuery = normalizeForSearch(q)
-            if (normQuery.isEmpty()) return@runCatching rawNonZeroEpisodes
+            if (normQuery.isEmpty()) return@runCatching pool
 
             fun searchableKey(r: ApiSearchResult): String {
                 val both = (r.title + " " + (r.altTitle ?: "")).trim()
                 return normalizeForSearch(both)
             }
 
-            val exactOrPartial = rawNonZeroEpisodes.filter { r ->
+            val exactOrPartial = pool.filter { r ->
                 val key = searchableKey(r)
                 key.isNotEmpty() && (key.contains(normQuery) || normQuery.contains(key))
             }
 
-            val ranked = (exactOrPartial.ifEmpty { rawNonZeroEpisodes })
+            val ranked = (exactOrPartial.ifEmpty { pool })
                 .sortedWith(compareBy<ApiSearchResult> { r ->
                     val key = searchableKey(r)
                     when {
@@ -171,7 +175,12 @@ class VetroApiService(
         aniList.searchAnime(query, 20, language).getOrNull()?.forEach { addIfNew(it) }
         burstRate.acquire()
         searchJikan(query, language).forEach { addIfNew(it) }
-        return filterAndRankByQuery(query, raw)
+        val ranked = filterAndRankByQuery(query, raw)
+        if (ranked.isNotEmpty()) return ranked
+        if (raw.isEmpty()) return emptyList()
+        return raw
+            .sortedWith(compareByDescending<ApiSearchResult> { it.rating ?: Int.MIN_VALUE })
+            .take(20)
     }
 
     private suspend fun searchJikan(query: String, language: AppLanguage): List<ApiSearchResult> = runCatching {

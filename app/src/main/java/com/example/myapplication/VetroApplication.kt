@@ -15,6 +15,7 @@ import coil3.disk.DiskCache
 import coil3.disk.directory
 import coil3.memory.MemoryCache
 import okio.Path.Companion.toOkioPath
+import androidx.work.WorkManager
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.context.startKoin
 import java.io.File
@@ -33,6 +34,7 @@ class VetroApplication : Application(), SingletonImageLoader.Factory {
                 viewModelModule
             )
         }
+        WorkManager.getInstance(this).cancelUniqueWork("AiRecommendationWork")
     }
 
     override fun newImageLoader(context: PlatformContext): ImageLoader {

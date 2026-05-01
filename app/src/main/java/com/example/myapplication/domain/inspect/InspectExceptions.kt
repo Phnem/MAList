@@ -7,7 +7,7 @@ enum class InspectGeminiRequirement {
     MOVIES_TV
 }
 
-/** Нужен GEMINI_API_KEY в local.properties. */
+/** Нужен пользовательский Gemini API key. */
 class InspectGeminiRequiredException(
     val requirement: InspectGeminiRequirement = InspectGeminiRequirement.MOVIES_TV
 ) : Exception()

@@ -208,7 +208,22 @@ class MigrationManager(
                     val isFavorite = obj["isFavorite"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
                     val tags = (obj["tags"]?.jsonArray?.mapNotNull { it.jsonPrimitive.content } ?: emptyList()).toImmutableList()
                     val categoryType = obj["categoryType"]?.jsonPrimitive?.content ?: ""
-                    restoredList.add(Anime(id, title, episodes, rating, imageFileName, orderIndex, dateAdded, isFavorite, tags, categoryType))
+                    val comment = obj["comment"]?.jsonPrimitive?.content ?: ""
+                    restoredList.add(
+                        Anime(
+                            id = id,
+                            title = title,
+                            episodes = episodes,
+                            rating = rating,
+                            imageFileName = imageFileName,
+                            orderIndex = orderIndex,
+                            dateAdded = dateAdded,
+                            isFavorite = isFavorite,
+                            tags = tags,
+                            categoryType = categoryType,
+                            comment = comment
+                        )
+                    )
                 } catch (e: Exception) {
                     Log.w(TAG, "Failed to parse anime entry", e)
                 }

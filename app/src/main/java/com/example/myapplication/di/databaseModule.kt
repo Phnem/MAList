@@ -6,11 +6,13 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.myapplication.data.local.AnimeLocalDataSource
 import com.example.myapplication.data.local.DeveloperMirrorCoordinator
+import com.example.myapplication.data.local.EncryptedGeminiApiKeyRepository
 import com.example.myapplication.data.local.ImageStorageRepositoryImpl
 import com.example.myapplication.data.local.LegacyMigrationRepositoryImpl
 import com.example.myapplication.data.local.MigrationManager
 import com.example.myapplication.data.local.SQLDelightDatabaseFactory
 import com.example.myapplication.data.local.VetroPublicDbExporter
+import com.example.myapplication.data.repository.GeminiApiKeyRepository
 import com.example.myapplication.data.repository.ImageStorageRepository
 import com.example.myapplication.data.repository.LegacyMigrationRepository
 import com.example.myapplication.data.local.AndroidPermissionChecker
@@ -21,6 +23,7 @@ import com.example.myapplication.domain.addedit.GetAnimeForEditUseCase
 import com.example.myapplication.domain.addedit.SaveAnimeUseCase
 import com.example.myapplication.domain.addedit.UpdateCommentUseCase
 import com.example.myapplication.DropboxSyncManager
+import com.example.myapplication.sync.ExternalListSyncCoordinator
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
@@ -42,6 +45,9 @@ val databaseModule = module {
     single<LegacyMigrationRepository> {
         LegacyMigrationRepositoryImpl(context = androidContext())
     }
+    single<GeminiApiKeyRepository> {
+        EncryptedGeminiApiKeyRepository(context = androidContext())
+    }
 
     single<DataStore<Preferences>>(named("migration")) {
         androidContext().migrationDataStore
@@ -62,6 +68,16 @@ val databaseModule = module {
             context = androidContext(),
             databaseFactory = get(),
             animeLocalDataSource = get()
+        )
+    }
+    single {
+        ExternalListSyncCoordinator(
+            context = androidContext(),
+            animeLocalDataSource = get(),
+            animeRepository = get(),
+            addFromApiUseCase = get(),
+            shikiRateLimiter = get(named("api_rate_burst")),
+            aniListRemoteDataSource = get()
         )
     }
 }

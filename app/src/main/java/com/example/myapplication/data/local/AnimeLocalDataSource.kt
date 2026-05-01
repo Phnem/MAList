@@ -29,7 +29,22 @@ class AnimeLocalDataSource(
             .getAllAnime()
             .asFlow()
             .mapToList(Dispatchers.IO)
-            .map { rows -> rows.map { row -> mapRowToAnime(row.id, row.title, row.imagePath, row.episodes, row.rating, row.orderIndex, row.dateAdded, row.isFavorite, row.categoryType, getRowComment(row)) } }
+            .map { rows ->
+                rows.map { row ->
+                    mapRowToAnime(
+                        id = row.id,
+                        title = row.title,
+                        imagePath = row.imagePath,
+                        episodes = row.episodes,
+                        rating = row.rating,
+                        orderIndex = row.orderIndex,
+                        dateAdded = row.dateAdded,
+                        isFavorite = row.isFavorite,
+                        categoryType = row.categoryType,
+                        comment = row.comment
+                    )
+                }
+            }
     }
 
     /** Закрывает старый коннект и открывает новый (после миграции .copyTo). */
@@ -46,20 +61,41 @@ class AnimeLocalDataSource(
     fun getAllAnimeList(): List<Anime> {
         return db().animeQueries.getAllAnime()
             .executeAsList()
-            .map { row -> mapRowToAnime(row.id, row.title, row.imagePath, row.episodes, row.rating, row.orderIndex, row.dateAdded, row.isFavorite, row.categoryType, getRowComment(row)) }
+            .map { row ->
+                mapRowToAnime(
+                    id = row.id,
+                    title = row.title,
+                    imagePath = row.imagePath,
+                    episodes = row.episodes,
+                    rating = row.rating,
+                    orderIndex = row.orderIndex,
+                    dateAdded = row.dateAdded,
+                    isFavorite = row.isFavorite,
+                    categoryType = row.categoryType,
+                    comment = row.comment
+                )
+            }
     }
 
     fun getAnimeById(id: String): Anime? {
         return db().animeQueries
             .getAnimeById(id)
             .executeAsOneOrNull()
-            ?.let { row -> mapRowToAnime(row.id, row.title, row.imagePath, row.episodes, row.rating, row.orderIndex, row.dateAdded, row.isFavorite, row.categoryType, getRowComment(row)) }
+            ?.let { row ->
+                mapRowToAnime(
+                    id = row.id,
+                    title = row.title,
+                    imagePath = row.imagePath,
+                    episodes = row.episodes,
+                    rating = row.rating,
+                    orderIndex = row.orderIndex,
+                    dateAdded = row.dateAdded,
+                    isFavorite = row.isFavorite,
+                    categoryType = row.categoryType,
+                    comment = row.comment
+                )
+            }
     }
-
-    private fun getRowComment(row: Any): String = try {
-        @Suppress("UNCHECKED_CAST")
-        (row.javaClass.getMethod("getComment").invoke(row) as? String).orEmpty()
-    } catch (_: Exception) { "" }
 
     suspend fun updateAnimeComment(id: String, comment: String) {
         db().animeQueries.updateAnimeComment(comment, System.currentTimeMillis(), id)
@@ -105,9 +141,10 @@ class AnimeLocalDataSource(
                 orderIndex = anime.orderIndex.toLong(),
                 dateAdded = anime.dateAdded,
                 categoryType = anime.categoryType,
-                comment = anime.comment
+                comment = anime.comment,
+                isAiRecommendation = 0L
             )
-            
+
             // Insert tags
             anime.tags.forEach { tag ->
                 db().animeQueries.insertAnimeTag(
@@ -132,9 +169,10 @@ class AnimeLocalDataSource(
                 orderIndex = anime.orderIndex.toLong(),
                 categoryType = anime.categoryType,
                 comment = anime.comment,
+                isAiRecommendation = 0L,
                 id = anime.id
             )
-            
+
             // Update tags
             db().animeQueries.deleteAnimeTags(anime.id)
             anime.tags.forEach { tag ->
@@ -170,7 +208,8 @@ class AnimeLocalDataSource(
                     orderIndex = anime.orderIndex.toLong(),
                     dateAdded = anime.dateAdded,
                     categoryType = anime.categoryType,
-                    comment = anime.comment
+                    comment = anime.comment,
+                    isAiRecommendation = 0L
                 )
                 anime.tags.forEach { tag ->
                     db().animeQueries.insertAnimeTag(

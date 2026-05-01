@@ -29,6 +29,7 @@ data class HomeUiState(
     val isCheckingUpdates: Boolean = false,
     val updates: ImmutableList<AnimeUpdate> = persistentListOf(),
     val statsAnimeList: ImmutableList<Anime> = persistentListOf(),
+    val statsFooterPhrase: String = "",
     val isRestoringFromCloud: Boolean = false,
     val isListLoaded: Boolean = false,
     val apiSearchResults: ImmutableList<ApiSearchResult> = persistentListOf(),

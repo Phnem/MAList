@@ -5,6 +5,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -18,25 +19,21 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.Hyphens
-import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
-import java.util.Locale
 import coil3.compose.AsyncImage
 import com.example.myapplication.data.models.Anime
 import com.example.myapplication.data.models.UiStrings
 import com.example.myapplication.isAppInDarkTheme
-import com.example.myapplication.ui.shared.inertialCollision
-import com.example.myapplication.ui.shared.rememberInertialCollisionState
 import com.example.myapplication.ui.shared.theme.*
 import androidx.compose.ui.graphics.graphicsLayer
 
@@ -68,6 +65,30 @@ fun AnimeListActionMenu(
     onEvent: (AnimeMenuEvent) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isDark = isAppInDarkTheme()
+    val onCard = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
+    val muted = if (isDark) {
+        OverlayThemeTokens.LabelMutedDark.copy(alpha = 0.9f)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val confirmButtonContainer = when (state.confirmMode) {
+        AnimeMenuConfirmMode.DELETE -> OverlayThemeTokens.AccentNeonRed
+        AnimeMenuConfirmMode.ADD_TO_FAVORITE -> OverlayThemeTokens.FavoriteConfirmGold
+    }
+    val confirmButtonContent = when (state.confirmMode) {
+        AnimeMenuConfirmMode.DELETE -> Color.White
+        AnimeMenuConfirmMode.ADD_TO_FAVORITE -> OverlayThemeTokens.OnFavoriteConfirmGold
+    }
+    val confirmLabel = when (state.confirmMode) {
+        AnimeMenuConfirmMode.DELETE -> strings.deleteConfirm
+        AnimeMenuConfirmMode.ADD_TO_FAVORITE -> strings.addButton
+    }
+    val confirmIcon = when (state.confirmMode) {
+        AnimeMenuConfirmMode.DELETE -> Icons.Default.Delete
+        AnimeMenuConfirmMode.ADD_TO_FAVORITE -> Icons.Rounded.Star
+    }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -85,9 +106,9 @@ fun AnimeListActionMenu(
                 contentDescription = "Anime Poster",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
-                    .width(120.dp)
+                    .width(114.dp)
                     .aspectRatio(0.7f)
-                    .clip(MaterialTheme.shapes.medium)
+                    .clip(RoundedCornerShape(16.dp))
             )
             Column(
                 modifier = Modifier.weight(1f),
@@ -95,55 +116,60 @@ fun AnimeListActionMenu(
             ) {
                 Text(
                     text = state.title,
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     maxLines = 3,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    color = onCard,
+                    lineHeight = 34.sp
                 )
                 Text(
                     text = state.statusText,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontSize = 16.sp,
+                        lineHeight = 22.sp,
+                        fontFamily = SnProFamily
+                    ),
+                    maxLines = 5,
+                    overflow = TextOverflow.Ellipsis,
+                    color = muted
                 )
             }
         }
 
-        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+        HorizontalDivider(
+            color = if (isDark) OverlayThemeTokens.RimDark else MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)
+        )
 
         // --- БЛОК 2: ДВЕ КНОПКИ — подтверждение + отмена (только обводка) ---
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            when (state.confirmMode) {
-                AnimeMenuConfirmMode.DELETE -> {
-                    Button(
-                        onClick = { onEvent(AnimeMenuEvent.OnConfirm) },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = BrandRed)
-                    ) {
-                        Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(strings.deleteConfirm)
-                    }
-                }
-                AnimeMenuConfirmMode.ADD_TO_FAVORITE -> {
-                    Button(
-                        onClick = { onEvent(AnimeMenuEvent.OnConfirm) },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = RateColor4)
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(strings.addButton)
-                    }
-                }
+            Button(
+                onClick = { onEvent(AnimeMenuEvent.OnConfirm) },
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(100),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = confirmButtonContainer,
+                    contentColor = confirmButtonContent
+                )
+            ) {
+                Icon(confirmIcon, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(confirmLabel, fontWeight = FontWeight.SemiBold)
             }
             OutlinedButton(
                 onClick = { onEvent(AnimeMenuEvent.OnCancel) },
                 modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(100),
                 colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.onSurface
+                    contentColor = onCard
+                ),
+                border = BorderStroke(
+                    1.dp,
+                    if (isDark) Color.White.copy(alpha = 0.16f)
+                    else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
                 )
             ) {
                 Text(strings.cancel)
@@ -180,11 +206,14 @@ fun AnimeListMenuSheet(
 
     val isDark = isAppInDarkTheme()
     val panelBg = if (isDark) DarkSurface else MaterialTheme.colorScheme.surface
-    val menuState = remember(anime, confirmMode) {
+    val menuState = remember(anime.id, confirmMode, strings.menuDeleteSnark, strings.menuAddFavoriteSnark) {
         AnimeMenuState(
             title = anime.title,
             imageUrl = getImgPath(anime.imageFileName) ?: "",
-            statusText = if (anime.rating > 0) "${anime.rating}/10" else "${anime.episodes} ${strings.episodesShort}",
+            statusText = when (confirmMode) {
+                AnimeMenuConfirmMode.DELETE -> strings.menuDeleteSnark
+                AnimeMenuConfirmMode.ADD_TO_FAVORITE -> strings.menuAddFavoriteSnark
+            },
             confirmMode = confirmMode
         )
     }
@@ -225,17 +254,38 @@ fun AnimeListMenuSheet(
                     .navigationBarsPadding()
                     .fillMaxWidth(),
                 shape = RoundedCornerShape(28.dp),
-                colors = CardDefaults.cardColors(containerColor = panelBg),
+                colors = CardDefaults.cardColors(containerColor = Color.Transparent),
                 elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
             ) {
-                AnimeListActionMenu(
-                    state = menuState,
-                    strings = strings,
-                    onEvent = { event ->
-                        onEvent(event)
-                        dismiss()
-                    }
-                )
+                OverlayGlassPanel(
+                    isDark = isDark,
+                    panelBg = panelBg,
+                    cornerRadius = 28.dp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.radialGradient(
+                                colors = listOf(
+                                    when (confirmMode) {
+                                        AnimeMenuConfirmMode.DELETE -> OverlayThemeTokens.AccentNeonRed.copy(alpha = if (isDark) 0.14f else 0.1f)
+                                        AnimeMenuConfirmMode.ADD_TO_FAVORITE -> OverlayThemeTokens.FavoriteConfirmGold.copy(alpha = if (isDark) 0.14f else 0.1f)
+                                    },
+                                    Color.Transparent
+                                ),
+                                center = Offset(0f, 0f),
+                                radius = 540f
+                            )
+                        )
+                ) {
+                    AnimeListActionMenu(
+                        state = menuState,
+                        strings = strings,
+                        onEvent = { event ->
+                            onEvent(event)
+                            dismiss()
+                        }
+                    )
+                }
             }
         }
     }
@@ -462,301 +512,4 @@ fun SwipeBackground(dismissState: SwipeToDismissBoxState) {
     }
 }
 
-// ==========================================
-// StatsOverlay — cleaner layout
-// ==========================================
-@Composable
-fun StatsOverlay(
-    animeList: List<Anime>,
-    strings: UiStrings,
-    onDismiss: () -> Unit
-) {
-    val isDark = isAppInDarkTheme()
-    var visible by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) { visible = true }
-
-    fun triggerDismiss() {
-        visible = false
-    }
-
-    LaunchedEffect(visible) {
-        if (!visible) {
-            kotlinx.coroutines.delay(250)
-            onDismiss()
-        }
-    }
-
-    BackHandler { triggerDismiss() }
-
-    val totalAnime = animeList.size
-    val avgRating = if (animeList.isNotEmpty()) animeList.map { it.rating }.average() else 0.0
-    val totalEpisodes = animeList.sumOf { it.episodes }
-    val favorites = animeList.count { it.isFavorite }
-    val ratingFormatted = String.format(Locale.getDefault(), "%.1f", avgRating)
-
-    val collisionState = rememberInertialCollisionState()
-    LaunchedEffect(visible) {
-        if (visible) {
-            collisionState.triggerCollision(impactForce = 55f, stiffness = 180f, dampingRatio = 0.5f)
-        }
-    }
-
-    val panelBg = if (isDark) DarkBackground else MaterialTheme.colorScheme.surface
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .zIndex(10f),
-        contentAlignment = Alignment.BottomCenter
-    ) {
-        AnimatedVisibility(
-            visible = visible,
-            enter = fadeIn(tween(200)),
-            exit = fadeOut(tween(150))
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.4f))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { triggerDismiss() }
-            )
-        }
-
-        AnimatedVisibility(
-            visible = visible,
-            enter = slideInVertically(
-                initialOffsetY = { it },
-                animationSpec = spring(dampingRatio = 0.8f, stiffness = 400f)
-            ) + fadeIn(),
-            exit = slideOutVertically(
-                targetOffsetY = { it },
-                animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMedium)
-            ) + fadeOut()
-        ) {
-            Card(
-                modifier = Modifier
-                    .padding(16.dp)
-                    .navigationBarsPadding()
-                    .fillMaxWidth(),
-                shape = RoundedCornerShape(28.dp),
-                colors = CardDefaults.cardColors(containerColor = panelBg),
-                elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(28.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .inertialCollision(state = collisionState, index = 0, baseMultiplier = 3f)
-                    ) {
-                        Text(
-                            text = strings.statsTitle,
-                            style = MaterialTheme.typography.titleLarge.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = SnProFamily
-                            ),
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-
-                    Spacer(Modifier.height(8.dp))
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .inertialCollision(state = collisionState, index = 1, baseMultiplier = 3f)
-                    ) {
-                        Text(
-                            text = strings.statsSubtitle,
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontFamily = SnProFamily
-                            ),
-                            color = MaterialTheme.colorScheme.secondary
-                        )
-                    }
-
-                    Spacer(Modifier.height(28.dp))
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .inertialCollision(state = collisionState, index = 2, baseMultiplier = 3f)
-                    ) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(IntrinsicSize.Min),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                StatsMetricTile(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight(),
-                                    value = totalAnime.toString(),
-                                    label = strings.statsTotal,
-                                    accent = BrandBlue,
-                                    icon = Icons.Default.Visibility,
-                                    isDark = isDark
-                                )
-                                StatsMetricTile(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight(),
-                                    value = ratingFormatted,
-                                    label = strings.avgRating,
-                                    accent = RatingColor,
-                                    icon = Icons.Rounded.Star,
-                                    isDark = isDark
-                                )
-                            }
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(IntrinsicSize.Min),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                StatsMetricTile(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight(),
-                                    value = totalEpisodes.toString(),
-                                    label = strings.episodesWatched,
-                                    accent = EpisodesColor,
-                                    icon = Icons.Default.Layers,
-                                    isDark = isDark
-                                )
-                                StatsMetricTile(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight(),
-                                    value = favorites.toString(),
-                                    label = strings.favorites,
-                                    accent = BrandRed,
-                                    icon = Icons.Default.Favorite,
-                                    isDark = isDark
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(Modifier.height(28.dp))
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .inertialCollision(state = collisionState, index = 3, baseMultiplier = 3f),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Button(
-                            onClick = { triggerDismiss() },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp),
-                            shape = RoundedCornerShape(50),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isDark) {
-                                    OverlayThemeTokens.IconSyncBlue
-                                } else {
-                                    MaterialTheme.colorScheme.secondaryContainer
-                                },
-                                contentColor = if (isDark) {
-                                    Color.Black
-                                } else {
-                                    MaterialTheme.colorScheme.onSecondaryContainer
-                                }
-                            ),
-                            elevation = ButtonDefaults.buttonElevation(
-                                defaultElevation = 0.dp,
-                                pressedElevation = 0.dp,
-                                focusedElevation = 0.dp,
-                                hoveredElevation = 0.dp
-                            )
-                        ) {
-                            Text(
-                                text = strings.statsOk,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = SnProFamily,
-                                fontSize = 16.sp
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun StatsMetricTile(
-    value: String,
-    label: String,
-    accent: Color,
-    icon: ImageVector,
-    isDark: Boolean,
-    modifier: Modifier = Modifier
-) {
-    val tileBg =
-        if (isDark) OverlayThemeTokens.TileBackgroundDark
-        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-    val labelMuted =
-        if (isDark) OverlayThemeTokens.LabelMutedDark
-        else MaterialTheme.colorScheme.onSurfaceVariant
-    val shape = RoundedCornerShape(OverlayThemeTokens.TileCornerRadius)
-
-    Column(
-        modifier = modifier
-            .defaultMinSize(minHeight = 104.dp)
-            .clip(shape)
-            .background(tileBg)
-            .border(1.5.dp, accent, shape)
-            .padding(horizontal = 14.dp, vertical = 12.dp)
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = accent,
-                modifier = Modifier.size(18.dp)
-            )
-            Text(
-                text = label.uppercase(Locale.getDefault()),
-                style = MaterialTheme.typography.labelSmall.copy(
-                    letterSpacing = 0.4.sp,
-                    fontFamily = SnProFamily,
-                    fontWeight = FontWeight.SemiBold,
-                    lineBreak = LineBreak.Heading,
-                    hyphens = Hyphens.None
-                ),
-                color = labelMuted,
-                maxLines = 3,
-                overflow = TextOverflow.Clip,
-                modifier = Modifier.weight(1f)
-            )
-        }
-        Spacer(Modifier.height(12.dp))
-        Text(
-            text = value,
-            style = MaterialTheme.typography.headlineSmall.copy(
-                fontWeight = FontWeight.Bold,
-                fontFamily = SnProFamily
-            ),
-            color = accent,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}
+// StatsOverlay вынесён в StatsOverlay.kt (пакет com.example.myapplication.ui.home).

@@ -13,7 +13,13 @@
     <string name="inspect_title">Scene search</string>
     <string name="inspect_mode_anime">Anime</string>
     <string name="inspect_mode_movies">Movies / TV</string>
-    <string name="inspect_gemini_required_movies">Add GEMINI_API_KEY to local.properties to search movies and TV from screenshots.</string>
-    <string name="inspect_gemini_required_ru_anime">Add GEMINI_API_KEY to local.properties for Russian anime search (trace.moe → Gemini → Shikimori).</string>
+    <string name="inspect_gemini_required_movies">Add your Gemini API key to search movies and TV from screenshots.</string>
+    <string name="inspect_gemini_required_ru_anime">Add your Gemini API key to use Russian anime search (trace.moe → Gemini → Shikimori).</string>
     <string name="inspect_back">Back</string>
+    <string name="external_list_oauth_not_configured">Set OAuth client id and secret in local.properties (see local.properties.example), then rebuild.</string>
+    <string name="external_list_oauth_opening_registration">Opening the site to register an OAuth app. Set redirect URI exactly as in local.properties.example, add keys, rebuild, then try again.</string>
+    <string name="external_list_oauth_add_secret_rebuild">Add the client secret to local.properties and rebuild. Then sign in again.</string>
+    <string name="external_list_oauth_success">Signed in. Running the selected action…</string>
+    <string name="external_list_oauth_error">Could not complete sign-in</string>
+    <string name="list_sync_cancelled">Sync cancelled</string>
 </resources>

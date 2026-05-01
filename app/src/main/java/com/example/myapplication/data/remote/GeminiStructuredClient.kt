@@ -25,17 +25,31 @@ import kotlinx.serialization.json.put
  * `responseMimeType` + `responseSchema` — без regex-очистки markdown.
  */
 class GeminiStructuredClient(
-    private val httpClient: HttpClient,
-    private val apiKey: String
+    private val httpClient: HttpClient
 ) {
+    suspend fun validateApiKey(apiKey: String): Result<Unit> = runCatching {
+        requireConfigured(apiKey)
+        val body = buildGeminiJsonRequest(
+            textPrompt = "Reply with {\"ok\": true}.",
+            inlineImageBase64 = null,
+            inlineMimeType = null,
+            responseSchema = schemaValidation()
+        )
+        val text = postGenerateContent(body, apiKey)
+        val parsed = json.decodeFromString<ValidationResponse>(text)
+        check(parsed.ok) { "Gemini key check failed" }
+    }
+
     private val json = Json { ignoreUnknownKeys = true }
 
     private val modelId = "gemini-2.5-flash"
 
-    fun isConfigured(): Boolean = apiKey.isNotBlank()
-
-    suspend fun russianAnimeTitle(romaji: String, english: String): Result<String> = runCatching {
-        requireConfigured()
+    suspend fun russianAnimeTitle(
+        romaji: String,
+        english: String,
+        apiKey: String
+    ): Result<String> = runCatching {
+        requireConfigured(apiKey)
         val prompt =
             "You are helping a Russian anime database search. Given official titles: romaji=\"$romaji\", english=\"$english\". " +
                 "Respond with the best Russian-language title users would recognize on Shikimori/Kinopoisk-style sites."
@@ -45,7 +59,7 @@ class GeminiStructuredClient(
             inlineMimeType = null,
             responseSchema = schemaRussianTitle()
         )
-        val text = postGenerateContent(body)
+        val text = postGenerateContent(body, apiKey)
         json.decodeFromString<RussianTitleResponse>(text).russianTitle.trim()
             .takeIf { it.isNotEmpty() }
             ?: error("Empty russianTitle")
@@ -53,9 +67,10 @@ class GeminiStructuredClient(
 
     suspend fun identifyMovieOrTvFromImage(
         imageBase64: String,
-        mimeType: String
+        mimeType: String,
+        apiKey: String
     ): Result<Pair<String, AppContentType>> = runCatching {
-        requireConfigured()
+        requireConfigured(apiKey)
         val prompt =
             "Identify the movie, TV series, or anime from this screenshot. " +
                 "Return the primary English (or international) title as users would search on TMDB."
@@ -65,7 +80,7 @@ class GeminiStructuredClient(
             inlineMimeType = mimeType,
             responseSchema = schemaMovieSeries()
         )
-        val text = postGenerateContent(body)
+        val text = postGenerateContent(body, apiKey)
         val parsed = json.decodeFromString<MovieSeriesResponse>(text)
         val title = parsed.title.trim()
         if (title.isEmpty()) error("Empty title")
@@ -77,11 +92,11 @@ class GeminiStructuredClient(
         title to type
     }
 
-    private fun requireConfigured() {
-        check(apiKey.isNotBlank()) { "GEMINI_API_KEY is missing (local.properties)" }
+    private fun requireConfigured(apiKey: String) {
+        check(apiKey.isNotBlank()) { "Gemini API key is missing." }
     }
 
-    private suspend fun postGenerateContent(body: JsonObject): String {
+    private suspend fun postGenerateContent(body: JsonObject, apiKey: String): String {
         val url =
             "https://generativelanguage.googleapis.com/v1beta/models/$modelId:generateContent?key=$apiKey"
         val responseText = httpClient.post(url) {
@@ -178,6 +193,17 @@ class GeminiStructuredClient(
             add(JsonPrimitive("type"))
         })
     }
+
+    private fun schemaValidation(): JsonObject = buildJsonObject {
+        put("type", "OBJECT")
+        put(
+            "properties",
+            buildJsonObject {
+                put("ok", buildJsonObject { put("type", "BOOLEAN") })
+            }
+        )
+        put("required", buildJsonArray { add(JsonPrimitive("ok")) })
+    }
 }
 
 @Serializable
@@ -189,4 +215,9 @@ private data class RussianTitleResponse(
 private data class MovieSeriesResponse(
     val title: String,
     val type: String
+)
+
+@Serializable
+private data class ValidationResponse(
+    val ok: Boolean
 )

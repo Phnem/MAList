@@ -25,6 +25,8 @@ class AnimeRepository(
     private val localDataSource: AnimeLocalDataSource
 ) {
 
+    fun getAllAnimeSnapshot(): List<Anime> = localDataSource.getAllAnimeList()
+
     /**
      * Реактивный поток списка: БД подписывается один раз, фильтрация/сортировка в памяти.
      * При изменении БД или параметров (поиск, сортировка, фильтр) пересчитывается только фильтрация.
@@ -53,21 +55,29 @@ class AnimeRepository(
         sortAscending: Boolean,
         filterTags: List<String>
     ): List<Anime> {
-        var result = list
         val trimmed = searchQuery.trim()
         if (trimmed.isNotEmpty()) {
+            var result = list
             val lower = trimmed.lowercase()
             result = result.filter { it.title.lowercase().contains(lower) }
+            if (filterTags.isNotEmpty()) {
+                result = result.filter { it.tags.containsAll(filterTags) }
+            }
+            return when (sortOption) {
+                SortOption.RATING -> if (sortAscending) result.sortedBy { it.rating } else result.sortedByDescending { it.rating }
+                SortOption.EPISODES -> if (sortAscending) result.sortedBy { it.episodes } else result.sortedByDescending { it.episodes }
+                SortOption.TITLE -> if (sortAscending) result.sortedBy { it.title } else result.sortedByDescending { it.title }
+            }
         }
+        var result = list
         if (filterTags.isNotEmpty()) {
             result = result.filter { it.tags.containsAll(filterTags) }
         }
-        result = when (sortOption) {
+        return when (sortOption) {
             SortOption.RATING -> if (sortAscending) result.sortedBy { it.rating } else result.sortedByDescending { it.rating }
             SortOption.EPISODES -> if (sortAscending) result.sortedBy { it.episodes } else result.sortedByDescending { it.episodes }
             SortOption.TITLE -> if (sortAscending) result.sortedBy { it.title } else result.sortedByDescending { it.title }
         }
-        return result
     }
 
     fun getAnimeById(id: String): Anime? = localDataSource.getAnimeById(id)
@@ -99,8 +109,12 @@ class AnimeRepository(
         return apiService.searchApi(query, contentType, language)
     }
 
-    suspend fun searchAnimeShikimoriOnly(query: String, language: AppLanguage): Result<List<ApiSearchResult>> {
-        return apiService.searchAnimeShikimoriOnly(query, language)
+    suspend fun searchAnimeShikimoriOnly(
+        query: String,
+        language: AppLanguage,
+        allowZeroEpisodes: Boolean = false
+    ): Result<List<ApiSearchResult>> {
+        return apiService.searchAnimeShikimoriOnly(query, language, allowZeroEpisodes)
     }
 
     suspend fun mediaByAnilistId(id: Int): Result<ApiSearchResult?> {

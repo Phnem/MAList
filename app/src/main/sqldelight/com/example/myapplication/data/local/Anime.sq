@@ -11,7 +11,8 @@ CREATE TABLE anime (
     dateAdded INTEGER NOT NULL,
     categoryType TEXT NOT NULL DEFAULT '',
     sync_status TEXT NOT NULL DEFAULT 'SYNCED',
-    comment TEXT NOT NULL DEFAULT ''
+    comment TEXT NOT NULL DEFAULT '',
+    isAiRecommendation INTEGER NOT NULL DEFAULT 0
 );
 
 -- Delta Sync: rows that need to be pushed to cloud
@@ -42,8 +43,8 @@ getAnimeById:
 SELECT * FROM anime WHERE id = ?;
 
 insertAnime:
-INSERT INTO anime(id, title, imagePath, episodes, rating, status, isFavorite, updatedAt, orderIndex, dateAdded, categoryType, sync_status, comment)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING_CREATE', ?);
+INSERT INTO anime(id, title, imagePath, episodes, rating, status, isFavorite, updatedAt, orderIndex, dateAdded, categoryType, sync_status, comment, isAiRecommendation)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING_CREATE', ?, ?);
 
 updateAnime:
 UPDATE anime
@@ -57,7 +58,8 @@ SET title = ?,
     orderIndex = ?,
     categoryType = ?,
     sync_status = 'PENDING_UPDATE',
-    comment = ?
+    comment = ?,
+    isAiRecommendation = ?
 WHERE id = ?;
 
 updateAnimeComment:

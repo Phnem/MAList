@@ -16,6 +16,8 @@ data class UiStrings(
     val emptyTitle: String,
     val emptySubtitle: String,
     val noResults: String,
+    /** Поиск: в коллекции нет совпадений, но внешний поиск может находить тайтлы. */
+    val noResultsInLibrary: String,
     val noFavorites: String,
     val filterByGenre: String,
     val genreAnime: String,
@@ -31,6 +33,9 @@ data class UiStrings(
     val timeSpent: String,
     val avgRating: String,
     val statsTotal: String,
+    val statsChartsGenresTitle: String,
+    val statsGenreOther: String,
+    val statsNoGenreData: String,
     val statsOk: String,
     val rankTitle: String,
     val updatesTitle: String,
@@ -42,6 +47,8 @@ data class UiStrings(
     val favTitle: String,
     val favSubtitle: String,
     val favConfirm: String,
+    val menuDeleteSnark: String,
+    val menuAddFavoriteSnark: String,
     val cancel: String,
     val addTitle: String,
     val editTitle: String,
@@ -125,9 +132,23 @@ data class UiStrings(
     val devHideShareSubtitle: String,
     val devExportLogsTitle: String,
     val devExportLogsSubtitle: String,
+    val devImportDbTitle: String,
+    val devImportDbSubtitle: String,
     val devFpsOverlayTitle: String,
     val devFpsOverlaySubtitle: String,
     val devExportLogsCd: String,
+    val devImportDbCd: String,
+    val devImportDbResultAddedTemplate: String,
+    val devImportDbResultNoNew: String,
+    val devImportDbResultInvalid: String,
+    val devExportPdfTitle: String,
+    val devExportPdfSubtitle: String,
+    val devExportPdfCd: String,
+    val devExportPdfDocumentTitle: String,
+    val devExportPdfColumnTitle: String,
+    val devExportPdfColumnEpisodes: String,
+    val devExportPdfColumnRating: String,
+    val devExportPdfEmpty: String,
     /** Экран «Поиск по кадру» — язык из настроек, не из системы */
     val inspectTitle: String,
     val inspectModeAnime: String,
@@ -141,6 +162,26 @@ data class UiStrings(
     val inspectErrorGeneric: String,
     val inspectGeminiRequiredRuAnime: String,
     val inspectGeminiRequiredMovies: String,
+    val inspectGeminiKeyTitle: String,
+    val inspectGeminiKeyInputPlaceholder: String,
+    val inspectGeminiGetKeyOneClick: String,
+    val inspectGeminiTenSecondsHint: String,
+    val inspectGeminiNextStep: String,
+    val inspectGeminiInstructionTitle: String,
+    val inspectGeminiInstructionBody: String,
+    val inspectGeminiInstructionStepOpen: String,
+    val inspectGeminiInstructionStepCreate: String,
+    val inspectGeminiInstructionStepCopy: String,
+    val inspectGeminiSaveKey: String,
+    val inspectGeminiCheckAndSave: String,
+    /** Статус при сетевой проверке ключа Gemini (не путать с анализом скриншота). */
+    val inspectGeminiCheckingKey: String,
+    val inspectGeminiInvalidFormat: String,
+    val inspectGeminiSaved: String,
+    val inspectGeminiSaveError: String,
+    val inspectGeminiCheckErrorTitle: String,
+    val inspectGeminiBackToInstruction: String,
+    val inspectGeminiKeyFoundInserted: String,
     /** Заголовок в шапке экрана Visual Search (центр). */
     val inspectVisualSearchToolbarTitle: String,
     /** Подпись сегмента «фильмы/ТВ» в стиле референса (короче inspectModeMoviesTv). */
@@ -180,5 +221,23 @@ data class UiStrings(
     val addEditFormatMoviesTitle: String,
     val addEditFormatMoviesSubtitle: String,
     val addEditFormatSeriesTitle: String,
-    val addEditFormatSeriesSubtitle: String
+    val addEditFormatSeriesSubtitle: String,
+    /** Заголовок квадратной плитки «Синхронизация» в оверлее. */
+    val nottifTileSyncTitle: String,
+    val nottifServiceShikimori: String,
+    val nottifServiceMal: String,
+    val nottifServiceAnilist: String,
+    /** Текст заглушки MyAnimeList (попап вместо действий Pull/Push/Sync). */
+    val malSyncPlaceholderBody: String,
+    /** Подзаголовок диалога выбора действия сервиса. */
+    val nottifServiceActionDialogMessage: String,
+    val nottifServiceActionPull: String,
+    val nottifServiceActionPush: String,
+    val nottifServiceActionSync: String,
+    /** Онлайн-синк (Shikimori и др.): строка по умолчанию над прогрессом. */
+    val listSyncLoadingDefaultMessage: String,
+    /** Подпись в стиле референса (caps / mono). */
+    val listSyncLoadingSubtitle: String,
+    /** Нижняя подсказка на оверлее синхронизации. */
+    val listSyncLoadingFooter: String
 )

@@ -2,8 +2,11 @@ package com.example.myapplication.ui.settings
 
 import android.content.Context
 import android.content.Intent
+import android.widget.Toast
 import com.example.myapplication.data.models.UiStrings
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.net.toUri
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
@@ -41,6 +44,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.activity.compose.BackHandler
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavController
 import com.example.myapplication.isAppInDarkTheme
 import com.example.myapplication.DropboxSyncManager
@@ -94,6 +98,11 @@ fun SettingsScreen(
     val collisionState = rememberInertialCollisionState()
     val settingsHazeState = remember { HazeState() }
     var showDeveloperSection by rememberSaveable { mutableStateOf(false) }
+    val importDbPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let { viewModel.importDbFromFile(context, it) }
+    }
 
     BackHandler(enabled = showCloudSheet || showContactSheet || showUpdateChangelogSheet) {
         showCloudSheet = false
@@ -114,6 +123,11 @@ fun SettingsScreen(
             stiffness = 200f,
             dampingRatio = 0.45f
         )
+    }
+    LaunchedEffect(uiState.importDbMessage) {
+        val msg = uiState.importDbMessage ?: return@LaunchedEffect
+        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+        viewModel.clearImportDbMessage()
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -354,6 +368,14 @@ fun SettingsScreen(
                                 onExportLogs = {
                                     performHaptic(view, "light")
                                     viewModel.exportLogs(context)
+                                },
+                                onExportPdf = {
+                                    performHaptic(view, "light")
+                                    viewModel.exportCollectionPdf(context)
+                                },
+                                onImportDb = {
+                                    performHaptic(view, "light")
+                                    importDbPicker.launch("*/*")
                                 }
                             )
                         }
@@ -468,7 +490,9 @@ private fun DeveloperSettingsSection(
     onMirrorDbToggle: (Boolean) -> Unit,
     onHideShareToggle: (Boolean) -> Unit,
     onFpsOverlayToggle: (Boolean) -> Unit,
-    onExportLogs: () -> Unit
+    onExportLogs: () -> Unit,
+    onExportPdf: () -> Unit,
+    onImportDb: () -> Unit
 ) {
     val isDark = isAppInDarkTheme()
     val tileBg =
@@ -544,8 +568,27 @@ private fun DeveloperSettingsSection(
                         subtitle = strings.devExportLogsSubtitle,
                         isLoading = uiState.isExportingLogs,
                         iconDescription = strings.devExportLogsCd,
+                        icon = Icons.Default.BugReport,
                         accent = accent,
                         onClick = onExportLogs
+                    )
+                    DeveloperActionRow(
+                        title = strings.devExportPdfTitle,
+                        subtitle = strings.devExportPdfSubtitle,
+                        isLoading = uiState.isExportingPdf,
+                        iconDescription = strings.devExportPdfCd,
+                        icon = Icons.Default.PictureAsPdf,
+                        accent = accent,
+                        onClick = onExportPdf
+                    )
+                    DeveloperActionRow(
+                        title = strings.devImportDbTitle,
+                        subtitle = strings.devImportDbSubtitle,
+                        isLoading = uiState.isImportingDb,
+                        iconDescription = strings.devImportDbCd,
+                        icon = Icons.Default.FileOpen,
+                        accent = accent,
+                        onClick = onImportDb
                     )
                     DeveloperSwitchRow(
                         title = strings.devFpsOverlayTitle,
@@ -604,6 +647,7 @@ private fun DeveloperActionRow(
     subtitle: String,
     isLoading: Boolean,
     iconDescription: String,
+    icon: ImageVector,
     accent: Color,
     onClick: () -> Unit
 ) {
@@ -637,7 +681,7 @@ private fun DeveloperActionRow(
                 )
             } else {
                 Icon(
-                    imageVector = Icons.Default.Share,
+                    imageVector = icon,
                     contentDescription = iconDescription,
                     tint = accent
                 )

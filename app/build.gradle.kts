@@ -14,6 +14,11 @@ val localProperties = Properties().apply {
     if (f.exists()) f.inputStream().use { load(it) }
 }
 
+fun oauthProp(name: String): String =
+    System.getenv(name)
+        ?.takeIf { it.isNotBlank() }
+        ?: localProperties.getProperty(name, "")
+
 sqldelight {
     databases {
         create("AnimeDatabase") {
@@ -30,16 +35,56 @@ android {
         applicationId = "com.phnem.vetro"
         minSdk = 26
         targetSdk = 36
-        versionCode = 323
-        versionName = "v3.2.3-Stable"
+        versionCode = 324
+        versionName = "v3.2.4-Beta"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "GITHUB_OWNER", "\"Phnem\"")
         buildConfigField("String", "GITHUB_REPO", "\"Vetra\"")
         buildConfigField(
             "String",
-            "GEMINI_API_KEY",
-            "\"${localProperties.getProperty("GEMINI_API_KEY", "")}\""
+            "SHIKIMORI_CLIENT_ID",
+            "\"${oauthProp("SHIKIMORI_CLIENT_ID")}\""
+        )
+        buildConfigField(
+            "String",
+            "SHIKIMORI_CLIENT_SECRET",
+            "\"${oauthProp("SHIKIMORI_CLIENT_SECRET")}\""
+        )
+        buildConfigField(
+            "String",
+            "SHIKIMORI_REDIRECT_URI",
+            "\"${oauthProp("SHIKIMORI_REDIRECT_URI")}\""
+        )
+        buildConfigField(
+            "String",
+            "MAL_CLIENT_ID",
+            "\"${oauthProp("MAL_CLIENT_ID")}\""
+        )
+        buildConfigField(
+            "String",
+            "MAL_CLIENT_SECRET",
+            "\"${oauthProp("MAL_CLIENT_SECRET")}\""
+        )
+        buildConfigField(
+            "String",
+            "MAL_REDIRECT_URI",
+            "\"${oauthProp("MAL_REDIRECT_URI")}\""
+        )
+        buildConfigField(
+            "String",
+            "ANILIST_CLIENT_ID",
+            "\"${oauthProp("ANILIST_CLIENT_ID")}\""
+        )
+        buildConfigField(
+            "String",
+            "ANILIST_CLIENT_SECRET",
+            "\"${oauthProp("ANILIST_CLIENT_SECRET")}\""
+        )
+        buildConfigField(
+            "String",
+            "ANILIST_REDIRECT_URI",
+            "\"${oauthProp("ANILIST_REDIRECT_URI")}\""
         )
     }
 
@@ -111,6 +156,7 @@ dependencies {
     implementation(libs.navigation.compose)
     implementation(libs.activity.compose)
     implementation(libs.datastore.preferences)
+    implementation(libs.androidx.security.crypto)
     implementation(libs.haze)
     implementation(libs.haze.materials)
 

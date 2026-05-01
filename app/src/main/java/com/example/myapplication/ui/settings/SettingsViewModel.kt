@@ -2,6 +2,7 @@ package com.example.myapplication.ui.settings
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Process
 import android.util.Log
 import androidx.core.content.FileProvider
@@ -18,8 +19,11 @@ import com.example.myapplication.data.models.AppTheme
 import com.example.myapplication.data.models.AppUpdateStatus
 import com.example.myapplication.data.models.SemanticVersion
 import com.phnem.vetro.BuildConfig
+import com.example.myapplication.data.local.CollectionPdfGenerator
 import com.example.myapplication.data.local.SQLDelightDatabaseFactory
 import com.example.myapplication.data.repository.AnimeRepository
+import com.example.myapplication.domain.settings.ImportAnimeDbUseCase
+import com.example.myapplication.utils.getStrings
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -41,7 +45,9 @@ private const val LOG_TAG = "SettingsViewModel"
 class SettingsViewModel(
     private val repository: AnimeRepository,
     private val settingsDataStore: DataStore<Preferences>,
-    private val databaseFactory: SQLDelightDatabaseFactory
+    private val databaseFactory: SQLDelightDatabaseFactory,
+    private val importAnimeDbUseCase: ImportAnimeDbUseCase,
+    private val collectionPdfGenerator: CollectionPdfGenerator
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -240,7 +246,8 @@ class SettingsViewModel(
                     val exportFile = File(exportDir, "vetro_logcat.txt")
                     val pid = Process.myPid().toString()
                     val process = ProcessBuilder("logcat", "-d", "-v", "threadtime", "--pid", pid).start()
-                    val logs = process.inputStream.bufferedReader().use { it.readText() }
+                    val raw = process.inputStream.bufferedReader().use { it.readText() }
+                    val logs = filterSystemViewFrameRateSpam(raw)
                     process.waitFor()
                     exportFile.writeText(logs)
                     exportFile
@@ -267,6 +274,81 @@ class SettingsViewModel(
         }
     }
 
+    fun exportCollectionPdf(context: Context) {
+        if (_uiState.value.isExportingPdf) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isExportingPdf = true) }
+            try {
+                val strings = getStrings(_uiState.value.language)
+                val pdfFile = withContext(Dispatchers.IO) {
+                    databaseFactory.checkpoint()
+                    val items = repository.getAllAnimeSnapshot()
+                    val exportDir = File(context.cacheDir, "share").apply { mkdirs() }
+                    val file = File(exportDir, "vetro_collection.pdf")
+                    collectionPdfGenerator.writeToFile(
+                        file = file,
+                        items = items,
+                        documentTitle = strings.devExportPdfDocumentTitle,
+                        columnTitle = strings.devExportPdfColumnTitle,
+                        columnEpisodes = strings.devExportPdfColumnEpisodes,
+                        columnRating = strings.devExportPdfColumnRating,
+                        emptyMessage = strings.devExportPdfEmpty
+                    )
+                    file
+                }
+                val uri = FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    pdfFile
+                )
+                val sendIntent = Intent().apply {
+                    action = Intent.ACTION_SEND
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    putExtra(Intent.EXTRA_TEXT, "${strings.devExportPdfDocumentTitle} — Vetro")
+                    type = "application/pdf"
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                context.startActivity(Intent.createChooser(sendIntent, null))
+            } catch (e: Exception) {
+                Log.w(LOG_TAG, "Failed to export PDF", e)
+            } finally {
+                _uiState.update { it.copy(isExportingPdf = false) }
+            }
+        }
+    }
+
+    fun importDbFromFile(context: Context, uri: Uri) {
+        if (_uiState.value.isImportingDb) return
+        val strings = getStrings(_uiState.value.language)
+        viewModelScope.launch {
+            _uiState.update { it.copy(isImportingDb = true, importDbMessage = null) }
+            val result = importAnimeDbUseCase(context, uri)
+            result.fold(
+                onSuccess = { summary ->
+                    val message = if (summary.addedCount > 0) {
+                        strings.devImportDbResultAddedTemplate.format(summary.addedCount)
+                    } else {
+                        strings.devImportDbResultNoNew
+                    }
+                    _uiState.update { it.copy(isImportingDb = false, importDbMessage = message) }
+                },
+                onFailure = { error ->
+                    Log.w(LOG_TAG, "Failed to import DB", error)
+                    _uiState.update {
+                        it.copy(
+                            isImportingDb = false,
+                            importDbMessage = strings.devImportDbResultInvalid
+                        )
+                    }
+                }
+            )
+        }
+    }
+
+    fun clearImportDbMessage() {
+        _uiState.update { it.copy(importDbMessage = null) }
+    }
+
     private fun parseVersion(versionStr: String): SemanticVersion {
         val clean = versionStr.removePrefix("v").trim()
         val dashSplit = clean.split("-", limit = 2)
@@ -279,3 +361,11 @@ class SettingsViewModel(
         )
     }
 }
+
+/** Android 15+ / Compose: system `View` INFO lines for setRequestedFrameRate(NaN). */
+private fun filterSystemViewFrameRateSpam(log: String): String =
+    log.lineSequence()
+        .filterNot { line ->
+            "setRequestedFrameRate" in line && "frameRate=NaN" in line
+        }
+        .joinToString("\n")

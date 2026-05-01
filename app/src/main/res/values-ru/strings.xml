@@ -13,7 +13,13 @@
     <string name="inspect_title">Поиск по кадру</string>
     <string name="inspect_mode_anime">Аниме</string>
     <string name="inspect_mode_movies">Фильмы / сериалы</string>
-    <string name="inspect_gemini_required_movies">Для поиска фильмов и сериалов по скриншоту добавьте GEMINI_API_KEY в local.properties.</string>
-    <string name="inspect_gemini_required_ru_anime">Для поиска аниме по кадру на русском нужен GEMINI_API_KEY в local.properties (trace.moe → Gemini → Shikimori).</string>
+    <string name="inspect_gemini_required_movies">Добавьте ваш Gemini API-ключ, чтобы искать фильмы и сериалы по скриншоту.</string>
+    <string name="inspect_gemini_required_ru_anime">Добавьте ваш Gemini API-ключ, чтобы использовать поиск аниме на русском (trace.moe → Gemini → Shikimori).</string>
     <string name="inspect_back">Назад</string>
+    <string name="external_list_oauth_not_configured">Укажите client id и secret в local.properties (см. local.properties.example), затем пересоберите.</string>
+    <string name="external_list_oauth_opening_registration">Открываем сайт для регистрации OAuth-приложения. Укажите redirect URI точно как в local.properties.example, добавьте ключи, пересоберите проект и повторите вход.</string>
+    <string name="external_list_oauth_add_secret_rebuild">Добавьте client secret в local.properties и пересоберите проект. Затем войдите снова.</string>
+    <string name="external_list_oauth_success">Вход выполнен. Запуск выбранного действия…</string>
+    <string name="external_list_oauth_error">Не удалось завершить вход</string>
+    <string name="list_sync_cancelled">Синхронизация отменена</string>
 </resources>

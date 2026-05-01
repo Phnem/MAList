@@ -14,8 +14,15 @@ interface ApiService {
 
     suspend fun searchApi(query: String, contentType: AppContentType, language: AppLanguage): Result<List<ApiSearchResult>>
 
-    /** Только Shikimori (для RU inspect: trace → Gemini → Shikimori). */
-    suspend fun searchAnimeShikimoriOnly(query: String, language: AppLanguage): Result<List<ApiSearchResult>>
+    /**
+     * Только Shikimori (для RU inspect: trace → Gemini → Shikimori).
+     * [allowZeroEpisodes]: для AI-рекомендаций, иначе Shikimori даёт 0 эпизодов у не вышедших/фильмов — список становится пустым.
+     */
+    suspend fun searchAnimeShikimoriOnly(
+        query: String,
+        language: AppLanguage,
+        allowZeroEpisodes: Boolean = false
+    ): Result<List<ApiSearchResult>>
 
     /** AniList [Media] по числовому id (для trace.moe → AniList). */
     suspend fun mediaByAnilistId(id: Int): Result<ApiSearchResult?>

@@ -1,14 +1,13 @@
 package com.example.myapplication
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.text.format.DateFormat
 import com.example.myapplication.data.models.AnimeUpdate
 import com.example.myapplication.data.models.UiStrings
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.Spring
@@ -18,24 +17,19 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -46,16 +40,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ExitToApp
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.CloudSync
-import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.outlined.SignalCellularAlt
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -69,6 +56,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -81,20 +70,27 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.myapplication.ui.shared.theme.DarkBackground
+import com.example.myapplication.ui.shared.theme.OverlayGlassPanel
 import com.example.myapplication.ui.shared.theme.OverlayThemeTokens
+import com.example.myapplication.ui.shared.theme.glassEdge
+import com.example.myapplication.ui.shared.theme.glassFill
 import com.example.myapplication.utils.performHaptic
+import com.example.myapplication.sync.ExternalListService
+import com.example.myapplication.sync.ExternalListSyncCoordinator
+import com.example.myapplication.sync.ListServiceAction
+import org.koin.compose.koinInject
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -102,20 +98,27 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.max
 
+/** Activity для OAuth: [LocalActivity] в overlay часто null — обходим через цепочку Context. */
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+
 /** Как у плиток Sort/Genres: тёмный «стеклянный» квадрат или светлая подложка под иконку. */
 @Composable
-private fun nottifOverlayIconBoxBg(isDark: Boolean): Color =
+internal fun nottifOverlayIconBoxBg(isDark: Boolean): Color =
     if (isDark) OverlayThemeTokens.TileIconBgDark
     else MaterialTheme.colorScheme.surface.copy(alpha = 0.65f)
 
 @Composable
-private fun nottifOverlayCircleControlBg(isDark: Boolean): Color =
+internal fun nottifOverlayCircleControlBg(isDark: Boolean): Color =
     if (isDark) Color.Black.copy(alpha = 0.28f)
     else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)
 
 /** Пилюля метрик: без рамки AssistChip, полностью скруглённый контейнер. */
 @Composable
-private fun SyncMetricPill(
+internal fun SyncMetricPill(
     icon: ImageVector,
     text: String,
     containerColor: Color,
@@ -158,7 +161,8 @@ fun NotificationSyncOverlay(
     onLogout: () -> Unit,
     onCheckUpdates: () -> Unit,
     onAcceptUpdate: (AnimeUpdate) -> Unit = {},
-    onDismissUpdate: (AnimeUpdate) -> Unit = {}
+    onDismissUpdate: (AnimeUpdate) -> Unit = {},
+    onBlockingChildDialogChange: (Boolean) -> Unit = {}
 ) {
     val syncState by syncManager.syncState.collectAsStateWithLifecycle()
     val syncMode by syncManager.syncMode.collectAsStateWithLifecycle()
@@ -168,6 +172,11 @@ fun NotificationSyncOverlay(
     val view = LocalView.current
     val scope = rememberCoroutineScope()
     var showLogoutDialog by remember { mutableStateOf(false) }
+    var serviceActionDialogTarget by remember { mutableStateOf<ExternalListService?>(null) }
+    var showMalPlaceholderDialog by remember { mutableStateOf(false) }
+    val hostActivity = LocalActivity.current ?: context.findActivity()
+    val listSyncCoordinator: ExternalListSyncCoordinator = koinInject()
+    val listSyncUi by listSyncCoordinator.syncUiState.collectAsStateWithLifecycle()
 
     val isDark = isAppInDarkTheme()
     val panelBg = if (isDark) DarkBackground else MaterialTheme.colorScheme.surface
@@ -180,6 +189,12 @@ fun NotificationSyncOverlay(
     val rim = if (isDark) OverlayThemeTokens.RimDark else MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)
     val onCard = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
     val muted = if (isDark) OverlayThemeTokens.LabelMutedDark else MaterialTheme.colorScheme.onSurfaceVariant
+    /** Непрозрачный фон диалогов поверх размытого задника. */
+    val dialogSurface = panelBg
+    val serviceActionButtonColors = ButtonDefaults.textButtonColors(
+        contentColor = onCard,
+        disabledContentColor = onCard.copy(alpha = 0.38f)
+    )
 
     val lastSyncTs = remember(syncState, visibleState.currentState, visibleState.targetState) {
         context.getSharedPreferences("dropbox_prefs", android.content.Context.MODE_PRIVATE)
@@ -192,6 +207,15 @@ fun NotificationSyncOverlay(
     val datePart = remember(lastSyncTs, strings) { formatSyncDateLine(lastSyncTs, strings) }
     val statusWord = remember(syncState, strings) { syncStatusWord(strings, syncState) }
     val detailLine = "$datePart • $statusWord"
+
+    val blockingChildDialogOpen =
+        showLogoutDialog || serviceActionDialogTarget != null || showMalPlaceholderDialog
+    LaunchedEffect(blockingChildDialogOpen) {
+        onBlockingChildDialogChange(blockingChildDialogOpen)
+    }
+    DisposableEffect(Unit) {
+        onDispose { onBlockingChildDialogChange(false) }
+    }
 
     BackHandler { onDismiss() }
 
@@ -234,9 +258,8 @@ fun NotificationSyncOverlay(
                 // Небольшой внешний отступ, чтобы скругление Card не обрезало круглую кнопку закрытия
                 Card(
                     shape = RoundedCornerShape(OverlayThemeTokens.PanelCornerRadius),
-                    colors = CardDefaults.cardColors(containerColor = panelBg),
+                    colors = CardDefaults.cardColors(containerColor = Color.Transparent),
                     elevation = CardDefaults.cardElevation(defaultElevation = OverlayThemeTokens.CardElevation),
-                    border = BorderStroke(1.dp, rim),
                     modifier = Modifier
                         .padding(
                             top = OverlayThemeTokens.CardOuterPaddingTop,
@@ -246,6 +269,12 @@ fun NotificationSyncOverlay(
                             detectTapGestures { /* поглощаем тап, без семантики clickable */ }
                         }
                 ) {
+                    OverlayGlassPanel(
+                        isDark = isDark,
+                        panelBg = panelBg,
+                        cornerRadius = OverlayThemeTokens.PanelCornerRadius,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
                     Column(
                         modifier = Modifier
                             .padding(
@@ -257,302 +286,66 @@ fun NotificationSyncOverlay(
                             .verticalScroll(rememberScrollState())
                     ) {
                         // —— Header —— //
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.Top
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = strings.nottifPanelTitle,
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = onCard,
-                                    fontSize = 22.sp
-                                )
-                                Spacer(Modifier.height(4.dp))
-                                Text(
-                                    text = strings.nottifPanelSubtitle,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = muted
-                                )
+                        NottifPanelHeader(
+                            title = strings.nottifPanelTitle,
+                            subtitle = strings.nottifPanelSubtitle,
+                            closeCd = strings.nottifCloseCd,
+                            onCard = onCard,
+                            muted = muted,
+                            onClose = {
+                                performHaptic(view, "light")
+                                onDismiss()
                             }
-                            IconButton(
-                                onClick = {
-                                    performHaptic(view, "light")
-                                    onDismiss()
-                                },
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = strings.nottifCloseCd,
-                                    tint = muted,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
+                        )
 
                         Spacer(Modifier.height(18.dp))
 
-                        // —— Main sync card (колонка: бейдж → инфо → кнопки внизу, без наложений) —— //
                         val badgeText = when (syncMode) {
                             SyncMode.AUTO -> strings.nottifBadgeAutomated
                             SyncMode.MANUAL -> strings.nottifBadgeManual
                         }
                         val syncingCloud = syncState == SyncState.SYNCING
                         val lastSyncAccent =
-                            if (isDark) OverlayThemeTokens.IconSyncBlue
+                            if (isDark) OverlayThemeTokens.AccentNeonBlue
                             else MaterialTheme.colorScheme.primary
-                        val lastSyncOnAccent =
-                            if (isDark) OverlayThemeTokens.OnSyncBlueButton
-                            else MaterialTheme.colorScheme.onPrimary
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .wrapContentHeight()
-                                .clip(RoundedCornerShape(OverlayThemeTokens.MainTileCornerRadius))
-                                .background(if (isDark) darkTileBase else cardBg)
-                                .border(
-                                    1.5.dp,
-                                    lastSyncAccent,
-                                    RoundedCornerShape(OverlayThemeTokens.MainTileCornerRadius)
-                                )
-                                .padding(horizontal = 12.dp, vertical = 10.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    text = strings.nottifLastSyncTitle.uppercase(Locale.getDefault()),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = muted,
-                                    letterSpacing = 0.9.sp,
-                                    textAlign = TextAlign.Start,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Text(
-                                    text = badgeText,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = lastSyncAccent,
-                                    letterSpacing = 0.8.sp,
-                                    textAlign = TextAlign.End
-                                )
-                            }
-                            Spacer(Modifier.height(8.dp))
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .clickable(
-                                        enabled = !syncingCloud,
-                                        interactionSource = remember { MutableInteractionSource() },
-                                        indication = null
-                                    ) {
-                                        performHaptic(view, "light")
-                                        scope.launch { syncManager.syncNow() }
-                                    },
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(nottifOverlayIconBoxBg(isDark)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.CloudSync,
-                                        contentDescription = null,
-                                        tint = lastSyncAccent,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                }
-                                Spacer(Modifier.width(10.dp))
-                                Column(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .wrapContentHeight()
-                                ) {
-                                    Text(
-                                        text = timeStr,
-                                        style = MaterialTheme.typography.titleLarge,
-                                        fontWeight = FontWeight.Bold,
-                                        color = onCard,
-                                        fontSize = 22.sp,
-                                        lineHeight = 24.sp,
-                                        textAlign = TextAlign.Start,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                    Spacer(Modifier.height(2.dp))
-                                    Text(
-                                        text = detailLine,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = muted,
-                                        lineHeight = 16.sp,
-                                        textAlign = TextAlign.Start,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                }
-                            }
-                            Spacer(Modifier.height(10.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                val pillBg = lastSyncAccent.copy(alpha = 0.28f)
-                                val pillContent = lastSyncOnAccent
-                                Row(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .horizontalScroll(rememberScrollState()),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    SyncMetricPill(
-                                        icon = Icons.Filled.CheckCircle,
-                                        // totalProcessed вместо syncedCount — пользователь видит общее число учтённых операций
-                                        text = "${strings.nottifSyncChipSynced}: ${syncReport.totalProcessed}",
-                                        containerColor = pillBg,
-                                        contentColor = pillContent,
-                                        contentDescription = "${strings.nottifSyncChipSynced}: ${syncReport.totalProcessed}"
-                                    )
-                                    SyncMetricPill(
-                                        icon = Icons.Filled.Error,
-                                        text = "${strings.nottifSyncChipErrors}: ${syncReport.errorCount}",
-                                        containerColor = pillBg,
-                                        contentColor = pillContent,
-                                        contentDescription = "${strings.nottifSyncChipErrors}: ${syncReport.errorCount}"
-                                    )
-                                }
-                                IconButton(
-                                    onClick = {
-                                        performHaptic(view, "light")
-                                        onCheckUpdates()
-                                    },
-                                    modifier = Modifier
-                                        .size(44.dp)
-                                        .clip(CircleShape)
-                                        .background(nottifOverlayCircleControlBg(isDark))
-                                ) {
-                                    val infiniteTransition = rememberInfiniteTransition(label = "chk")
-                                    val angle by infiniteTransition.animateFloat(
-                                        initialValue = 0f,
-                                        targetValue = 360f,
-                                        animationSpec = infiniteRepeatable(
-                                            animation = tween(900, easing = LinearEasing),
-                                            repeatMode = RepeatMode.Restart
-                                        ),
-                                        label = "spinChk"
-                                    )
-                                    Icon(
-                                        imageVector = Icons.Default.Refresh,
-                                        contentDescription = strings.nottifCheckUpdatesCd,
-                                        tint = lastSyncAccent,
-                                        modifier = Modifier
-                                            .size(22.dp)
-                                            .graphicsLayer {
-                                                if (isCheckingUpdates) rotationZ = angle
-                                            }
-                                    )
-                                }
-                            }
-                        }
 
-                        Spacer(Modifier.height(12.dp))
-
-                        // —— Status | Account (одинаковая высота) —— //
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(IntrinsicSize.Max),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalAlignment = Alignment.Top
-                        ) {
-                            NottifMiniCard(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight(),
-                                isDark = isDark,
-                                cardBg = cardBg,
-                                onCard = onCard,
-                                muted = muted,
-                                accentColor = OverlayThemeTokens.IconSignalGreen,
-                                icon = {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(36.dp)
-                                            .clip(RoundedCornerShape(10.dp))
-                                            .background(nottifOverlayIconBoxBg(isDark)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Outlined.SignalCellularAlt,
-                                            contentDescription = null,
-                                            tint = OverlayThemeTokens.IconSignalGreen,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
-                                },
-                                label = strings.nottifStatusTitle.uppercase(Locale.getDefault()),
-                                value = if (hasToken && syncState != SyncState.AUTH_REQUIRED) {
-                                    strings.nottifStatusConnected
+                        NottifSyncServiceGrid(
+                            isDark = isDark,
+                            strings = strings,
+                            cardBg = cardBg,
+                            darkTileBase = darkTileBase,
+                            onCard = onCard,
+                            muted = muted,
+                            badgeText = badgeText,
+                            timeStr = timeStr,
+                            detailLine = detailLine,
+                            syncingCloud = syncingCloud,
+                            isCheckingUpdates = isCheckingUpdates,
+                            hasToken = hasToken,
+                            syncState = syncState,
+                            accent = lastSyncAccent,
+                            onSyncNow = {
+                                performHaptic(view, "light")
+                                scope.launch { syncManager.syncNow() }
+                            },
+                            onCheckUpdates = {
+                                performHaptic(view, "light")
+                                onCheckUpdates()
+                            },
+                            onLogoutClick = {
+                                performHaptic(view, "light")
+                                showLogoutDialog = true
+                            },
+                            onServiceClick = { service ->
+                                if (listSyncUi.isRunning) return@NottifSyncServiceGrid
+                                performHaptic(view, "light")
+                                if (service == ExternalListService.MYANIMELIST) {
+                                    showMalPlaceholderDialog = true
                                 } else {
-                                    strings.nottifStatusDisconnected
-                                },
-                                hint = "",
-                                hintDot = false
-                            )
-                            NottifMiniCard(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight(),
-                                isDark = isDark,
-                                cardBg = cardBg,
-                                onCard = onCard,
-                                muted = muted,
-                                accentColor = OverlayThemeTokens.IconAccountYellow,
-                                icon = {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(36.dp)
-                                            .clip(RoundedCornerShape(10.dp))
-                                            .background(nottifOverlayIconBoxBg(isDark)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Person,
-                                            contentDescription = null,
-                                            tint = OverlayThemeTokens.IconAccountYellow,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
-                                },
-                                label = strings.nottifSectionAccount.uppercase(Locale.getDefault()),
-                                value = strings.nottifAccountTitle,
-                                hint = if (hasToken) strings.nottifAccountSignedIn else strings.nottifAccountGuest,
-                                footerAction = {
-                                    IconButton(
-                                        onClick = {
-                                            performHaptic(view, "light")
-                                            showLogoutDialog = true
-                                        },
-                                        modifier = Modifier.size(44.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.AutoMirrored.Rounded.ExitToApp,
-                                            contentDescription = strings.nottifLogoutConfirmTitle,
-                                            tint = OverlayThemeTokens.LogoutIconTint,
-                                            modifier = Modifier.size(26.dp)
-                                        )
-                                    }
+                                    serviceActionDialogTarget = service
                                 }
-                            )
-                        }
+                            }
+                        )
 
                         // —— Episode updates —— //
                         if (updates.isNotEmpty()) {
@@ -560,10 +353,9 @@ fun NotificationSyncOverlay(
                             HorizontalDivider(color = rim, thickness = 1.dp)
                             Spacer(Modifier.height(14.dp))
                             Text(
-                                text = strings.updatesTitle,
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = onCard
+                                text = strings.updatesTitle.uppercase(Locale.getDefault()),
+                                style = OverlayThemeTokens.SectionLabel,
+                                color = muted
                             )
                             Spacer(Modifier.height(10.dp))
                             updates.forEach { update ->
@@ -574,7 +366,7 @@ fun NotificationSyncOverlay(
                                     cardBg = cardBg,
                                     darkTileBase = darkTileBase,
                                     onCard = onCard,
-                                    accentColor = OverlayThemeTokens.IconSyncBlue,
+                                    accentColor = OverlayThemeTokens.AccentNeonBlue,
                                     onAccentColor = OverlayThemeTokens.OnSyncBlueButton,
                                     title = update.title,
                                     subtitle = epLine,
@@ -591,18 +383,42 @@ fun NotificationSyncOverlay(
                             }
                         }
                     }
+                    }
                 }
             }
+        }
+
+        if (showMalPlaceholderDialog) {
+            AlertDialog(
+                onDismissRequest = { showMalPlaceholderDialog = false },
+                containerColor = dialogSurface,
+                titleContentColor = onCard,
+                textContentColor = muted,
+                title = { Text(strings.nottifServiceMal, color = onCard) },
+                text = {
+                    Text(
+                        text = strings.malSyncPlaceholderBody,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = muted
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = { showMalPlaceholderDialog = false },
+                        colors = serviceActionButtonColors
+                    ) { Text(strings.statsOk) }
+                }
+            )
         }
 
         if (showLogoutDialog) {
             AlertDialog(
                 onDismissRequest = { showLogoutDialog = false },
-                containerColor = panelBg,
+                containerColor = dialogSurface,
                 titleContentColor = onCard,
                 textContentColor = muted,
-                title = { Text(strings.nottifLogoutConfirmTitle) },
-                text = { Text(strings.nottifLogoutConfirmBody) },
+                title = { Text(strings.nottifLogoutConfirmTitle, color = onCard) },
+                text = { Text(strings.nottifLogoutConfirmBody, color = muted) },
                 confirmButton = {
                     Button(
                         onClick = {
@@ -613,124 +429,68 @@ fun NotificationSyncOverlay(
                     ) { Text(strings.deleteConfirm) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showLogoutDialog = false }) { Text(strings.cancel) }
+                    TextButton(
+                        onClick = { showLogoutDialog = false },
+                        colors = serviceActionButtonColors
+                    ) { Text(strings.cancel) }
                 }
             )
         }
-    }
-}
 
-@Composable
-private fun NottifMiniCard(
-    modifier: Modifier = Modifier,
-    isDark: Boolean,
-    cardBg: Color,
-    onCard: Color,
-    muted: Color,
-    accentColor: Color,
-    icon: @Composable () -> Unit,
-    label: String,
-    value: String,
-    hint: String,
-    hintDot: Boolean = false,
-    footerAction: (@Composable () -> Unit)? = null
-) {
-    Column(
-        modifier = modifier
-            .fillMaxHeight()
-            .clip(RoundedCornerShape(OverlayThemeTokens.TileCornerRadius))
-            .background(
-                if (isDark) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                else cardBg
-            )
-            .border(
-                1.5.dp,
-                accentColor,
-                RoundedCornerShape(OverlayThemeTokens.TileCornerRadius)
-            )
-            .padding(horizontal = 12.dp, vertical = 10.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                icon()
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = muted,
-                    letterSpacing = 0.8.sp
-                )
+        serviceActionDialogTarget?.let { svc ->
+            val serviceTitle = when (svc) {
+                ExternalListService.SHIKIMORI -> strings.nottifServiceShikimori
+                ExternalListService.MYANIMELIST -> strings.nottifServiceMal
+                ExternalListService.ANILIST -> strings.nottifServiceAnilist
             }
-        }
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = value,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold,
-            color = onCard,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            lineHeight = 18.sp
-        )
-        when {
-            hint.isNotEmpty() && footerAction != null -> {
-                Spacer(Modifier.height(4.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (hintDot) {
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .clip(CircleShape)
-                                .background(accentColor)
+            AlertDialog(
+                onDismissRequest = { serviceActionDialogTarget = null },
+                containerColor = dialogSurface,
+                titleContentColor = onCard,
+                textContentColor = muted,
+                title = { Text(serviceTitle, color = onCard) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = strings.nottifServiceActionDialogMessage,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = muted
                         )
-                        Spacer(Modifier.width(6.dp))
+                        Spacer(Modifier.height(4.dp))
+                        TextButton(
+                            enabled = !listSyncUi.isRunning,
+                            colors = serviceActionButtonColors,
+                            onClick = {
+                            hostActivity?.let { listSyncCoordinator.startListServiceActionOrAuthorize(it, svc, ListServiceAction.PULL) }
+                            serviceActionDialogTarget = null
+                        }
+                        ) { Text(strings.nottifServiceActionPull) }
+                        TextButton(
+                            enabled = !listSyncUi.isRunning,
+                            colors = serviceActionButtonColors,
+                            onClick = {
+                            hostActivity?.let { listSyncCoordinator.startListServiceActionOrAuthorize(it, svc, ListServiceAction.PUSH) }
+                            serviceActionDialogTarget = null
+                        }
+                        ) { Text(strings.nottifServiceActionPush) }
+                        TextButton(
+                            enabled = !listSyncUi.isRunning,
+                            colors = serviceActionButtonColors,
+                            onClick = {
+                            hostActivity?.let { listSyncCoordinator.startListServiceActionOrAuthorize(it, svc, ListServiceAction.SYNC) }
+                            serviceActionDialogTarget = null
+                        }
+                        ) { Text(strings.nottifServiceActionSync) }
                     }
-                    Text(
-                        text = hint,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = muted,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    footerAction()
+                },
+                confirmButton = {},
+                dismissButton = {
+                    TextButton(
+                        onClick = { serviceActionDialogTarget = null },
+                        colors = serviceActionButtonColors
+                    ) { Text(strings.cancel) }
                 }
-            }
-            hint.isNotEmpty() -> {
-                Spacer(Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (hintDot) {
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .clip(CircleShape)
-                                .background(accentColor)
-                        )
-                        Spacer(Modifier.width(6.dp))
-                    }
-                    Text(
-                        text = hint,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = muted
-                    )
-                }
-            }
-            footerAction != null -> {
-                Spacer(Modifier.height(6.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    footerAction()
-                }
-            }
+            )
         }
     }
 }
@@ -748,16 +508,26 @@ private fun NottifUpdateRow(
     onAccept: () -> Unit,
     onDismissRow: () -> Unit
 ) {
+    val tileShape = RoundedCornerShape(OverlayThemeTokens.TileCornerRadius)
+    val tileBg = if (isDark) darkTileBase else cardBg
+    val accentRim = accentColor.copy(alpha = if (isDark) 0.4f else 0.55f)
+    val accentGlow = accentColor.copy(alpha = if (isDark) 0.16f else 0.14f)
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(OverlayThemeTokens.TileCornerRadius))
-            .background(if (isDark) darkTileBase else cardBg)
-            .border(
-                1.5.dp,
-                accentColor,
-                RoundedCornerShape(OverlayThemeTokens.TileCornerRadius)
+            .clip(tileShape)
+            .background(tileBg)
+            .background(
+                Brush.radialGradient(
+                    colors = listOf(accentGlow, Color.Transparent),
+                    center = Offset(0f, 0f),
+                    radius = 360f
+                )
             )
+            .glassFill(isDark)
+            .glassEdge(OverlayThemeTokens.TileCornerRadius, isDark)
+            .border(1.dp, accentRim, tileShape)
             .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -816,8 +586,8 @@ private fun NottifUpdateRow(
                 modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFF1E293B))
-                    .border(1.dp, Color(0xFFEF4444).copy(alpha = 0.35f), CircleShape)
+                    .background(if (isDark) Color(0xFF1E293B) else Color.White.copy(alpha = 0.7f))
+                    .border(1.dp, OverlayThemeTokens.AccentNeonRed.copy(alpha = 0.45f), CircleShape)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
@@ -827,10 +597,58 @@ private fun NottifUpdateRow(
                 Icon(
                     imageVector = Icons.Default.Close,
                     contentDescription = null,
-                    tint = Color(0xFFEF4444),
+                    tint = OverlayThemeTokens.AccentNeonRed,
                     modifier = Modifier.size(20.dp)
                 )
             }
+        }
+    }
+}
+
+/**
+ * Заголовок панели уведомлений: крупный bold-title + приглушённый подзаголовок + close button.
+ * Декомпозирован в Спринте 3, чтобы не раздувать тело [NotificationSyncOverlay].
+ */
+@Composable
+private fun NottifPanelHeader(
+    title: String,
+    subtitle: String,
+    closeCd: String,
+    onCard: Color,
+    muted: Color,
+    onClose: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Top
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = onCard,
+                fontSize = 22.sp,
+                letterSpacing = (-0.2).sp
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = muted
+            )
+        }
+        IconButton(
+            onClick = onClose,
+            modifier = Modifier.size(32.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Close,
+                contentDescription = closeCd,
+                tint = muted,
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 }

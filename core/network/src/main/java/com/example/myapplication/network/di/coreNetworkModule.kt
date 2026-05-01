@@ -24,11 +24,14 @@ import org.koin.dsl.module
 private val rateHeavy = named("api_rate_heavy")
 private val rateSearch = named("api_rate_search")
 private val rateBurst = named("api_rate_burst")
+private val rateAnilistGraphql = named("anilist_graphql")
 
 val coreNetworkModule = module {
     single(rateHeavy) { TokenBucketRateLimiter(maxTokens = 1.0, refillTokensPerSecond = 1.0 / 1.2) }
     single(rateSearch) { TokenBucketRateLimiter(maxTokens = 1.0, refillTokensPerSecond = 1.0 / 0.4) }
     single(rateBurst) { TokenBucketRateLimiter(maxTokens = 1.0, refillTokensPerSecond = 1.0 / 0.3) }
+    /** AniList GraphQL: ~90 запросов в минуту (усреднённо). */
+    single(rateAnilistGraphql) { TokenBucketRateLimiter(maxTokens = 90.0, refillTokensPerSecond = 90.0 / 60.0) }
 
     single {
         HttpClient(OkHttp) {
@@ -49,7 +52,10 @@ val coreNetworkModule = module {
                 }
             }
             install(HttpTimeout) {
-                requestTimeoutMillis = 120_000
+                // Gemini с большим промптом (блэклист) + structured output — ответ часто >10s; иначе OkHttp: Socket timeout.
+                requestTimeoutMillis = 300_000
+                connectTimeoutMillis = 30_000
+                socketTimeoutMillis = 300_000
             }
         }
     }
@@ -62,7 +68,7 @@ val coreNetworkModule = module {
     }
     single { ShikimoriRemoteDataSource(get<HttpClient>(), get(rateBurst)) }
     single { TraceMoeRemoteDataSource(get<HttpClient>()) }
-    single { AniListRemoteDataSource(get<ApolloClient>()) }
+    single { AniListRemoteDataSource(get<ApolloClient>(), get(rateAnilistGraphql)) }
     single<ApiService> {
         VetroApiService(
             httpClient = get<HttpClient>(),

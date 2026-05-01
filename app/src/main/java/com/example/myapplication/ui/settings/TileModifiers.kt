@@ -19,6 +19,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.example.myapplication.isAppInDarkTheme
 import com.example.myapplication.ui.shared.theme.OverlayThemeTokens
+import com.example.myapplication.ui.shared.theme.glassEdge
+import com.example.myapplication.ui.shared.theme.glassFill
 
 fun Modifier.tileGlow(accentColor: Color, glowAlpha: Float = 0.15f): Modifier {
     return this.drawWithCache {
@@ -66,14 +68,30 @@ fun BaseTile(
     val tileBg =
         if (isDark) OverlayThemeTokens.TileBackgroundDark
         else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-    val shape = RoundedCornerShape(24.dp)
+    val cornerRadius = 24.dp
+    val shape = RoundedCornerShape(cornerRadius)
+    val accentRim = tile.accentColor.copy(alpha = if (isDark) 0.45f else 0.6f)
+    val accentGlow = tile.accentColor.copy(
+        alpha = if (isDark) OverlayThemeTokens.TileGlowAlphaDark else OverlayThemeTokens.TileGlowAlphaLight
+    )
+    val glowRadiusFactor = 0.85f
     Box(
         modifier = modifier
             .fillMaxWidth()
             .aspectRatio(if (tile.span == 1) 1f else 2.1f)
             .clip(shape)
             .background(tileBg)
-            .border(1.5.dp, tile.accentColor, shape)
+            .drawWithCache {
+                val brush = Brush.radialGradient(
+                    colors = listOf(accentGlow, Color.Transparent),
+                    center = Offset(size.width, 0f),
+                    radius = size.maxDimension * glowRadiusFactor
+                )
+                onDrawBehind { drawRect(brush = brush) }
+            }
+            .glassFill(isDark)
+            .glassEdge(cornerRadius, isDark)
+            .border(1.dp, accentRim, shape)
             .padding(12.dp),
         content = content
     )
