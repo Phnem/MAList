@@ -1,8 +1,8 @@
-<h1 align="center">Vetra 🎬</h1>
+<h1 align="center">Vetro 🎬</h1>
 
 <p align="center">
   <a href="images/multiBG.png">
-    <img src="images/multiSM.png" width="900" alt="Vetra preview">
+    <img src="images/multiSM.png" width="900" alt="Vetro preview">
   </a>
 </p>
 
@@ -17,17 +17,17 @@
 
 ---
 
-<h2 align="center">✨ What is Vetra?</h2>
+<h2 align="center">✨ What is Vetro?</h2>
 
-Vetra is a powerful yet minimal <b>local-first media manager</b>.
+Vetro is a powerful yet minimal <b>local-first media manager</b>.
 
-Originally built as a personal anime tracker, it evolved into a flexible and scalable system with:
+Originally built as an anime tracker, it has evolved into a flexible and scalable system with:
 
-- The Depth of Light design language (3.2.x family)
+- The Depth of Light design language (3.2.x)
 - strict unidirectional data flow (UDF / MVI)
-- clean architecture (Domain-driven)
+- clean architecture (domain-driven)
 - reactive data layer (Flow + SQLDelight)
-- optional cloud sync
+- optional cloud sync & external integrations
 - advanced search (API + image recognition)
 
 ---
@@ -51,7 +51,7 @@ Originally built as a personal anime tracker, it evolved into a flexible and sca
 - No forced accounts
 - Your data belongs to you
 - Cloud = extension, not requirement
-- Instant UI response (no fake delays)
+- Instant UI response (no artificial delays)
 - Deterministic state & predictable behavior
 
 ---
@@ -64,15 +64,15 @@ Originally built as a personal anime tracker, it evolved into a flexible and sca
 - Rating system
 - Favorites
 - Comments & notes
-- Fully reactive data updates
+- Fully reactive updates
 
 <h3>🔍 Advanced Search</h3>
 
 - Real-time in-memory search
-- API search (movies + anime)
+- API search (anime + movies)
 - Auto-fetch metadata (cover, description, rating)
 
-<h4>🧠 Image-based search (v3.1.x family)</h4>
+<h4>🧠 Image-based search</h4>
 
 - Identify content from a screenshot
 - Anime → trace.moe
@@ -97,21 +97,69 @@ Workflow:
 
 ---
 
-<h2>🎨 Design Language — The Depth of Light</h2>
+<h2>🧪 New in 3.2.x</h2>
 
-Introduced in the 3.2.x family, <b>The Depth of Light</b> defines the visual and interaction system of Vetra:
+<h3>🎨 Visual & UI Evolution</h3>
 
-- light-driven hierarchy instead of flat layers
-- depth through translucency and spatial separation
-- physically consistent motion and feedback
-- refined contrast between foreground and background
-- emphasis on clarity, focus, and visual calm
+- Fully reworked light theme:
+  - improved palette
+  - better contrast
+  - refined accent system
 
-Result:
+- Updated global lighting model:
+  - heavy glow → subtle light accents
+  - more consistent visuals across screens
 
-- deeper visual immersion
-- stronger spatial hierarchy
-- more natural interaction feedback
+- Tile-based genre system:
+  - unified across Add / Edit / Sorting
+
+- Redesigned dialogs in Depth of Light style
+
+<h3>🔐 Security</h3>
+
+- Removed embedded Gemini API key
+- Users provide their own key
+- Prevents abuse and improves transparency
+
+<h3>🔄 Sync & Integrations</h3>
+
+- New Sync system UI
+- Import / Export / Sync workflows
+
+Integrations:
+
+- Shikimori API
+- AniList API
+
+Capabilities:
+
+- Import external libraries → into Vetro
+- Export Vetro collection → external services
+
+⚠️ Experimental feature
+
+<h3>🛠 Data & Tools</h3>
+
+- Database Import added
+- PDF export (shareable readable tables)
+- Developer Settings section
+
+<h3>🎭 Digital Sarcasm System</h3>
+
+- Context-aware sarcasm engine
+
+Features:
+
+- 600+ dynamic phrases in Statistics
+- App reacts to your taste:
+  - judges it
+  - or supports your optimism
+
+<h3>🎬 UX & Interaction</h3>
+
+- Visual Search gestures added
+- Improved navigation flow
+- Better animation consistency
 
 ---
 
@@ -124,6 +172,7 @@ Result:
   - SaveAnimeUseCase
   - UpdateCommentUseCase
   - GetAnimeForEditUseCase
+
 - DTO layer (SaveAnimeParams)
 - No Android dependencies in ViewModels
 
@@ -137,7 +186,7 @@ Result:
 <h3>Data Layer</h3>
 
 - SQLDelight + Flow
-- Fully reactive DB
+- Fully reactive database
 - Single source of truth
 - In-memory filtering & sorting
 
@@ -151,21 +200,18 @@ Result:
 
 - Ktor (CIO)
 - Apollo GraphQL
-- Improved API pipeline (3.1.x family)
 - Structured error handling
 
 ---
 
 <h2>⚡ Performance</h2>
 
-Key improvements since 3.0:
-
 - Removed Paging3 → no pagination lag
 - Reduced recompositions
 - Optimized LazyColumn behavior
-- GPU optimization
+- GPU improvements
 - Image loading optimization (Coil 3.x)
-- XML removal → no runtime parsing cost
+- XML removal → no runtime parsing
 
 Result:
 
@@ -180,10 +226,10 @@ Result:
 Dropbox-based sync:
 
 - File hashing (DropboxContentHasher)
-- No delta sync complexity
-- Safe DB restore (WAL fix)
+- Simple and reliable restore
+- No complex delta sync
 
-Architecture remains local-first.
+Local-first architecture remains unchanged.
 
 ---
 
@@ -192,7 +238,7 @@ Architecture remains local-first.
 - 100% local by default
 - No analytics
 - No tracking
-- No hidden network calls
+- No hidden network activity
 
 ---
 
