@@ -1,5 +1,8 @@
 package com.example.myapplication.ui.addedit
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.net.Uri
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
@@ -34,9 +37,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -348,7 +349,6 @@ fun PillTextFieldWithCopy(
     singleLine: Boolean = false,
     maxLines: Int = 4
 ) {
-    val clipboardManager = LocalClipboardManager.current
     val ctx = LocalContext.current
 
     PillTextField(
@@ -367,7 +367,9 @@ fun PillTextFieldWithCopy(
                     modifier = Modifier
                         .size(18.dp)
                         .clickable {
-                            clipboardManager.setText(AnnotatedString(value))
+                            val cm =
+                                ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            cm.setPrimaryClip(ClipData.newPlainText("", value))
                             @Suppress("DEPRECATION")
                             android.widget.Toast
                                 .makeText(ctx, "Copied!", android.widget.Toast.LENGTH_SHORT)

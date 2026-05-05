@@ -1,5 +1,8 @@
 package com.example.myapplication.ui.shared.components
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -24,9 +27,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -94,12 +95,11 @@ fun AnimatedOneUiTextField(
 // AnimatedCopyButton
 // ==========================================
 @Composable
-@Suppress("DEPRECATION")
 fun AnimatedCopyButton(textToCopy: String) {
-    val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
     IconButton(onClick = {
-        clipboardManager.setText(AnnotatedString(textToCopy))
+        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        cm.setPrimaryClip(ClipData.newPlainText("", textToCopy))
         Toast.makeText(context, "Copied!", Toast.LENGTH_SHORT).show()
     }) {
         Icon(
