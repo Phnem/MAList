@@ -30,9 +30,8 @@ suspend fun compressVisualSearchImage(context: Context, uri: Uri): ByteArray =
         val decoded = resolver.openInputStream(uri)?.use { stream ->
             val opts = BitmapFactory.Options().apply { inSampleSize = sample }
             BitmapFactory.decodeStream(stream, null, opts)
+                ?: throw IllegalArgumentException("Failed to decode image")
         } ?: throw IllegalArgumentException("Cannot open image stream")
-
-        if (decoded == null) throw IllegalArgumentException("Failed to decode image")
 
         var bitmap: Bitmap = decoded
         try {

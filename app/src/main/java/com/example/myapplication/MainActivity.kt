@@ -4,6 +4,7 @@ import android.content.Intent
 import android.graphics.Color as AndroidGraphicsColor
 import android.os.Build
 import android.os.Bundle
+import android.view.Window
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -48,8 +49,8 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             window.isNavigationBarContrastEnforced = false
         }
-        if (Build.VERSION.SDK_INT >= 35) {
-            window.isStatusBarContrastEnforced = false
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+            window.disableStatusBarContrastEnforced()
         }
         handleExternalListOAuthIntent(intent)
         checkPerms()
@@ -108,4 +109,9 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         dropboxSyncManager.onOAuthResult()
     }
+}
+
+@Suppress("DEPRECATION")
+private fun Window.disableStatusBarContrastEnforced() {
+    isStatusBarContrastEnforced = false
 }
