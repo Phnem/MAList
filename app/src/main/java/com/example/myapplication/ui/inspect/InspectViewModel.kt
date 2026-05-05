@@ -20,11 +20,11 @@ import com.example.myapplication.network.ApiSearchResult
 import com.example.myapplication.network.AppContentType
 import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.ui.home.ApiSearchUiModel
+import com.example.myapplication.utils.compressVisualSearchImage
 import com.example.myapplication.utils.getStrings
 import io.ktor.http.ContentType
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -34,7 +34,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 private val KEY_LANG = stringPreferencesKey("lang")
 private val KEY_CONTENT_TYPE = stringPreferencesKey("contentType")
@@ -246,10 +245,10 @@ class InspectViewModel(
             _rawResults.value = emptyList()
             _loadingMessage.value = str.inspectLoadingAnalyzing
             val outcome = runCatching {
-                val bytes = withContext(Dispatchers.IO) {
-                    context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                } ?: error(str.inspectReadImageFailed)
-                val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
+                val bytes = runCatching { compressVisualSearchImage(context, uri) }.getOrElse {
+                    error(str.inspectReadImageFailed)
+                }
+                val mime = "image/jpeg"
                 val traceCt = mimeToKtorContentType(mime)
                 inspectImageUseCase(
                     imageBytes = bytes,

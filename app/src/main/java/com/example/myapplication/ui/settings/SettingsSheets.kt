@@ -22,6 +22,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
@@ -33,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.myapplication.DropboxSyncManager
+import com.example.myapplication.isAppInDarkTheme
 import com.phnem.vetro.R
 import com.example.myapplication.SyncState
 import com.example.myapplication.network.AppLanguage
@@ -63,10 +65,16 @@ fun CloudSettingsSheet(
     }
     val syncState by dropboxSyncManager.syncState.collectAsStateWithLifecycle()
 
+    val sheetSurface = if (isAppInDarkTheme()) {
+        Color(0xFF0D1117).copy(alpha = 0.8f)
+    } else {
+        MaterialTheme.colorScheme.surface.copy(alpha = 0.75f)
+    }
+
     Card(
         modifier = sharedModifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f))
+        colors = CardDefaults.cardColors(containerColor = sheetSurface)
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
             Row(
@@ -97,6 +105,7 @@ fun CloudSettingsSheet(
                     CloudSettingsSection(
                         strings = CloudStrings(
                             title = if (uiState.language == AppLanguage.RU) "Синхронизация с облаком" else "Cloud Sync",
+                            subtitle = strings.cloudSettingsSubtitle,
                             syncNow = strings.syncLabel,
                             lastSync = strings.lastSync,
                             neverSynced = strings.never,

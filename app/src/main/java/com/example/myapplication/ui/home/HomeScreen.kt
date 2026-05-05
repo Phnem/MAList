@@ -207,7 +207,13 @@ fun HomeScreen(
         }
     }
 
-    Scaffold(containerColor = Color.Transparent, bottomBar = {}, floatingActionButton = {}) { paddingValues ->
+    Scaffold(
+        containerColor = Color.Transparent,
+        bottomBar = {},
+        floatingActionButton = {},
+        // Иначе system bar insets добавляются в paddingValues — фон не заливает полосы сверху/снизу
+        contentWindowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp)
+    ) { paddingValues ->
         Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
             Box(modifier = Modifier.fillMaxSize().background(bgColor))
 

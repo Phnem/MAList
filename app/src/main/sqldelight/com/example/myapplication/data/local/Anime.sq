@@ -29,6 +29,29 @@ CREATE TABLE anime_tags (
 getAllAnime:
 SELECT * FROM anime ORDER BY orderIndex ASC;
 
+-- One row per anime; tags aggregated for observeAllAnime() (avoids N+1 getAnimeTags calls).
+getAllAnimeWithTagsConcat:
+SELECT
+    anime.id,
+    anime.title,
+    anime.imagePath,
+    anime.episodes,
+    anime.rating,
+    anime.status,
+    anime.isFavorite,
+    anime.updatedAt,
+    anime.orderIndex,
+    anime.dateAdded,
+    anime.categoryType,
+    anime.sync_status,
+    anime.comment,
+    anime.isAiRecommendation,
+    GROUP_CONCAT(anime_tags.tag, CHAR(31)) AS tagsConcat
+FROM anime
+LEFT JOIN anime_tags ON anime.id = anime_tags.anime_id
+GROUP BY anime.id
+ORDER BY anime.orderIndex ASC;
+
 getAnimeCount:
 SELECT COUNT(*) FROM anime;
 

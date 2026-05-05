@@ -6,6 +6,7 @@ import com.example.myapplication.data.local.AnimeDatabase
 import com.example.myapplication.data.models.Anime
 import com.example.myapplication.data.models.AnimeUpdate
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -26,21 +27,22 @@ class AnimeLocalDataSource(
      */
     fun observeAllAnime(): Flow<List<Anime>> = factory.dbConnectionTrigger.flatMapLatest {
         db().animeQueries
-            .getAllAnime()
+            .getAllAnimeWithTagsConcat()
             .asFlow()
             .mapToList(Dispatchers.IO)
             .map { rows ->
                 rows.map { row ->
-                    mapRowToAnime(
+                    Anime(
                         id = row.id,
                         title = row.title,
-                        imagePath = row.imagePath,
-                        episodes = row.episodes,
-                        rating = row.rating,
-                        orderIndex = row.orderIndex,
+                        episodes = row.episodes.toInt(),
+                        rating = row.rating.toInt(),
+                        imageFileName = row.imagePath,
+                        orderIndex = row.orderIndex.toInt(),
                         dateAdded = row.dateAdded,
-                        isFavorite = row.isFavorite,
-                        categoryType = row.categoryType,
+                        isFavorite = row.isFavorite == 1L,
+                        tags = parseTagsConcat(row.tagsConcat),
+                        categoryType = row.categoryType ?: "",
                         comment = row.comment
                     )
                 }
@@ -273,5 +275,18 @@ class AnimeLocalDataSource(
 
     private fun getTagsForAnime(animeId: String): ImmutableList<String> {
         return db().animeQueries.getAnimeTags(animeId).executeAsList().toImmutableList()
+    }
+
+    private fun parseTagsConcat(tagsConcat: String?): ImmutableList<String> {
+        val raw = tagsConcat?.trim().orEmpty()
+        if (raw.isEmpty()) return persistentListOf()
+        return raw.split(TAG_CONCAT_DELIMITER)
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .toImmutableList()
+    }
+
+    private companion object {
+        private const val TAG_CONCAT_DELIMITER = '\u001F'
     }
 }

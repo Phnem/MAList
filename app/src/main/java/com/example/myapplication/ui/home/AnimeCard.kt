@@ -51,10 +51,6 @@ import com.example.myapplication.ui.shared.fluidClickable
 import com.example.myapplication.ui.shared.theme.SnProFamily
 import com.example.myapplication.ui.shared.theme.LightBorder
 import com.example.myapplication.ui.shared.theme.getRatingColor
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeSource
-import dev.chrisbanes.haze.materials.CupertinoMaterials
-import com.example.myapplication.safeHaze
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
 
@@ -78,7 +74,6 @@ fun SharedTransitionScope.OneUiAnimeCard(
     onDetailsClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val localHazeState = remember { HazeState() }
     val isDark = isAppInDarkTheme()
     val borderStroke = if (isDark) Color.White.copy(alpha = 0.15f) else LightBorder
     val cardBg = if (isDark) Color(0xFF1C1F28) else MaterialTheme.colorScheme.surface
@@ -124,7 +119,6 @@ fun SharedTransitionScope.OneUiAnimeCard(
                     )
                     .skipToLookaheadSize()
                     .clip(RoundedCornerShape(16.dp))
-                    .hazeSource(state = localHazeState)
                     .background(if (isDark) Color(0xFF2C2C34) else Color(0xFFE8E8ED)),
                 contentAlignment = Alignment.Center
             ) {
@@ -181,13 +175,9 @@ fun SharedTransitionScope.OneUiAnimeCard(
                         Box(
                             modifier = Modifier
                                 .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.secondaryContainer)
-                                .then(
-                                    if (isDark) Modifier.safeHaze(
-                                        state = localHazeState,
-                                        style = CupertinoMaterials.thin()
-                                    )
-                                    else Modifier
+                                .background(
+                                    if (isDark) Color(0xFF0D1117)
+                                    else Color(0xFFF4EBDD).copy(alpha = 0.5f)
                                 )
                         ) {
                             Text(
