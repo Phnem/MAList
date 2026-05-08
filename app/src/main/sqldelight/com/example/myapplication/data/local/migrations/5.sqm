@@ -1,0 +1,6 @@
+ALTER TABLE anime ADD COLUMN anilist_id INTEGER;
+ALTER TABLE anime ADD COLUMN mal_id INTEGER;
+ALTER TABLE anime ADD COLUMN shikimori_id INTEGER;
+ALTER TABLE anime ADD COLUMN anilist_not_found_at INTEGER;
+ALTER TABLE anime ADD COLUMN mal_not_found_at INTEGER;
+ALTER TABLE anime ADD COLUMN shikimori_not_found_at INTEGER;
