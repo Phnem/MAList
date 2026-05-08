@@ -75,6 +75,8 @@ data class UiStrings(
     val contactTitle: String,
     val contactSubtitle: String,
     val contactSupportSubtitle: String,
+    val donationCardTitle: String,
+    val donationCardSubtitle: String,
     val nottifPanelTitle: String,
     val nottifPanelSubtitle: String,
     val nottifLastSyncTitle: String,

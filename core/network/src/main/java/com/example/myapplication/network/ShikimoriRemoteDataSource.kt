@@ -51,6 +51,12 @@ class ShikimoriRemoteDataSource(
         if (episodes > 0) episodes to "Shikimori" else null
     }
 
+    suspend fun getAnimeById(id: Int, language: AppLanguage = AppLanguage.EN): Result<ApiSearchResult?> = runCatching {
+        burstRate.acquire()
+        val full = client.get("https://shikimori.one/api/animes/$id").body<ShikimoriSearchItemDto>()
+        full.toApiSearchResult(language)
+    }
+
     private fun ShikimoriSearchItemDto.toApiSearchResult(language: AppLanguage): ApiSearchResult {
         val desc = description
             ?.replace(Regex("\\[.*?\\]"), "")

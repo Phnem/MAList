@@ -14,6 +14,7 @@ import com.example.myapplication.data.repository.ImageStorageRepository
 import com.example.myapplication.domain.normalizeForSearch
 import com.example.myapplication.domain.search.AddFromApiUseCase
 import com.example.myapplication.domain.stats.ResolveStatsFooterPhraseUseCase
+import com.example.myapplication.domain.updates.BatchEpisodeCheckUseCase
 import com.example.myapplication.network.ApiSearchResult
 import com.example.myapplication.network.AppContentType
 import com.example.myapplication.network.AppLanguage
@@ -31,6 +32,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
@@ -54,7 +56,8 @@ class HomeViewModel(
     private val imageStorage: ImageStorageRepository,
     private val settingsDataStore: DataStore<Preferences>,
     private val addFromApiUseCase: AddFromApiUseCase,
-    private val statsFooterPhraseUseCase: ResolveStatsFooterPhraseUseCase
+    private val statsFooterPhraseUseCase: ResolveStatsFooterPhraseUseCase,
+    private val batchEpisodeCheckUseCase: BatchEpisodeCheckUseCase
 ) : ViewModel() {
 
     private var apiSearchJob: Job? = null
@@ -284,19 +287,14 @@ class HomeViewModel(
         _uiState.update { it.copy(isCheckingUpdates = true) }
         viewModelScope.launch {
             runCatching {
-                val appContentType = AppContentType.ANIME
-                val newUpdates = mutableListOf<AnimeUpdate>()
-                localDataSource.getAllAnimeList().forEach { anime ->
-                    val result = repository.findTotalEpisodes(anime.title, anime.categoryType, appContentType).getOrNull()
-                    if (result != null) {
-                        val (remoteEps, source) = result
-                        val isIgnored = ignoredUpdatesMap[anime.id] == remoteEps
-                        if (remoteEps > anime.episodes && !isIgnored) {
-                            val newUpdate = AnimeUpdate(anime.id, anime.title, anime.episodes, remoteEps, source)
-                            if (!newUpdates.contains(newUpdate)) newUpdates.add(newUpdate)
-                        }
-                    }
-                }
+                val language = readLanguageFromSettings()
+                val rawUpdates = batchEpisodeCheckUseCase(
+                    animeList = localDataSource.getAllAnimeList(),
+                    language = language
+                )
+                val newUpdates = rawUpdates.filter { update ->
+                    ignoredUpdatesMap[update.animeId] != update.newEpisodes
+                }.distinctBy { it.animeId to it.newEpisodes }
                 _uiState.update { it.copy(updates = newUpdates.toImmutableList(), isCheckingUpdates = false) }
                 localDataSource.setUpdates(newUpdates)
                 if (newUpdates.isNotEmpty()) {
@@ -307,6 +305,12 @@ class HomeViewModel(
                 _uiState.update { it.copy(isCheckingUpdates = false) }
             }
         }
+    }
+
+    private suspend fun readLanguageFromSettings(): AppLanguage {
+        val prefs = settingsDataStore.data.first()
+        val raw = prefs[KEY_LANG] ?: "EN"
+        return runCatching { AppLanguage.valueOf(raw) }.getOrElse { AppLanguage.EN }
     }
 
     fun acceptUpdate(update: AnimeUpdate, ctx: Context) {

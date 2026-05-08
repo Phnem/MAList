@@ -75,10 +75,11 @@ fun BaseTile(
         alpha = if (isDark) OverlayThemeTokens.TileGlowAlphaDark else OverlayThemeTokens.TileGlowAlphaLight
     )
     val glowRadiusFactor = 0.85f
+    val ratio = tile.preferredAspectRatio ?: if (tile.span == 1) 1f else 2.1f
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .aspectRatio(if (tile.span == 1) 1f else 2.1f)
+            .aspectRatio(ratio)
             .clip(shape)
             .background(tileBg)
             .drawWithCache {

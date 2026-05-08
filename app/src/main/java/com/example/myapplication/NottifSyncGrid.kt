@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -44,6 +45,7 @@ import com.example.myapplication.sync.ExternalListService
 import com.example.myapplication.ui.shared.theme.OverlayThemeTokens
 import com.example.myapplication.ui.shared.theme.glassEdge
 import com.example.myapplication.ui.shared.theme.glassFill
+import com.phnem.vetro.R
 import java.util.Locale
 
 /**
@@ -213,40 +215,24 @@ private fun NottifSquareCloudSyncTile(
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Top
             ) {
-                Text(
-                    text = "LastSync",
-                    style = OverlayThemeTokens.MetricLabel,
-                    color = muted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Visible
-                )
-                Text(
-                    text = badgeText,
-                    style = OverlayThemeTokens.MetricLabel.copy(fontWeight = FontWeight.SemiBold),
-                    color = accent,
-                    maxLines = 1
-                )
-            }
-            Spacer(Modifier.height(6.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(RoundedCornerShape(OverlayThemeTokens.IconBoxCorner))
-                        .background(nottifOverlayIconBoxBg(isDark)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.CloudSync,
-                        contentDescription = null,
-                        tint = accent,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-                Spacer(Modifier.width(6.dp))
-                Column(Modifier.weight(1f)) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(RoundedCornerShape(OverlayThemeTokens.IconBoxCorner))
+                            .background(nottifOverlayIconBoxBg(isDark)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CloudSync,
+                            contentDescription = null,
+                            tint = accent,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Spacer(Modifier.height(6.dp))
                     Text(
                         text = timeStr,
                         style = MaterialTheme.typography.titleMedium,
@@ -262,9 +248,16 @@ private fun NottifSquareCloudSyncTile(
                         color = muted,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        lineHeight = 14.sp
+                        lineHeight = 14.sp,
+                        modifier = Modifier.padding(top = 4.dp)
                     )
                 }
+                Text(
+                    text = badgeText,
+                    style = OverlayThemeTokens.MetricLabel.copy(fontWeight = FontWeight.SemiBold),
+                    color = accent,
+                    maxLines = 1
+                )
             }
             Spacer(Modifier.weight(1f))
             Row(
@@ -286,8 +279,10 @@ private fun NottifSquareCloudSyncTile(
                     isRotating = isCheckingUpdates,
                     contentDescription = strings.nottifCheckUpdatesCd,
                     onClick = onCheckUpdates,
-                    buttonSize = 40.dp,
-                    iconSize = 20.dp,
+                    buttonSize = 32.dp,
+                    iconSize = 16.dp,
+                    lottieRawRes = R.raw.loading_animation_blue,
+                    lottieVisualScale = 1f,
                     modifier = Modifier.offset(y = -refreshOffsetUp)
                 )
             }

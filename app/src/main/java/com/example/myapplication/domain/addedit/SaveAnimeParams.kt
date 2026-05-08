@@ -15,5 +15,11 @@ data class SaveAnimeParams(
     val isFavorite: Boolean,
     val selectedTags: List<String>,
     val categoryType: String,
-    val comment: String
+    val comment: String,
+    val anilistId: Int? = null,
+    val malId: Int? = null,
+    val shikimoriId: Int? = null,
+    val anilistNotFoundAt: Long? = null,
+    val malNotFoundAt: Long? = null,
+    val shikimoriNotFoundAt: Long? = null
 )

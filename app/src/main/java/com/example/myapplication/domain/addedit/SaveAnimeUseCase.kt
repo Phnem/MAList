@@ -29,7 +29,13 @@ class SaveAnimeUseCase(
             isFavorite = params.isFavorite,
             tags = params.selectedTags.toImmutableList(),
             categoryType = params.categoryType,
-            comment = params.comment
+            comment = params.comment,
+            anilistId = params.anilistId,
+            malId = params.malId,
+            shikimoriId = params.shikimoriId,
+            anilistNotFoundAt = params.anilistNotFoundAt,
+            malNotFoundAt = params.malNotFoundAt,
+            shikimoriNotFoundAt = params.shikimoriNotFoundAt
         )
 
         if (isNew) {

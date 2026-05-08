@@ -120,4 +120,28 @@ class AnimeRepository(
     suspend fun mediaByAnilistId(id: Int): Result<ApiSearchResult?> {
         return apiService.mediaByAnilistId(id)
     }
+
+    suspend fun searchAnimeAniListOnly(
+        query: String,
+        language: AppLanguage,
+        limit: Int = 20
+    ): Result<List<ApiSearchResult>> {
+        return apiService.searchAnimeAniListOnly(query, language, limit)
+    }
+
+    suspend fun shikimoriById(id: Int, language: AppLanguage): Result<ApiSearchResult?> {
+        return apiService.shikimoriById(id, language)
+    }
+
+    suspend fun malById(id: Int, language: AppLanguage): Result<ApiSearchResult?> {
+        return apiService.malById(id, language)
+    }
+
+    suspend fun searchAnimeMalOnly(
+        query: String,
+        language: AppLanguage,
+        limit: Int = 20
+    ): Result<List<ApiSearchResult>> {
+        return apiService.searchAnimeMalOnly(query, language, limit)
+    }
 }

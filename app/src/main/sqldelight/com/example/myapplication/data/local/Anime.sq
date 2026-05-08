@@ -12,7 +12,13 @@ CREATE TABLE anime (
     categoryType TEXT NOT NULL DEFAULT '',
     sync_status TEXT NOT NULL DEFAULT 'SYNCED',
     comment TEXT NOT NULL DEFAULT '',
-    isAiRecommendation INTEGER NOT NULL DEFAULT 0
+    isAiRecommendation INTEGER NOT NULL DEFAULT 0,
+    anilist_id INTEGER,
+    mal_id INTEGER,
+    shikimori_id INTEGER,
+    anilist_not_found_at INTEGER,
+    mal_not_found_at INTEGER,
+    shikimori_not_found_at INTEGER
 );
 
 -- Delta Sync: rows that need to be pushed to cloud
@@ -46,6 +52,12 @@ SELECT
     anime.sync_status,
     anime.comment,
     anime.isAiRecommendation,
+    anime.anilist_id,
+    anime.mal_id,
+    anime.shikimori_id,
+    anime.anilist_not_found_at,
+    anime.mal_not_found_at,
+    anime.shikimori_not_found_at,
     GROUP_CONCAT(anime_tags.tag, CHAR(31)) AS tagsConcat
 FROM anime
 LEFT JOIN anime_tags ON anime.id = anime_tags.anime_id
@@ -66,8 +78,13 @@ getAnimeById:
 SELECT * FROM anime WHERE id = ?;
 
 insertAnime:
-INSERT INTO anime(id, title, imagePath, episodes, rating, status, isFavorite, updatedAt, orderIndex, dateAdded, categoryType, sync_status, comment, isAiRecommendation)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING_CREATE', ?, ?);
+INSERT INTO anime(
+    id, title, imagePath, episodes, rating, status, isFavorite, updatedAt, orderIndex, dateAdded,
+    categoryType, sync_status, comment, isAiRecommendation,
+    anilist_id, mal_id, shikimori_id,
+    anilist_not_found_at, mal_not_found_at, shikimori_not_found_at
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING_CREATE', ?, ?, ?, ?, ?, ?, ?, ?);
 
 updateAnime:
 UPDATE anime
@@ -82,7 +99,43 @@ SET title = ?,
     categoryType = ?,
     sync_status = 'PENDING_UPDATE',
     comment = ?,
-    isAiRecommendation = ?
+    isAiRecommendation = ?,
+    anilist_id = ?,
+    mal_id = ?,
+    shikimori_id = ?,
+    anilist_not_found_at = ?,
+    mal_not_found_at = ?,
+    shikimori_not_found_at = ?
+WHERE id = ?;
+
+setAnilistId:
+UPDATE anime
+SET anilist_id = ?, anilist_not_found_at = NULL, updatedAt = ?, sync_status = 'PENDING_UPDATE'
+WHERE id = ?;
+
+setMalId:
+UPDATE anime
+SET mal_id = ?, mal_not_found_at = NULL, updatedAt = ?, sync_status = 'PENDING_UPDATE'
+WHERE id = ?;
+
+setShikimoriId:
+UPDATE anime
+SET shikimori_id = ?, shikimori_not_found_at = NULL, updatedAt = ?, sync_status = 'PENDING_UPDATE'
+WHERE id = ?;
+
+markAnilistNotFound:
+UPDATE anime
+SET anilist_not_found_at = ?, updatedAt = ?, sync_status = 'PENDING_UPDATE'
+WHERE id = ?;
+
+markMalNotFound:
+UPDATE anime
+SET mal_not_found_at = ?, updatedAt = ?, sync_status = 'PENDING_UPDATE'
+WHERE id = ?;
+
+markShikimoriNotFound:
+UPDATE anime
+SET shikimori_not_found_at = ?, updatedAt = ?, sync_status = 'PENDING_UPDATE'
 WHERE id = ?;
 
 updateAnimeComment:

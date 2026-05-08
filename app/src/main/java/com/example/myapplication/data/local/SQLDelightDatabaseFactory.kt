@@ -39,34 +39,60 @@ class SQLDelightDatabaseFactory(private val context: Context) {
         if (!dbFile.exists()) return
         val targetVersion = AnimeDatabase.Schema.version
         SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READWRITE).use { db ->
-            val colsInitial = db.rawQuery("PRAGMA table_info(anime)", null).use { c ->
+            fun readAnimeColumns(): Set<String> = db.rawQuery("PRAGMA table_info(anime)", null).use { c ->
                 buildSet {
                     while (c.moveToNext()) add(c.getString(1))
                 }
             }
-            // Не полагаться только на .sqm: старая логика могла поднять user_version без ALTER (см. колонка isAiRecommendation).
-            if (!colsInitial.contains("isAiRecommendation")) {
+            fun ensureColumn(name: String, ddl: String) {
                 try {
-                    db.execSQL(
-                        "ALTER TABLE anime ADD COLUMN isAiRecommendation INTEGER NOT NULL DEFAULT 0"
-                    )
+                    db.execSQL(ddl)
                 } catch (e: Exception) {
-                    Log.w("SQLDelight", "alignLegacy: isAiRecommendation", e)
+                    Log.w("SQLDelight", "alignLegacy: column=$name", e)
                 }
+            }
+
+            val colsInitial = readAnimeColumns()
+            // Не полагаться только на .sqm: старая логика могла поднять user_version без ALTER.
+            if (!colsInitial.contains("isAiRecommendation")) {
+                ensureColumn(
+                    "isAiRecommendation",
+                    "ALTER TABLE anime ADD COLUMN isAiRecommendation INTEGER NOT NULL DEFAULT 0"
+                )
+            }
+            if (!colsInitial.contains("anilist_id")) {
+                ensureColumn("anilist_id", "ALTER TABLE anime ADD COLUMN anilist_id INTEGER")
+            }
+            if (!colsInitial.contains("mal_id")) {
+                ensureColumn("mal_id", "ALTER TABLE anime ADD COLUMN mal_id INTEGER")
+            }
+            if (!colsInitial.contains("shikimori_id")) {
+                ensureColumn("shikimori_id", "ALTER TABLE anime ADD COLUMN shikimori_id INTEGER")
+            }
+            if (!colsInitial.contains("anilist_not_found_at")) {
+                ensureColumn("anilist_not_found_at", "ALTER TABLE anime ADD COLUMN anilist_not_found_at INTEGER")
+            }
+            if (!colsInitial.contains("mal_not_found_at")) {
+                ensureColumn("mal_not_found_at", "ALTER TABLE anime ADD COLUMN mal_not_found_at INTEGER")
+            }
+            if (!colsInitial.contains("shikimori_not_found_at")) {
+                ensureColumn("shikimori_not_found_at", "ALTER TABLE anime ADD COLUMN shikimori_not_found_at INTEGER")
             }
             val ver = db.rawQuery("PRAGMA user_version", null).use { c ->
                 if (c.moveToFirst()) c.getLong(0) else 0L
             }
             if (ver >= targetVersion) return@use
-            val cols = db.rawQuery("PRAGMA table_info(anime)", null).use { c ->
-                buildSet {
-                    while (c.moveToNext()) add(c.getString(1))
-                }
-            }
+            val cols = readAnimeColumns()
             val hasSync = cols.contains("sync_status")
             val hasComment = cols.contains("comment")
+            val hasEpisodeCheckColumns = cols.contains("anilist_id")
+                && cols.contains("mal_id")
+                && cols.contains("shikimori_id")
+                && cols.contains("anilist_not_found_at")
+                && cols.contains("mal_not_found_at")
+                && cols.contains("shikimori_not_found_at")
             when {
-                hasSync && hasComment ->
+                hasSync && hasComment && hasEpisodeCheckColumns ->
                     db.execSQL("PRAGMA user_version = $targetVersion")
                 hasSync && !hasComment && targetVersion > 1 ->
                     db.execSQL("PRAGMA user_version = ${targetVersion - 1}")

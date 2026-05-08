@@ -12,6 +12,8 @@ val SettingsAccentThemeDarkGreen = Color(0xFF21B1A0)
 val SettingsAccentCloudLightBlue = Color(0xFF81D4FA)
 val SettingsAccentContentOrange = Color(0xFFFF9500)
 val SettingsAccentContactLightGreen = Color(0xFF81C784)
+/** Акцент плитки доната (кофейный / тёплый) */
+val SettingsAccentDonationCoffee = Color(0xFF8D6E63)
 
 // M3 Accent — серо-фиолетовый (mauve), как у FilledTonalButton / secondaryContainer
 val AccentMauveDark = Color(0xFF4A4458)

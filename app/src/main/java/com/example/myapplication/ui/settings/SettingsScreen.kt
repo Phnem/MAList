@@ -39,6 +39,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -67,6 +69,13 @@ import org.koin.androidx.compose.koinViewModel
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateDpAsState
+import com.airbnb.lottie.compose.LottieAnimation
+import com.airbnb.lottie.compose.LottieCompositionSpec
+import com.airbnb.lottie.compose.LottieConstants
+import com.airbnb.lottie.compose.animateLottieCompositionAsState
+import com.airbnb.lottie.compose.rememberLottieComposition
+
+private const val TRIBUTE_DONATION_URL = "https://web.tribute.tg/e/Tb"
 
 @OptIn(ExperimentalSharedTransitionApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -229,21 +238,23 @@ fun SettingsScreen(
                                                         }
                                                     }
                                             ) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(40.dp)
-                                                        .clip(RoundedCornerShape(10.dp))
-                                                        .background(settingsTileIconBoxBg()),
-                                                    contentAlignment = Alignment.Center
-                                                ) {
-                                                    Icon(
-                                                        tile.icon,
-                                                        contentDescription = null,
-                                                        tint = tile.accentColor,
-                                                        modifier = Modifier.size(22.dp)
-                                                    )
+                                                tile.icon?.let { icon ->
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(40.dp)
+                                                            .clip(RoundedCornerShape(10.dp))
+                                                            .background(settingsTileIconBoxBg()),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Icon(
+                                                            icon,
+                                                            contentDescription = null,
+                                                            tint = tile.accentColor,
+                                                            modifier = Modifier.size(22.dp)
+                                                        )
+                                                    }
+                                                    Spacer(Modifier.height(8.dp))
                                                 }
-                                                Spacer(Modifier.height(8.dp))
                                                 Text(
                                                     text = tile.title,
                                                     style = MaterialTheme.typography.titleMedium,
@@ -333,6 +344,10 @@ fun SettingsScreen(
                                         }
                                     }
                                 }
+                                is LottieLinkTile -> LottieLinkTileItem(
+                                    tile = tile,
+                                    onPerformHaptic = { performHaptic(view, "light") }
+                                )
                             }
                         }
                     }
@@ -343,7 +358,7 @@ fun SettingsScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .inertialCollision(collisionState, index = 7, baseMultiplier = 1.2f)
+                                .inertialCollision(collisionState, index = 8, baseMultiplier = 1.2f)
                         ) {
                             DeveloperSettingsSection(
                                 strings = strings,
@@ -705,7 +720,8 @@ fun rememberSettingsTiles(
     uiState.updateStatus,
     uiState.currentVersion,
     uiState.latestDownloadUrl,
-    strings
+    strings,
+    context
 ) {
     listOf(
         // 2 квадратных
@@ -793,6 +809,17 @@ fun rememberSettingsTiles(
             accentColor = SettingsAccentContactLightGreen,
             span = 2,
             onClick = onContactClick
+        ),
+        LottieLinkTile(
+            id = "donate",
+            title = strings.donationCardTitle,
+            subtitle = strings.donationCardSubtitle,
+            icon = null,
+            accentColor = SettingsAccentDonationCoffee,
+            lottieRawRes = R.raw.coffee_loader_food_beverage,
+            onClick = {
+                context.startActivity(Intent(Intent.ACTION_VIEW, TRIBUTE_DONATION_URL.toUri()))
+            }
         )
     )
 }
@@ -890,6 +917,66 @@ fun CapsuleChipRow(
 }
 
 @Composable
+private fun LottieLinkTileItem(
+    tile: LottieLinkTile,
+    onPerformHaptic: () -> Unit
+) {
+    val composition by rememberLottieComposition(LottieCompositionSpec.RawRes(tile.lottieRawRes))
+    val progress by animateLottieCompositionAsState(
+        composition = composition,
+        iterations = LottieConstants.IterateForever
+    )
+    val lottieCd = tile.subtitle ?: tile.title
+    BaseTile(
+        tile = tile,
+        modifier = Modifier
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) {
+                onPerformHaptic()
+                tile.onClick()
+            }
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = tile.title,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontFamily = SnProFamily,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                tile.subtitle?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            LottieAnimation(
+                composition = composition,
+                progress = { progress },
+                modifier = Modifier
+                    .size(54.dp)
+                    .semantics { contentDescription = lottieCd },
+                alignment = Alignment.Center,
+                contentScale = ContentScale.Fit
+            )
+        }
+    }
+}
+
+@Composable
 fun ToggleTileItem(
     tile: ToggleTile,
     strings: UiStrings,
@@ -897,16 +984,18 @@ fun ToggleTileItem(
 ) {
     BaseTile(tile = tile, modifier = Modifier) {
         Column(modifier = Modifier.fillMaxSize()) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(settingsTileIconBoxBg()),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(tile.icon, contentDescription = null, tint = tile.accentColor, modifier = Modifier.size(22.dp))
+            tile.icon?.let { icon ->
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(settingsTileIconBoxBg()),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, contentDescription = null, tint = tile.accentColor, modifier = Modifier.size(22.dp))
+                }
+                Spacer(Modifier.height(8.dp))
             }
-            Spacer(Modifier.height(8.dp))
             Text(
                 text = tile.title,
                 style = MaterialTheme.typography.titleMedium,
@@ -965,16 +1054,18 @@ fun ActionTileItem(
         ) { onPerformHaptic(); tile.onClick() }
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(settingsTileIconBoxBg()),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(tile.icon, contentDescription = null, tint = tile.accentColor, modifier = Modifier.size(22.dp))
+            tile.icon?.let { icon ->
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(settingsTileIconBoxBg()),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, contentDescription = null, tint = tile.accentColor, modifier = Modifier.size(22.dp))
+                }
+                Spacer(Modifier.height(8.dp))
             }
-            Spacer(Modifier.height(8.dp))
             Text(
                 text = tile.title,
                 style = MaterialTheme.typography.titleMedium,
@@ -1032,19 +1123,21 @@ fun DetailTileItem(
         ) {
         Row(
             modifier = Modifier.fillMaxSize(),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.Top
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(settingsTileIconBoxBg()),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(tile.icon, contentDescription = null, tint = tile.accentColor, modifier = Modifier.size(22.dp))
+                tile.icon?.let { icon ->
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(settingsTileIconBoxBg()),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(icon, contentDescription = null, tint = tile.accentColor, modifier = Modifier.size(22.dp))
+                    }
+                    Spacer(Modifier.height(8.dp))
                 }
-                Spacer(Modifier.height(8.dp))
                 Text(
                     text = tile.title,
                     style = MaterialTheme.typography.titleLarge,
@@ -1065,12 +1158,17 @@ fun DetailTileItem(
                     )
                 }
             }
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                contentDescription = null,
-                modifier = Modifier.size(20.dp),
-                tint = tile.accentColor
-            )
+            Box(
+                modifier = Modifier.fillMaxHeight(),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = tile.accentColor
+                )
+            }
         }
     }
     }

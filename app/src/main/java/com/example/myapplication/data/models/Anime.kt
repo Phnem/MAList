@@ -14,5 +14,11 @@ data class Anime(
     val isFavorite: Boolean = false,
     val tags: ImmutableList<String> = persistentListOf(),
     val categoryType: String = "",
-    val comment: String = ""
+    val comment: String = "",
+    val anilistId: Int? = null,
+    val malId: Int? = null,
+    val shikimoriId: Int? = null,
+    val anilistNotFoundAt: Long? = null,
+    val malNotFoundAt: Long? = null,
+    val shikimoriNotFoundAt: Long? = null
 )

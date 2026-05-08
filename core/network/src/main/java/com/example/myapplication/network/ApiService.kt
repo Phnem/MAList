@@ -26,4 +26,24 @@ interface ApiService {
 
     /** AniList [Media] по числовому id (для trace.moe → AniList). */
     suspend fun mediaByAnilistId(id: Int): Result<ApiSearchResult?>
+
+    /** AniList-only search (used by batch update checker). */
+    suspend fun searchAnimeAniListOnly(
+        query: String,
+        language: AppLanguage,
+        limit: Int = 20
+    ): Result<List<ApiSearchResult>>
+
+    /** Shikimori title by numeric id. */
+    suspend fun shikimoriById(id: Int, language: AppLanguage): Result<ApiSearchResult?>
+
+    /** MAL/Jikan title by numeric id. */
+    suspend fun malById(id: Int, language: AppLanguage): Result<ApiSearchResult?>
+
+    /** MAL-only search via Jikan (used as EN fallback). */
+    suspend fun searchAnimeMalOnly(
+        query: String,
+        language: AppLanguage,
+        limit: Int = 20
+    ): Result<List<ApiSearchResult>>
 }

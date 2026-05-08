@@ -53,7 +53,12 @@ class AddFromApiUseCase(
             isFavorite = false,
             selectedTags = selectedTags,
             categoryType = result.categoryType,
-            comment = ""
+            comment = "",
+            anilistId = result.externalId?.toIntOrNull().takeIf { result.source.equals("AniList", ignoreCase = true) },
+            malId = result.externalId?.toIntOrNull().takeIf {
+                result.source.equals("MAL", ignoreCase = true) || result.source.equals("Jikan", ignoreCase = true)
+            },
+            shikimoriId = result.externalId?.toIntOrNull().takeIf { result.source.equals("Shikimori", ignoreCase = true) }
         )
         saveAnimeUseCase(params)
     }

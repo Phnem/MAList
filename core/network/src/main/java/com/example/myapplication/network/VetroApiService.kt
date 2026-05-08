@@ -124,6 +124,34 @@ class VetroApiService(
         }
     }
 
+    override suspend fun searchAnimeAniListOnly(
+        query: String,
+        language: AppLanguage,
+        limit: Int
+    ): Result<List<ApiSearchResult>> = runCatching {
+        searchRate.acquire()
+        aniList.searchAnime(query.trim(), limit, language).getOrThrow()
+    }
+
+    override suspend fun shikimoriById(id: Int, language: AppLanguage): Result<ApiSearchResult?> = runCatching {
+        searchRate.acquire()
+        shikimori.getAnimeById(id, language).getOrThrow()
+    }
+
+    override suspend fun malById(id: Int, language: AppLanguage): Result<ApiSearchResult?> = runCatching {
+        searchRate.acquire()
+        fetchJikanById(id, language)
+    }
+
+    override suspend fun searchAnimeMalOnly(
+        query: String,
+        language: AppLanguage,
+        limit: Int
+    ): Result<List<ApiSearchResult>> = runCatching {
+        searchRate.acquire()
+        searchJikan(query.trim(), language).take(limit)
+    }
+
     private fun tmdbKey(): String = BuildConfig.TMDB_API_KEY
 
     private enum class SearchMatch { EXACT, PARTIAL, FUZZY, NONE }
@@ -229,6 +257,49 @@ class VetroApiService(
             )
         }
     }.getOrElse { emptyList() }
+
+    private suspend fun fetchJikanById(id: Int, language: AppLanguage): ApiSearchResult? = runCatching {
+        val response = httpClient.get {
+            url {
+                protocol = URLProtocol.HTTPS
+                host = "api.jikan.moe"
+                appendPathSegments("v4", "anime", id.toString())
+            }
+        }.bodyAsText()
+        val root = json.parseToJsonElement(response).jsonObject
+        val obj = root["data"]?.jsonObject ?: return@runCatching null
+        val titleJp = obj["title"]?.jsonPrimitive?.content ?: return@runCatching null
+        val titleEng = obj["title_english"]?.jsonPrimitive?.content ?: ""
+        val (displayTitle, altTitle) = when {
+            language == AppLanguage.RU && titleJp.isNotBlank() -> titleJp to titleEng.takeIf { it.isNotBlank() && it != titleJp }
+            titleEng.isNotBlank() -> titleEng to titleJp.takeIf { it != titleEng }
+            else -> titleJp to null
+        }
+        val desc = obj["synopsis"]?.jsonPrimitive?.content?.replace(Regex("<[^>]+>"), "")?.trim() ?: ""
+        val episodes = obj["episodes"]?.jsonPrimitive?.intOrNull ?: 0
+        val score = obj["score"]?.jsonPrimitive?.content?.toFloatOrNull()?.toInt()
+        val jpg = obj["images"]?.jsonObject?.get("jpg")?.jsonObject
+        val image = jpg?.get("large_image_url")?.jsonPrimitive?.content
+            ?: jpg?.get("image_url")?.jsonPrimitive?.content
+        val genres = obj["genres"]?.jsonArray?.mapNotNull { g ->
+            g.jsonObject["name"]?.jsonPrimitive?.content
+        } ?: emptyList()
+        val type = obj["type"]?.jsonPrimitive?.content ?: ""
+        ApiSearchResult(
+            title = displayTitle,
+            altTitle = altTitle,
+            posterUrl = image,
+            episodes = episodes,
+            description = desc,
+            type = type,
+            genres = genres,
+            rating = score,
+            source = "MAL",
+            categoryType = "ANIME",
+            externalId = obj["mal_id"]?.jsonPrimitive?.intOrNull?.toString()
+                ?: obj["mal_id"]?.jsonPrimitive?.content
+        )
+    }.getOrNull()
 
     private suspend fun searchTmdbMovie(query: String): List<ApiSearchResult> = runCatching {
         val key = tmdbKey()

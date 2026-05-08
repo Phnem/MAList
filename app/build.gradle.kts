@@ -151,6 +151,7 @@ dependencies {
     // 3. Coil 3
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
+    implementation(libs.lottie.compose)
 
     // 4. Навигация, UI, Стейт
     implementation(libs.navigation.compose)

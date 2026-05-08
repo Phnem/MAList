@@ -43,7 +43,13 @@ class AnimeLocalDataSource(
                         isFavorite = row.isFavorite == 1L,
                         tags = parseTagsConcat(row.tagsConcat),
                         categoryType = row.categoryType ?: "",
-                        comment = row.comment
+                        comment = row.comment,
+                        anilistId = row.anilist_id?.toInt(),
+                        malId = row.mal_id?.toInt(),
+                        shikimoriId = row.shikimori_id?.toInt(),
+                        anilistNotFoundAt = row.anilist_not_found_at,
+                        malNotFoundAt = row.mal_not_found_at,
+                        shikimoriNotFoundAt = row.shikimori_not_found_at
                     )
                 }
             }
@@ -74,7 +80,13 @@ class AnimeLocalDataSource(
                     dateAdded = row.dateAdded,
                     isFavorite = row.isFavorite,
                     categoryType = row.categoryType,
-                    comment = row.comment
+                    comment = row.comment,
+                    anilistId = row.anilist_id,
+                    malId = row.mal_id,
+                    shikimoriId = row.shikimori_id,
+                    anilistNotFoundAt = row.anilist_not_found_at,
+                    malNotFoundAt = row.mal_not_found_at,
+                    shikimoriNotFoundAt = row.shikimori_not_found_at
                 )
             }
     }
@@ -94,7 +106,13 @@ class AnimeLocalDataSource(
                     dateAdded = row.dateAdded,
                     isFavorite = row.isFavorite,
                     categoryType = row.categoryType,
-                    comment = row.comment
+                    comment = row.comment,
+                    anilistId = row.anilist_id,
+                    malId = row.mal_id,
+                    shikimoriId = row.shikimori_id,
+                    anilistNotFoundAt = row.anilist_not_found_at,
+                    malNotFoundAt = row.mal_not_found_at,
+                    shikimoriNotFoundAt = row.shikimori_not_found_at
                 )
             }
     }
@@ -114,7 +132,13 @@ class AnimeLocalDataSource(
         dateAdded: Long,
         isFavorite: Long,
         categoryType: String?,
-        comment: String = ""
+        comment: String = "",
+        anilistId: Long? = null,
+        malId: Long? = null,
+        shikimoriId: Long? = null,
+        anilistNotFoundAt: Long? = null,
+        malNotFoundAt: Long? = null,
+        shikimoriNotFoundAt: Long? = null
     ): Anime = Anime(
         id = id,
         title = title,
@@ -126,7 +150,13 @@ class AnimeLocalDataSource(
         isFavorite = isFavorite == 1L,
         tags = getTagsForAnime(id),
         categoryType = categoryType ?: "",
-        comment = comment
+        comment = comment,
+        anilistId = anilistId?.toInt(),
+        malId = malId?.toInt(),
+        shikimoriId = shikimoriId?.toInt(),
+        anilistNotFoundAt = anilistNotFoundAt,
+        malNotFoundAt = malNotFoundAt,
+        shikimoriNotFoundAt = shikimoriNotFoundAt
     )
 
     suspend fun insertAnime(anime: Anime) {
@@ -144,7 +174,13 @@ class AnimeLocalDataSource(
                 dateAdded = anime.dateAdded,
                 categoryType = anime.categoryType,
                 comment = anime.comment,
-                isAiRecommendation = 0L
+                isAiRecommendation = 0L,
+                anilist_id = anime.anilistId?.toLong(),
+                mal_id = anime.malId?.toLong(),
+                shikimori_id = anime.shikimoriId?.toLong(),
+                anilist_not_found_at = anime.anilistNotFoundAt,
+                mal_not_found_at = anime.malNotFoundAt,
+                shikimori_not_found_at = anime.shikimoriNotFoundAt
             )
 
             // Insert tags
@@ -172,6 +208,12 @@ class AnimeLocalDataSource(
                 categoryType = anime.categoryType,
                 comment = anime.comment,
                 isAiRecommendation = 0L,
+                anilist_id = anime.anilistId?.toLong(),
+                mal_id = anime.malId?.toLong(),
+                shikimori_id = anime.shikimoriId?.toLong(),
+                anilist_not_found_at = anime.anilistNotFoundAt,
+                mal_not_found_at = anime.malNotFoundAt,
+                shikimori_not_found_at = anime.shikimoriNotFoundAt,
                 id = anime.id
             )
 
@@ -211,7 +253,13 @@ class AnimeLocalDataSource(
                     dateAdded = anime.dateAdded,
                     categoryType = anime.categoryType,
                     comment = anime.comment,
-                    isAiRecommendation = 0L
+                    isAiRecommendation = 0L,
+                    anilist_id = anime.anilistId?.toLong(),
+                    mal_id = anime.malId?.toLong(),
+                    shikimori_id = anime.shikimoriId?.toLong(),
+                    anilist_not_found_at = anime.anilistNotFoundAt,
+                    mal_not_found_at = anime.malNotFoundAt,
+                    shikimori_not_found_at = anime.shikimoriNotFoundAt
                 )
                 anime.tags.forEach { tag ->
                     db().animeQueries.insertAnimeTag(
@@ -270,6 +318,60 @@ class AnimeLocalDataSource(
 
     suspend fun removeUpdate(animeId: String) {
         db().animeQueries.deleteUpdateByAnimeId(animeId)
+        mirrorCoordinator.requestExportIfEnabled()
+    }
+
+    suspend fun setAnilistId(animeId: String, anilistId: Int) {
+        db().animeQueries.setAnilistId(
+            anilist_id = anilistId.toLong(),
+            updatedAt = System.currentTimeMillis(),
+            id = animeId
+        )
+        mirrorCoordinator.requestExportIfEnabled()
+    }
+
+    suspend fun setMalId(animeId: String, malId: Int) {
+        db().animeQueries.setMalId(
+            mal_id = malId.toLong(),
+            updatedAt = System.currentTimeMillis(),
+            id = animeId
+        )
+        mirrorCoordinator.requestExportIfEnabled()
+    }
+
+    suspend fun setShikimoriId(animeId: String, shikimoriId: Int) {
+        db().animeQueries.setShikimoriId(
+            shikimori_id = shikimoriId.toLong(),
+            updatedAt = System.currentTimeMillis(),
+            id = animeId
+        )
+        mirrorCoordinator.requestExportIfEnabled()
+    }
+
+    suspend fun markAnilistNotFound(animeId: String, atMillis: Long) {
+        db().animeQueries.markAnilistNotFound(
+            anilist_not_found_at = atMillis,
+            updatedAt = System.currentTimeMillis(),
+            id = animeId
+        )
+        mirrorCoordinator.requestExportIfEnabled()
+    }
+
+    suspend fun markMalNotFound(animeId: String, atMillis: Long) {
+        db().animeQueries.markMalNotFound(
+            mal_not_found_at = atMillis,
+            updatedAt = System.currentTimeMillis(),
+            id = animeId
+        )
+        mirrorCoordinator.requestExportIfEnabled()
+    }
+
+    suspend fun markShikimoriNotFound(animeId: String, atMillis: Long) {
+        db().animeQueries.markShikimoriNotFound(
+            shikimori_not_found_at = atMillis,
+            updatedAt = System.currentTimeMillis(),
+            id = animeId
+        )
         mirrorCoordinator.requestExportIfEnabled()
     }
 

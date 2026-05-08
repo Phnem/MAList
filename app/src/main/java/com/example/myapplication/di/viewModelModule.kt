@@ -28,7 +28,8 @@ val viewModelModule = module {
             imageStorage = get(),
             settingsDataStore = get(named("settings")),
             addFromApiUseCase = get(),
-            statsFooterPhraseUseCase = get()
+            statsFooterPhraseUseCase = get(),
+            batchEpisodeCheckUseCase = get()
         )
     }
     viewModel {
