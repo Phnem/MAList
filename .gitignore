@@ -17,3 +17,8 @@ local.properties
 **/build/
 **/generated/
 .kotlin/
+wrapper/
+app/release/
+*.apk
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
