@@ -14,7 +14,7 @@ import com.example.myapplication.data.repository.ImageStorageRepository
 import com.example.myapplication.domain.normalizeForSearch
 import com.example.myapplication.domain.search.AddFromApiUseCase
 import com.example.myapplication.domain.stats.ResolveStatsFooterPhraseUseCase
-import com.example.myapplication.domain.updates.BatchEpisodeCheckUseCase
+import com.example.myapplication.updates.BatchEpisodeCheckUseCase
 import com.example.myapplication.network.ApiSearchResult
 import com.example.myapplication.network.AppContentType
 import com.example.myapplication.network.AppLanguage

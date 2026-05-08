@@ -1,4 +1,4 @@
-package com.example.myapplication.domain.updates
+package com.example.myapplication.updates
 
 import android.util.Log
 import com.example.myapplication.data.local.AnimeLocalDataSource
@@ -6,8 +6,8 @@ import com.example.myapplication.data.models.Anime
 import com.example.myapplication.data.models.AnimeUpdate
 import com.example.myapplication.data.repository.AnimeRepository
 import com.example.myapplication.domain.normalizeForSearch
-import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.network.ApiSearchResult
+import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.sync.TitleMatcher
 import kotlinx.coroutines.delay
 

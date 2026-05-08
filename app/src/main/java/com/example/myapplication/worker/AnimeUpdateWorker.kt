@@ -7,7 +7,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.myapplication.data.local.AnimeLocalDataSource
-import com.example.myapplication.domain.updates.BatchEpisodeCheckUseCase
+import com.example.myapplication.updates.BatchEpisodeCheckUseCase
 import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.notifications.AnimeNotifier
 import kotlinx.coroutines.Dispatchers
