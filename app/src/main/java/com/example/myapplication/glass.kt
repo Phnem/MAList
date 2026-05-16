@@ -116,9 +116,15 @@ import com.example.myapplication.ui.shared.theme.OverlayThemeTokens
 import com.example.myapplication.ui.shared.theme.SnProFamily
 import com.example.myapplication.ui.shared.theme.glassEdge
 import com.example.myapplication.ui.shared.theme.glassFill
+import com.example.myapplication.ui.shared.theme.softPlateShadowForLightSheet
 import com.example.myapplication.ui.shared.inertialCollision
 import com.example.myapplication.ui.shared.rememberInertialCollisionState
 import com.example.myapplication.utils.performHaptic
+import com.kyant.backdrop.Backdrop
+import com.kyant.backdrop.drawBackdrop
+import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.lens
+import com.kyant.backdrop.effects.vibrancy
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
@@ -128,9 +134,6 @@ import dev.chrisbanes.haze.hazeEffect
 fun isAppInDarkTheme(): Boolean {
     return MaterialTheme.colorScheme.background.toArgb() == DarkBackground.toArgb()
 }
-
-/** Стиль haze без подкрашивания и шума: только размытие (tint = transparent, noiseFactor = 0). */
-private val cleanHazeStyle = HazeStyle(tints = emptyList(), noiseFactor = 0f, blurRadius = 20.dp)
 
 /**
  * «Матовое стекло» сильнее нижнего дока: выше blur, лёгкий белый tint и зерно
@@ -168,10 +171,9 @@ internal val panelGlassHazeStyle = HazeStyle(
 // ==========================================
 @Composable
 fun SimpGlassCard(
-    hazeState: HazeState,
+    backdrop: Backdrop,
     modifier: Modifier = Modifier,
     shape: Shape = CircleShape,
-    hazeStyle: HazeStyle = cleanHazeStyle,
     content: @Composable BoxScope.() -> Unit
 ) {
     val isDark = isAppInDarkTheme()
@@ -181,7 +183,15 @@ fun SimpGlassCard(
     Box(
         modifier = modifier
             .clip(shape)
-            .safeHaze(state = hazeState, style = hazeStyle)
+            .drawBackdrop(
+                backdrop = backdrop,
+                shape = { shape },
+                effects = {
+                    vibrancy()
+                    blur(12f.dp.toPx())
+                    lens(8f.dp.toPx(), 40f.dp.toPx())
+                }
+            )
             .border(0.5.dp, borderStroke, shape),
         contentAlignment = Alignment.Center
     ) {
@@ -213,7 +223,7 @@ fun SimpGlassCard(
 // ==========================================
 @Composable
 fun GlassActionDock(
-    hazeState: HazeState,
+    backdrop: Backdrop,
     isFloating: Boolean,
     strings: UiStrings,
     filterSelectedTags: List<String>,
@@ -262,7 +272,15 @@ fun GlassActionDock(
         Box(
             Modifier
                 .clip(RoundedCornerShape(32.dp))
-                .safeHaze(state = hazeState, style = cleanHazeStyle)
+                .drawBackdrop(
+                    backdrop = backdrop,
+                    shape = { RoundedCornerShape(32.dp) },
+                    effects = {
+                        vibrancy()
+                        blur(12f.dp.toPx())
+                        lens(8f.dp.toPx(), 40f.dp.toPx())
+                    }
+                )
                 .border(0.5.dp, borderColor, RoundedCornerShape(32.dp))
         ) {
             if (shineAlpha > 0f) {
@@ -305,7 +323,7 @@ fun GlassActionDock(
 @Composable
 @Suppress("UNUSED_PARAMETER")
 fun GlassBottomNavigation(
-    hazeState: HazeState,
+    backdrop: Backdrop,
     nav: androidx.navigation.NavController,
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
@@ -333,7 +351,15 @@ fun GlassBottomNavigation(
                 .height(64.dp)
                 .wrapContentWidth()
                 .clip(RoundedCornerShape(32.dp))
-                .safeHaze(state = hazeState, style = cleanHazeStyle)
+                .drawBackdrop(
+                    backdrop = backdrop,
+                    shape = { RoundedCornerShape(32.dp) },
+                    effects = {
+                        vibrancy()
+                        blur(16f.dp.toPx())
+                        lens(10f.dp.toPx(), 44f.dp.toPx())
+                    }
+                )
                 .border(0.5.dp, borderStroke, RoundedCornerShape(32.dp))
         ) {
             Row(
@@ -500,7 +526,7 @@ fun GlassBottomNavigation(
                 .padding(end = 24.dp),
             size = 64.dp,
             iconSize = 32.dp,
-            hazeState = hazeState,
+            backdrop = backdrop,
             backgroundColor = Color.Transparent,
             contentDescription = "Search",
             tint = if (isSearchActive) BrandBlue else currentThemeColor
@@ -753,7 +779,9 @@ fun SortFilterOverlay(
                 Card(
                     shape = RoundedCornerShape(OverlayThemeTokens.PanelCornerRadius),
                     colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-                    elevation = CardDefaults.cardElevation(defaultElevation = OverlayThemeTokens.CardElevation),
+                    elevation = CardDefaults.cardElevation(
+                        defaultElevation = if (isDark) OverlayThemeTokens.CardElevation else 0.dp
+                    ),
                     modifier = Modifier
                         .padding(
                             top = OverlayThemeTokens.CardOuterPaddingTop,
@@ -774,8 +802,7 @@ fun SortFilterOverlay(
                             .padding(
                                 start = OverlayThemeTokens.PanelInnerPaddingStart,
                                 top = OverlayThemeTokens.PanelInnerPaddingTop,
-                                end = OverlayThemeTokens.PanelInnerPaddingEnd,
-                                bottom = OverlayThemeTokens.PanelInnerPaddingBottom
+                                end = OverlayThemeTokens.PanelInnerPaddingEnd
                             )
                             .verticalScroll(rememberScrollState())
                     ) {
@@ -925,6 +952,7 @@ fun SortFilterOverlay(
                                 }
                             }
                         )
+                        Spacer(Modifier.height(OverlayThemeTokens.PanelInnerPaddingBottom))
                     }
                     } // OverlayGlassPanel
                 }
@@ -1019,7 +1047,7 @@ private fun SortSortTile(
     val shape = RoundedCornerShape(OverlayThemeTokens.TileCornerRadius)
     val tileBg = if (isDark) OverlayThemeTokens.TileBackgroundDark else cardBg
     val glowAlpha = if (isActive) {
-        if (isDark) 0.22f else 0.18f
+        if (isDark) 0.22f else OverlayThemeTokens.TileGlowAlphaLight
     } else 0f
     val accentGlow = accentColor.copy(alpha = glowAlpha)
 
@@ -1027,6 +1055,13 @@ private fun SortSortTile(
         modifier = modifier
             .fillMaxHeight()
             .defaultMinSize(minHeight = OverlayThemeTokens.SortTileMinHeight)
+            .then(
+                if (isDark) Modifier else Modifier.softPlateShadowForLightSheet(
+                    isDark = false,
+                    shape = shape,
+                    elevation = OverlayThemeTokens.SortOverlayGridLightShadowElevation,
+                )
+            )
             .clip(shape)
             .background(tileBg)
             .background(
@@ -1154,7 +1189,7 @@ private fun GenreSortTile(
     val shape = RoundedCornerShape(OverlayThemeTokens.TileCornerRadius)
     val tileBg = if (isDark) OverlayThemeTokens.TileBackgroundDark else cardBg
     val glowAlpha = if (isActive || badgeCount > 0) {
-        if (isDark) 0.22f else 0.18f
+        if (isDark) 0.22f else OverlayThemeTokens.TileGlowAlphaLight
     } else 0f
     val accentGlow = genreAccent.copy(alpha = glowAlpha)
 
@@ -1162,6 +1197,13 @@ private fun GenreSortTile(
         modifier = modifier
             .fillMaxHeight()
             .defaultMinSize(minHeight = OverlayThemeTokens.SortTileMinHeight)
+            .then(
+                if (isDark) Modifier else Modifier.softPlateShadowForLightSheet(
+                    isDark = false,
+                    shape = shape,
+                    elevation = OverlayThemeTokens.SortOverlayGridLightShadowElevation,
+                )
+            )
             .clip(shape)
             .background(tileBg)
             .background(
@@ -1300,7 +1342,9 @@ fun GenreFilterOverlay(
                     .padding(16.dp),
                 shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 28.dp, bottomEnd = 28.dp),
                 colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-                elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
+                elevation = CardDefaults.cardElevation(
+                    defaultElevation = if (isDark) 12.dp else 0.dp
+                )
             ) {
                 OverlayGlassPanel(
                     isDark = isDark,
@@ -1310,7 +1354,7 @@ fun GenreFilterOverlay(
                 ) {
                 Column(
                     modifier = Modifier
-                        .padding(24.dp)
+                        .padding(start = 24.dp, top = 24.dp, end = 24.dp)
                         .verticalScroll(rememberScrollState())
                 ) {
                     Box(
@@ -1376,6 +1420,7 @@ fun GenreFilterOverlay(
                             )
                         }
                     }
+                    Spacer(Modifier.height(24.dp))
                 }
                 } // OverlayGlassPanel
             }

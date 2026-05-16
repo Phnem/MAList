@@ -21,6 +21,7 @@ import com.example.myapplication.isAppInDarkTheme
 import com.example.myapplication.ui.shared.theme.OverlayThemeTokens
 import com.example.myapplication.ui.shared.theme.glassEdge
 import com.example.myapplication.ui.shared.theme.glassFill
+import com.example.myapplication.ui.shared.theme.lightTileShadowInLightTheme
 
 fun Modifier.tileGlow(accentColor: Color, glowAlpha: Float = 0.15f): Modifier {
     return this.drawWithCache {
@@ -54,11 +55,6 @@ fun Modifier.tileGlowLeading(accentColor: Color, glowAlpha: Float = 0.15f): Modi
 }
 
 @Composable
-fun settingsTileIconBoxBg(): Color =
-    if (isAppInDarkTheme()) OverlayThemeTokens.TileIconBgDark
-    else MaterialTheme.colorScheme.surface.copy(alpha = 0.65f)
-
-@Composable
 fun BaseTile(
     tile: SettingsTile,
     modifier: Modifier = Modifier,
@@ -67,10 +63,14 @@ fun BaseTile(
     val isDark = isAppInDarkTheme()
     val tileBg =
         if (isDark) OverlayThemeTokens.TileBackgroundDark
-        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+        else MaterialTheme.colorScheme.surface
     val cornerRadius = 24.dp
     val shape = RoundedCornerShape(cornerRadius)
-    val accentRim = tile.accentColor.copy(alpha = if (isDark) 0.45f else 0.6f)
+    val rimColor = if (isDark) {
+        tile.accentColor.copy(alpha = 0.45f)
+    } else {
+        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f)
+    }
     val accentGlow = tile.accentColor.copy(
         alpha = if (isDark) OverlayThemeTokens.TileGlowAlphaDark else OverlayThemeTokens.TileGlowAlphaLight
     )
@@ -80,6 +80,7 @@ fun BaseTile(
         modifier = modifier
             .fillMaxWidth()
             .aspectRatio(ratio)
+            .lightTileShadowInLightTheme(isDark, shape)
             .clip(shape)
             .background(tileBg)
             .drawWithCache {
@@ -92,7 +93,7 @@ fun BaseTile(
             }
             .glassFill(isDark)
             .glassEdge(cornerRadius, isDark)
-            .border(1.dp, accentRim, shape)
+            .border(1.dp, rimColor, shape)
             .padding(12.dp),
         content = content
     )

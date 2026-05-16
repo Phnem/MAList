@@ -75,8 +75,8 @@ import com.example.myapplication.ui.navigation.navigateToDetails
 import com.example.myapplication.ui.navigation.navigateToInspect
 import com.example.myapplication.ui.navigation.navigateToWelcome
 import com.example.myapplication.ui.shared.theme.*
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeSource
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import kotlin.math.roundToInt
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.launch
@@ -102,8 +102,6 @@ fun HomeScreen(
     val focusManager = LocalFocusManager.current
     val view = LocalView.current
     val ctx = LocalContext.current
-    val hazeState = remember { HazeState() }
-
     var showCSheet by remember { mutableStateOf(false) }
     var isSearchVisible by remember { mutableStateOf(false) }
     var showNotificationsOverlay by remember { mutableStateOf(false) }
@@ -170,6 +168,10 @@ fun HomeScreen(
     val isHeaderFloating by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 20 } }
     val showScrollToTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 4 } }
     val bgColor = MaterialTheme.colorScheme.background
+    val backdrop = rememberLayerBackdrop {
+        drawRect(bgColor)
+        drawContent()
+    }
 
     val shouldBlur = (isSearchVisible && uiState.searchQuery.isBlank()) ||
             showCSheet || animeToDelete != null || animeToFavorite != null ||
@@ -226,6 +228,7 @@ fun HomeScreen(
                         syncReport = syncReport,
                         updates = uiState.updates,
                         isCheckingUpdates = uiState.isCheckingUpdates,
+                        currentLanguage = currentLanguage,
                         onDismiss = { showNotificationsOverlay = false },
                         onLogout = {
                             dropboxSyncManager.logout()
@@ -241,7 +244,7 @@ fun HomeScreen(
                         },
                         onDismissUpdate = { update ->
                             performHaptic(view, "light")
-                            viewModel.dismissUpdate(update)
+                            viewModel.dismissUpdate(update, ctx)
                         },
                         onBlockingChildDialogChange = { notificationsBlockingChildDialog = it }
                     )
@@ -337,11 +340,11 @@ fun HomeScreen(
                             ) {
                                 LazyColumn(
                                     state = listState,
-                                    contentPadding = PaddingValues(top = 0.dp, bottom = 220.dp, start = 0.dp, end = 0.dp),
+                                    contentPadding = PaddingValues(top = 0.dp, bottom = 0.dp, start = 0.dp, end = 0.dp),
                                     verticalArrangement = Arrangement.spacedBy(16.dp),
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .hazeSource(state = hazeState)
+                                        .layerBackdrop(backdrop)
                                 ) {
                                     item {
                                         MalistWorkspaceTopBar(strings = getStrings(currentLanguage))
@@ -476,6 +479,9 @@ fun HomeScreen(
                                             }
                                         }
                                     }
+                                    item(key = "home_bottom_dock_spacer") {
+                                        Spacer(Modifier.height(220.dp))
+                                    }
                                 }
                             }
                         }
@@ -502,7 +508,7 @@ fun HomeScreen(
                         ) + fadeOut(animationSpec = tween(200))
                     ) {
                         GlassBottomNavigation(
-                            hazeState = hazeState,
+                            backdrop = backdrop,
                             nav = navController,
                             sharedTransitionScope = sharedTransitionScope,
                             animatedVisibilityScope = animatedVisibilityScope,
@@ -534,7 +540,7 @@ fun HomeScreen(
                 exit = slideOutVertically { it } + fadeOut(),
                 modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 16.dp).windowInsetsPadding(WindowInsets.ime).padding(bottom = 16.dp).zIndex(10f)
             ) {
-                SimpGlassCard(hazeState = hazeState, shape = RoundedCornerShape(28.dp), modifier = Modifier.fillMaxWidth().height(56.dp)) {
+                SimpGlassCard(backdrop = backdrop, shape = RoundedCornerShape(28.dp), modifier = Modifier.fillMaxWidth().height(56.dp)) {
                     BasicTextField(
                         value = uiState.searchQuery,
                         onValueChange = {
@@ -633,7 +639,7 @@ fun HomeScreen(
                     .zIndex(1f)
             ) {
                 SimpGlassCard(
-                    hazeState = hazeState,
+                    backdrop = backdrop,
                     shape = CircleShape,
                     modifier = Modifier.size(44.dp).clickable {
                         performHaptic(view, "light")
@@ -672,7 +678,7 @@ fun HomeScreen(
                 }
                 Box(modifier = Modifier.align(Alignment.TopEnd).padding(end = 16.dp)) {
                     GlassActionDock(
-                        hazeState = hazeState,
+                        backdrop = backdrop,
                         isFloating = isHeaderFloating,
                         strings = strings,
                         filterSelectedTags = uiState.filterTags,

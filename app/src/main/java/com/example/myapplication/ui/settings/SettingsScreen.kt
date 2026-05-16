@@ -27,6 +27,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -54,6 +55,7 @@ import com.phnem.vetro.R
 import com.example.myapplication.data.models.*
 import com.example.myapplication.network.AppContentType
 import com.example.myapplication.network.AppLanguage
+import com.example.myapplication.utils.formatApkSizeLabel
 import com.example.myapplication.utils.getStrings
 import com.example.myapplication.utils.performHaptic
 import com.example.myapplication.ui.shared.theme.*
@@ -62,6 +64,12 @@ import com.example.myapplication.ui.shared.inertialCollision
 import com.example.myapplication.ui.shared.rememberInertialCollisionState
 import com.example.myapplication.ui.navigation.navigateToWelcome
 import com.example.myapplication.SyncState
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.drawBackdrop
+import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.lens
+import com.kyant.backdrop.effects.vibrancy
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import kotlinx.coroutines.launch
@@ -113,6 +121,12 @@ fun SettingsScreen(
         uri?.let { viewModel.importDbFromFile(context, it) }
     }
 
+    val installPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) {
+        viewModel.onReturnedFromInstallSettings(context)
+    }
+
     BackHandler(enabled = showCloudSheet || showContactSheet || showUpdateChangelogSheet) {
         showCloudSheet = false
         showContactSheet = false
@@ -155,41 +169,22 @@ fun SettingsScreen(
                 .hazeSource(settingsHazeState)
                 .background(bg)
         ) {
-            Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 16.dp, start = 16.dp, end = 16.dp, bottom = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = {
-                        performHaptic(view, "light")
-                        navController.popBackStack()
-                    }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = textC,
-                            modifier = Modifier.sharedElement(
-                                rememberSharedContentState(key = "settings_icon"),
-                                animatedVisibilityScope = animatedVisibilityScope
-                            )
-                        )
-                    }
-                    Spacer(Modifier.width(16.dp))
-                    Text(
-                        text = strings.settingsScreenTitle,
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = textC,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
+            val backdrop = rememberLayerBackdrop {
+        drawRect(bg)
+        drawContent()
+    }
 
+            Box(modifier = Modifier.fillMaxSize()) {
+                
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-                    contentPadding = PaddingValues(bottom = 100.dp),
+                    modifier = Modifier.fillMaxSize()
+                        .layerBackdrop(backdrop)
+                        .padding(horizontal = 16.dp),
+                    contentPadding = PaddingValues(
+                        top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 80.dp,
+                        bottom = 100.dp
+                    ),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
@@ -207,114 +202,61 @@ fun SettingsScreen(
                                     onPerformHaptic = { performHaptic(view, "light") }
                                 )
                                 is ActionTile -> if (tile.id == "update") {
-                                    val updateState = when (uiState.updateStatus) {
-                                        AppUpdateStatus.IDLE -> UpdateTileState.Idle
-                                        AppUpdateStatus.LOADING -> UpdateTileState.Checking
-                                        AppUpdateStatus.UPDATE_AVAILABLE -> UpdateTileState.UpdateAvailable(
-                                            uiState.latestVersion ?: ""
-                                        )
-                                        AppUpdateStatus.NO_UPDATE -> UpdateTileState.UpToDate(uiState.currentVersion)
-                                        AppUpdateStatus.ERROR -> UpdateTileState.Error
+                                    val updateAccent = OverlayThemeTokens.AccentNeonGreen
+                                    val sizeLabel = formatApkSizeLabel(
+                                        uiState.latestApkSizeBytes,
+                                        uiState.language,
+                                        strings.updateApkSizeUnit,
+                                    )
+                                    val updateState: UpdateTileState = when {
+                                        uiState.isApkDownloading ->
+                                            UpdateTileState.Downloading(uiState.apkDownloadProgress)
+                                        uiState.updateStatus == AppUpdateStatus.LOADING ->
+                                            UpdateTileState.Checking
+                                        uiState.updateStatus == AppUpdateStatus.UPDATE_AVAILABLE ->
+                                            UpdateTileState.UpdateAvailable(
+                                                versionTag = uiState.latestVersion ?: "",
+                                                sizeLabel = sizeLabel,
+                                            )
+                                        uiState.updateStatus == AppUpdateStatus.NO_UPDATE ->
+                                            UpdateTileState.UpToDate
+                                        uiState.updateStatus == AppUpdateStatus.ERROR ->
+                                            UpdateTileState.Error
+                                        else -> UpdateTileState.Idle
                                     }
-                                    val isUpdateClickable = updateState is UpdateTileState.Idle ||
-                                        updateState is UpdateTileState.UpdateAvailable ||
-                                        updateState is UpdateTileState.Error
+                                    val headline = when (updateState) {
+                                        is UpdateTileState.UpdateAvailable,
+                                        is UpdateTileState.Downloading -> strings.updateTileAvailable
+                                        else -> strings.updateTileCardTitle
+                                    }
                                     BaseTile(
-                                        tile = tile,
-                                        modifier = Modifier
-                                    ) {
-                                        Column(modifier = Modifier.fillMaxSize()) {
-                                            Column(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .clickable(
-                                                        interactionSource = remember { MutableInteractionSource() },
-                                                        indication = null
-                                                    ) {
-                                                        performHaptic(view, "light")
-                                                        showUpdateChangelogSheet = true
-                                                        if (uiState.updateChangelogMarkdown.isNullOrBlank() && !uiState.isUpdateChangelogLoading) {
-                                                            viewModel.loadUpdateChangelog()
-                                                        }
-                                                    }
-                                            ) {
-                                                tile.icon?.let { icon ->
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .size(40.dp)
-                                                            .clip(RoundedCornerShape(10.dp))
-                                                            .background(settingsTileIconBoxBg()),
-                                                        contentAlignment = Alignment.Center
-                                                    ) {
-                                                        Icon(
-                                                            icon,
-                                                            contentDescription = null,
-                                                            tint = tile.accentColor,
-                                                            modifier = Modifier.size(22.dp)
-                                                        )
-                                                    }
-                                                    Spacer(Modifier.height(8.dp))
-                                                }
-                                                Text(
-                                                    text = tile.title,
-                                                    style = MaterialTheme.typography.titleMedium,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    color = MaterialTheme.colorScheme.onSurface,
-                                                    fontFamily = SnProFamily,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                                tile.subtitle?.let {
-                                                    Text(
-                                                        text = it,
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                        fontFamily = SnProFamily,
-                                                        modifier = Modifier.padding(top = 2.dp),
-                                                        maxLines = 1,
-                                                        overflow = TextOverflow.Ellipsis
-                                                    )
-                                                }
-                                            }
-                                            Spacer(Modifier.weight(1f))
-                                            Box(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .clickable(
-                                                        enabled = isUpdateClickable,
-                                                        interactionSource = remember { MutableInteractionSource() },
-                                                        indication = null
-                                                    ) {
-                                                        when (updateState) {
-                                                            is UpdateTileState.Idle, is UpdateTileState.Error -> {
-                                                                performHaptic(view, "light")
-                                                                viewModel.checkAppUpdate(context)
-                                                            }
-                                                            is UpdateTileState.UpdateAvailable -> {
-                                                                performHaptic(view, "light")
-                                                                uiState.latestDownloadUrl?.let { url ->
-                                                                    context.startActivity(
-                                                                        Intent(
-                                                                            Intent.ACTION_VIEW,
-                                                                            url.toUri()
-                                                                        )
-                                                                    )
-                                                                }
-                                                            }
-                                                            else -> {}
-                                                        }
-                                                    }
-                                            ) {
-                                                UpdateTile(
-                                                    state = updateState,
-                                                    checkButtonText = strings.checkButtonText,
-                                                    checkingText = strings.updateTileChecking,
-                                                    availableText = strings.updateTileAvailable,
-                                                    upToDateText = strings.updateTileUpToDate,
-                                                    versionLabel = strings.updateTileVersionLabel
-                                                )
-                                            }
+                                        tile = tile.copy(accentColor = updateAccent),
+                                        modifier = Modifier.clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null
+                                        ) {
+                                            performHaptic(view, "light")
+                                            showUpdateChangelogSheet = true
+                                            viewModel.notifyUpdateChangelogSheetPresentedFromSettings()
+                                            viewModel.loadUpdateChangelog(context)
                                         }
+                                    ) {
+                                        UpdateTile(
+                                            state = updateState,
+                                            headline = headline,
+                                            checkButtonText = strings.checkButtonText,
+                                            checkingText = strings.updateTileChecking,
+                                            newVersionSubtitle = strings.updateTileNewVersionSubtitle,
+                                            upToDateSubtitle = if (uiState.currentVersion.isNotBlank()) {
+                                                "${strings.updateTileUpToDate} · ${uiState.currentVersion}"
+                                            } else {
+                                                strings.updateTileUpToDate
+                                            },
+                                            installNowText = strings.updateInstallNow,
+                                            downloadProgressFormat = strings.updateDownloadProgressFormat,
+                                            accentColor = updateAccent,
+                                            modifier = Modifier.fillMaxSize(),
+                                        )
                                     }
                                 } else {
                                     ActionTileItem(
@@ -395,6 +337,78 @@ fun SettingsScreen(
                             )
                         }
                     }
+                } // LazyVerticalGrid
+
+                // Top Bar with Liquid Glass Backdrop
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(top = 16.dp, start = 16.dp, end = 16.dp, bottom = 16.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .size(48.dp)
+                            .drawBackdrop(
+                                backdrop = backdrop,
+                                shape = { CircleShape },
+                                effects = {
+                                    vibrancy()
+                                    blur(24f.dp.toPx())
+                                    lens(8f.dp.toPx(), 48f.dp.toPx())
+                                },
+                                onDrawSurface = { drawRect(Color.White.copy(alpha = 0.1f)) }
+                            )
+                            .clip(CircleShape)
+                            .border(0.5.dp, Color.White.copy(alpha = 0.2f), CircleShape)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = {
+                                    performHaptic(view, "light")
+                                    navController.popBackStack()
+                                }
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = textC,
+                            modifier = Modifier.sharedElement(
+                                rememberSharedContentState(key = "settings_icon"),
+                                animatedVisibilityScope = animatedVisibilityScope
+                            )
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .height(48.dp)
+                            .drawBackdrop(
+                                backdrop = backdrop,
+                                shape = { RoundedCornerShape(100.dp) },
+                                effects = {
+                                    vibrancy()
+                                    blur(24f.dp.toPx())
+                                    lens(8f.dp.toPx(), 48f.dp.toPx())
+                                },
+                                onDrawSurface = { drawRect(Color.White.copy(alpha = 0.1f)) }
+                            )
+                            .clip(RoundedCornerShape(100.dp))
+                            .border(0.5.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(100.dp))
+                            .padding(horizontal = 24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = strings.settingsScreenTitle,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = textC
+                        )
+                    }
                 }
             }
             if (!uiState.devHideShareButton) {
@@ -404,21 +418,40 @@ fun SettingsScreen(
                         .padding(bottom = 24.dp, end = 24.dp)
                         .inertialCollision(collisionState, index = 6, baseMultiplier = 2.5f)
                 ) {
-                    GlassIconButton(
-                        icon = Icons.Default.Share,
-                        onClick = {
-                            performHaptic(view, "light")
-                            viewModel.shareWithDb(context)
-                        },
-                        modifier = Modifier,
-                        hazeState = settingsHazeState,
-                        size = 58.dp,
-                        iconSize = 29.dp,
-                        backgroundColor = Color.Transparent,
-                        contentDescription = "Share",
-                        tint = textC,
-                        iconOffsetX = (-2).dp
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(58.dp)
+                            .drawBackdrop(
+                                backdrop = backdrop,
+                                shape = { CircleShape },
+                                effects = {
+                                    vibrancy()
+                                    blur(32f.dp.toPx())
+                                    lens(8f.dp.toPx(), 48f.dp.toPx())
+                                },
+                                onDrawSurface = { drawRect(Color.White.copy(alpha = 0.1f)) }
+                            )
+                            .clip(CircleShape)
+                            .border(0.5.dp, Color.White.copy(alpha = 0.3f), CircleShape)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = ripple(),
+                                onClick = {
+                                    performHaptic(view, "light")
+                                    viewModel.shareWithDb(context)
+                                }
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Share",
+                            tint = textC,
+                            modifier = Modifier
+                                .size(29.dp)
+                                .offset(x = (-2).dp)
+                        )
+                    }
                 }
             }
         }
@@ -430,64 +463,91 @@ fun SettingsScreen(
     if (showContactSheet) lastSheetKey = "card_contact"
     if (showUpdateChangelogSheet) lastSheetKey = "card_update_changelog"
 
+    val overlayOpen = showCloudSheet || showContactSheet || showUpdateChangelogSheet
+
     AnimatedVisibility(
         modifier = Modifier.fillMaxSize(),
-        visible = showCloudSheet || showContactSheet || showUpdateChangelogSheet,
-        enter = fadeIn(animationSpec = tween(300)),
-        exit = fadeOut(animationSpec = tween(250))
+        visible = overlayOpen,
+        enter = SettingsOverlayMotion.scrimFadeIn,
+        exit = SettingsOverlayMotion.scrimFadeOut,
     ) {
-        with(sharedTransitionScope) {
-            val sharedModifier = Modifier.sharedBounds(
-                sharedContentState = rememberSharedContentState(key = lastSheetKey),
-                animatedVisibilityScope = this@AnimatedVisibility,
-                resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
-                clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(24.dp))
-            )
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.35f))
-                        .clickable(
-                            indication = null,
-                            interactionSource = remember { MutableInteractionSource() }
-                        ) {
-                            showCloudSheet = false
-                            showContactSheet = false
-                            showUpdateChangelogSheet = false
-                        }
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.35f))
+                .clickable(
+                    indication = null,
+                    interactionSource = remember { MutableInteractionSource() }
+                ) {
+                    showCloudSheet = false
+                    showContactSheet = false
+                    showUpdateChangelogSheet = false
+                }
+        )
+    }
+    AnimatedVisibility(
+        modifier = Modifier.fillMaxSize(),
+        visible = overlayOpen,
+        enter = SettingsOverlayMotion.panelFadeInScaleIn(),
+        exit = SettingsOverlayMotion.panelFadeOutScaleOut(),
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            with(sharedTransitionScope) {
+                val sharedModifier = Modifier.sharedBounds(
+                    sharedContentState = rememberSharedContentState(key = lastSheetKey),
+                    animatedVisibilityScope = this@AnimatedVisibility,
+                    resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
                 )
+                val panelInDarkTheme = isAppInDarkTheme()
+                val panelShadowShape = when (lastSheetKey) {
+                    "card_contact" -> RoundedCornerShape(28.dp)
+                    else -> RoundedCornerShape(24.dp)
+                }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth(0.9f)
                         .wrapContentHeight()
-                        .clickable(
-                            indication = null,
-                            interactionSource = remember { MutableInteractionSource() }
-                        ) {}
+                        .softPlateShadowForLightSheet(
+                            panelInDarkTheme,
+                            panelShadowShape,
+                            OverlayThemeTokens.SettingsDialogPanelShadowElevation,
+                        ),
                 ) {
-                    when (lastSheetKey) {
-                        "card_cloud" -> CloudSettingsSheet(
-                            onDismiss = { showCloudSheet = false },
-                            onLogout = {
-                                showCloudSheet = false
-                                dropboxSyncManager.logout()
-                                navController.navigateToWelcome()
-                            },
-                            sharedModifier = sharedModifier
-                        )
-                        "card_contact" -> ContactSheet(
-                            onDismiss = { showContactSheet = false },
-                            sharedModifier = sharedModifier
-                        )
-                        "card_update_changelog" -> UpdateChangelogSheet(
-                            viewModel = viewModel,
-                            onDismiss = { showUpdateChangelogSheet = false },
-                            sharedModifier = sharedModifier
-                        )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(
+                                indication = null,
+                                interactionSource = remember { MutableInteractionSource() },
+                                onClick = {},
+                            ),
+                    ) {
+                        when (lastSheetKey) {
+                            "card_cloud" -> CloudSettingsSheet(
+                                onDismiss = { showCloudSheet = false },
+                                onLogout = {
+                                    showCloudSheet = false
+                                    dropboxSyncManager.logout()
+                                    navController.navigateToWelcome()
+                                },
+                                sharedModifier = sharedModifier,
+                            )
+
+                            "card_contact" -> ContactSheet(
+                                onDismiss = { showContactSheet = false },
+                                sharedModifier = sharedModifier,
+                            )
+
+                            "card_update_changelog" -> UpdateChangelogSheet(
+                                viewModel = viewModel,
+                                onDismiss = { showUpdateChangelogSheet = false },
+                                installPermissionLauncher = installPermissionLauncher,
+                                sharedModifier = sharedModifier,
+                            )
+                        }
                     }
                 }
             }
@@ -514,6 +574,7 @@ private fun DeveloperSettingsSection(
         if (isDark) OverlayThemeTokens.TileBackgroundDark
         else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
     val accent = if (isDark) BrandBlueSoft else BrandRed
+    val sectionBorderColor = if (isDark) accent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
     val cornerRadius by animateDpAsState(
         targetValue = if (expanded) 24.dp else 999.dp,
         animationSpec = tween(300),
@@ -524,7 +585,7 @@ private fun DeveloperSettingsSection(
         shape = shape,
         color = tileBg,
         tonalElevation = 0.dp,
-        border = BorderStroke(1.5.dp, accent),
+        border = BorderStroke(1.5.dp, sectionBorderColor),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -720,6 +781,8 @@ fun rememberSettingsTiles(
     uiState.updateStatus,
     uiState.currentVersion,
     uiState.latestDownloadUrl,
+    uiState.latestApkSizeBytes,
+    uiState.isApkDownloading,
     strings,
     context
 ) {
@@ -787,18 +850,10 @@ fun rememberSettingsTiles(
             icon = Icons.Outlined.SystemUpdate,
             accentColor = RateColor4,
             span = 1,
-            onClick = {
-                when (uiState.updateStatus) {
-                    AppUpdateStatus.IDLE, AppUpdateStatus.ERROR -> viewModel.checkAppUpdate(context)
-                    AppUpdateStatus.UPDATE_AVAILABLE -> uiState.latestDownloadUrl?.let { url ->
-                        context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
-                    }
-                    else -> {}
-                }
-            },
+            onClick = { },
             updateStatus = uiState.updateStatus,
             currentVersion = uiState.currentVersion,
-            latestDownloadUrl = uiState.latestDownloadUrl
+            latestDownloadUrl = uiState.latestDownloadUrl,
         ),
         // 1 длинный
         DetailTile(
@@ -825,8 +880,8 @@ fun rememberSettingsTiles(
 }
 
 /**
- * Сегментированный переключатель в виде «капсула внутри капсулы» (как на фото 3).
- * Без галочек, с анимацией перемещения внутренней капсулы.
+ * Сегментированный переключатель в плоском стиле:
+ * спокойный контейнер, мягкий акцент активного сегмента и минимальная обводка.
  */
 @Composable
 fun CapsuleChipRow(
@@ -840,21 +895,41 @@ fun CapsuleChipRow(
     val containerHeight = 44.dp
     val containerCornerRadius = containerHeight / 2
     val containerShape = RoundedCornerShape(containerCornerRadius)
+    val isDark = isAppInDarkTheme()
+    val unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (isDark) 0.92f else 0.86f)
+    val selectedContentColor = Color.White
+    val containerColor = if (isDark) {
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f)
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+    }
+    val selectedPillColor = if (isDark) {
+        accentColor.copy(alpha = 0.9f)
+    } else {
+        Color(0xFF2C2C2E)
+    }
+    val selectedPillBorder = if (isDark) {
+        Color.White.copy(alpha = 0.2f)
+    } else {
+        Color.Black.copy(alpha = 0.08f)
+    }
 
     BoxWithConstraints(
         modifier = modifier
             .height(containerHeight)
             .clip(containerShape)
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f))
+            .background(containerColor)
             .border(
                 width = 1.dp,
-                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                color = MaterialTheme.colorScheme.outline.copy(alpha = if (isDark) 0.36f else 0.24f),
                 shape = containerShape
             )
     ) {
         val innerWidth = maxWidth
         val segmentWidth = innerWidth / options.size
-        val pillCornerRadius = containerHeight / 2
+        val pillInsetHorizontal = 2.dp
+        val pillInsetVertical = 3.dp
+        val pillCornerRadius = (containerHeight - pillInsetVertical * 2) / 2
         val innerShape = RoundedCornerShape(pillCornerRadius)
         val pillOffset by animateDpAsState(
             targetValue = segmentWidth * selectedIndex,
@@ -869,13 +944,10 @@ fun CapsuleChipRow(
                     .offset(x = pillOffset)
                     .width(segmentWidth)
                     .fillMaxHeight()
+                    .padding(pillInsetHorizontal, pillInsetVertical)
                     .clip(innerShape)
-                    .background(accentColor.copy(alpha = 0.22f))
-                    .border(
-                        width = 1.dp,
-                        color = accentColor.copy(alpha = 0.35f),
-                        shape = innerShape
-                    )
+                    .background(selectedPillColor, innerShape)
+                    .border(1.dp, selectedPillBorder, innerShape),
             )
             Row(
                 modifier = Modifier.fillMaxSize(),
@@ -898,7 +970,7 @@ fun CapsuleChipRow(
                                 opt.icon,
                                 contentDescription = contentDescription(index),
                                 modifier = Modifier.size(20.dp),
-                                tint = if (selectedIndex == index) accentColor else MaterialTheme.colorScheme.onSurfaceVariant
+                                tint = if (selectedIndex == index) selectedContentColor else unselectedContentColor
                             )
                         } else {
                             Text(
@@ -906,7 +978,7 @@ fun CapsuleChipRow(
                                 fontFamily = SnProFamily,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
-                                color = if (selectedIndex == index) accentColor else MaterialTheme.colorScheme.onSurfaceVariant
+                                color = if (selectedIndex == index) selectedContentColor else unselectedContentColor
                             )
                         }
                     }
@@ -982,6 +1054,8 @@ fun ToggleTileItem(
     strings: UiStrings,
     onPerformHaptic: () -> Unit
 ) {
+    val isDark = isAppInDarkTheme()
+    val iconWell = settingsIconWellColors(isDark, tile.accentColor)
     BaseTile(tile = tile, modifier = Modifier) {
         Column(modifier = Modifier.fillMaxSize()) {
             tile.icon?.let { icon ->
@@ -989,10 +1063,10 @@ fun ToggleTileItem(
                     modifier = Modifier
                         .size(40.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(settingsTileIconBoxBg()),
+                        .background(iconWell.background),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(icon, contentDescription = null, tint = tile.accentColor, modifier = Modifier.size(22.dp))
+                    Icon(icon, contentDescription = null, tint = iconWell.tint, modifier = Modifier.size(22.dp))
                 }
                 Spacer(Modifier.height(8.dp))
             }
@@ -1046,6 +1120,8 @@ fun ActionTileItem(
     strings: UiStrings,
     onPerformHaptic: () -> Unit
 ) {
+    val isDark = isAppInDarkTheme()
+    val iconWell = settingsIconWellColors(isDark, tile.accentColor)
     BaseTile(
         tile = tile,
         modifier = Modifier.clickable(
@@ -1059,10 +1135,10 @@ fun ActionTileItem(
                     modifier = Modifier
                         .size(40.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(settingsTileIconBoxBg()),
+                        .background(iconWell.background),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(icon, contentDescription = null, tint = tile.accentColor, modifier = Modifier.size(22.dp))
+                    Icon(icon, contentDescription = null, tint = iconWell.tint, modifier = Modifier.size(22.dp))
                 }
                 Spacer(Modifier.height(8.dp))
             }
@@ -1106,6 +1182,8 @@ fun DetailTileItem(
     animatedVisibilityScope: AnimatedVisibilityScope,
     onPerformHaptic: () -> Unit
 ) {
+    val isDark = isAppInDarkTheme()
+    val iconWell = settingsIconWellColors(isDark, tile.accentColor)
     with(sharedTransitionScope) {
         BaseTile(
             tile = tile,
@@ -1131,10 +1209,10 @@ fun DetailTileItem(
                         modifier = Modifier
                             .size(40.dp)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(settingsTileIconBoxBg()),
+                            .background(iconWell.background),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(icon, contentDescription = null, tint = tile.accentColor, modifier = Modifier.size(22.dp))
+                        Icon(icon, contentDescription = null, tint = iconWell.tint, modifier = Modifier.size(22.dp))
                     }
                     Spacer(Modifier.height(8.dp))
                 }
@@ -1166,7 +1244,8 @@ fun DetailTileItem(
                     imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                     contentDescription = null,
                     modifier = Modifier.size(20.dp),
-                    tint = tile.accentColor
+                    tint = if (isDark) tile.accentColor
+                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                 )
             }
         }

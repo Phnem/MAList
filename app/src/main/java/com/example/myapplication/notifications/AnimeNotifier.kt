@@ -11,6 +11,9 @@ import com.example.myapplication.MainActivity
 import com.example.myapplication.data.models.AnimeUpdate
 import com.example.myapplication.receiver.AnimeUpdateReceiver
 
+/** Id уведомления в шторке (совпадает с `NotificationManager.cancel` из приложения). */
+fun animeUpdateNotificationId(animeId: String): Int = animeId.hashCode()
+
 /** Абстракция для тестирования и инверсии зависимостей (SOLID). */
 interface AnimeNotifier {
     fun showUpdateNotification(update: AnimeUpdate)
@@ -41,7 +44,7 @@ class AnimeNotifierImpl(
     }
 
     override fun showUpdateNotification(update: AnimeUpdate) {
-        val notifId = update.animeId.hashCode()
+        val notifId = animeUpdateNotificationId(update.animeId)
 
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK

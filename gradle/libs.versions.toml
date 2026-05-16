@@ -17,6 +17,7 @@ markdownRenderer = "0.39.2"
 composeBom = "2025.12.00"
 navigationCompose = "2.9.7"
 haze = "1.7.2"
+backdrop = "1.0.0"
 coil = "3.3.0"
 lottie = "6.6.2"
 
@@ -70,6 +71,7 @@ lottie-compose = { module = "com.airbnb.android:lottie-compose", version.ref = "
 # --- Haze ---
 haze = { module = "dev.chrisbanes.haze:haze", version.ref = "haze" }
 haze-materials = { module = "dev.chrisbanes.haze:haze-materials", version.ref = "haze" }
+backdrop = { module = "io.github.kyant0:backdrop", version.ref = "backdrop" }
 
 # --- Markdown renderer ---
 markdown-renderer = { module = "com.mikepenz:multiplatform-markdown-renderer", version.ref = "markdownRenderer" }

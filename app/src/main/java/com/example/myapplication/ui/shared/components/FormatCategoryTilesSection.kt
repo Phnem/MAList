@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -44,6 +45,7 @@ import com.example.myapplication.isAppInDarkTheme
 import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.ui.shared.icons.HeroCheck
 import com.example.myapplication.ui.shared.theme.SnProFamily
+import com.example.myapplication.ui.shared.theme.lightTileShadowInLightTheme
 import org.koin.compose.koinInject
 
 /**
@@ -102,7 +104,7 @@ fun FormatCategoryTilesWithGenres(
     val tileShape = RoundedCornerShape(14.dp)
     val tileBg =
         if (isDark) scheme.surfaceContainerHigh.copy(alpha = 0.42f)
-        else scheme.surfaceVariant.copy(alpha = 0.55f)
+        else scheme.surfaceVariant
 
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
@@ -222,14 +224,19 @@ fun FormatCategoryGenreChip(
         if (selected) accentColor
         else scheme.onSurface
     val bg =
-        if (selected) accentColor.copy(alpha = 0.15f)
-        else scheme.surfaceContainerHighest.copy(alpha = if (isDark) 0.35f else 0.5f)
+        when {
+            selected && isDark -> accentColor.copy(alpha = 0.15f)
+            selected && !isDark -> lerp(scheme.surfaceContainerHighest, accentColor, 0.22f)
+            isDark -> scheme.surfaceContainerHighest.copy(alpha = 0.35f)
+            else -> scheme.surfaceContainerHighest
+        }
     val strokeColor =
         if (selected) accentColor.copy(alpha = 0.45f)
         else scheme.outline.copy(alpha = if (isDark) 0.2f else 0.22f)
 
     Row(
         modifier = modifier
+            .lightTileShadowInLightTheme(isDark, shape)
             .clip(shape)
             .background(bg)
             .border(1.dp, strokeColor, shape)
@@ -301,6 +308,7 @@ fun FormatCategoryTile(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .lightTileShadowInLightTheme(isDark, tileShape)
                 .clip(tileShape)
                 .background(tileBg)
                 .border(1.5.dp, animatedBorderColor, tileShape)
@@ -335,7 +343,7 @@ fun FormatCategoryTile(
         if (selectedCount > 0) {
             val badgeBg =
                 if (isDark) accentColor.copy(alpha = 0.92f)
-                else scheme.surface.copy(alpha = 0.98f)
+                else scheme.surface
             val badgeCheckTint =
                 if (isDark) Color.White.copy(alpha = 0.95f)
                 else scheme.onSurface.copy(alpha = 0.92f)

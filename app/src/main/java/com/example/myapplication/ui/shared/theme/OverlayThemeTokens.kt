@@ -44,8 +44,29 @@ internal object OverlayThemeTokens {
     /** Базовый radial glow на тёмных плитках оверлея ([tileGlow] по умолчанию совпадает). */
     const val TileGlowAlphaDark = 0.15f
 
-    /** Radial glow на светлых плитках — сильнее, чем на тёмных, иначе на surface не читается. */
-    const val TileGlowAlphaLight = 0.24f
+    /** В светлой теме glow отключен, читаемость обеспечивается рамкой и мягкой тенью. */
+    const val TileGlowAlphaLight = 0f
+
+    /** Мягкая тень под плитками в светлой теме. */
+    val LightTileShadowElevation = 8.dp
+
+    /**
+     * Плитки сеток внутри светлых оверлеев (сортировка, уведомления, статистика):
+     * мягкая тень с [clip] и приглушёнными цветами — без «полос» при анимации открытия панели.
+     */
+    val SortOverlayGridLightShadowElevation = 3.dp
+
+    /**
+     * Тень для карточек внутри полупрозрачного листа (обновление и т.п.): слабее, чем у плиток сетки,
+     * чтобы не было «грязного» ореола на кремовом фоне.
+     */
+    val UpdateSheetNestedShadowElevation = 3.dp
+
+    /** Тень целого модального листа (облако, контакт): чуть сильнее вложенных плашек. */
+    val SettingsDialogPanelShadowElevation = 5.dp
+
+    /** Мягкая тень под карточками/оверлеями в светлой теме. */
+    val LightCardShadowElevation = 8.dp
 
     /** Кнопка «Применить»: тёмная подложка + приглушённый текст без «кислотного» cyan. */
     val ApplyButtonContainerDark = Color(0xFF1C2633)
@@ -60,19 +81,20 @@ internal object OverlayThemeTokens {
     /** Опорная альфа для glass-edge на тёмной теме (верх/левый угол блика). */
     const val GlassEdgeAlphaDark = 0.22f
 
-    /** Опорная альфа для glass-edge на светлой теме. */
-    const val GlassEdgeAlphaLight = 0.7f
+    /** В light-theme внутренний glass-edge отключаем: остаётся рамка + внешняя тень. */
+    const val GlassEdgeAlphaLight = 0f
 
     /** Финальная альфа в направлении угасания градиента (тёмная тема). */
     const val GlassEdgeFadeAlphaDark = 0.04f
 
     /** Финальная альфа в направлении угасания градиента (светлая). */
-    const val GlassEdgeFadeAlphaLight = 0.18f
+    const val GlassEdgeFadeAlphaLight = 0f
 
     /** Лёгкий вертикальный «тонировочный» fill поверх panelBg для имитации толщины стекла. */
     const val GlassFillTopAlphaDark = 0.06f
     const val GlassFillBottomAlphaDark = 0.0f
-    const val GlassFillTopAlphaLight = 0.55f
+    /** В light-theme убираем внутренний «налив», чтобы не было тени/пятна внутри плитки. */
+    const val GlassFillTopAlphaLight = 0f
     const val GlassFillBottomAlphaLight = 0.0f
 
     // ============================================================

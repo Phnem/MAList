@@ -69,11 +69,27 @@ val RussianStrings = UiStrings(
     themeDark = "Тёмная",
     themeSystem = "Системная",
     checkForUpdateTitle = "Обновление приложения",
-    checkButtonText = "Проверить версию",
+    checkButtonText = "Проверить",
     updateTileChecking = "Проверка...",
     updateTileAvailable = "Доступно обновление",
     updateTileUpToDate = "Установлена последняя версия",
     updateTileVersionLabel = "Версия",
+    updateTileCardTitle = "Обновление",
+    updateTileNewVersionSubtitle = "Доступна новая версия",
+    updateDialogTitle = "Доступно обновление",
+    updateDialogDescription = "Доступна версия %1${'$'}s (%2${'$'}s). Хотите обновить приложение?",
+    updateApkSizeUnit = "МБ",
+    updateWhatsNewTitle = "Что нового",
+    updateWhatsNewFallback = "Улучшения производительности и исправления ошибок",
+    updateInstallLater = "Установить позже",
+    updateInstallNow = "Обновить",
+    updateDownloadProgressFormat = "Загрузка %1${'$'}d%%",
+    updateChangelogEmpty = "Список изменений пуст",
+    updateChangelogLoadError = "Не удалось загрузить список изменений",
+    updateCloseCd = "Закрыть",
+    updateOpenInstallPermission = "Разрешить установку из других источников",
+    updateSheetNoUpdateDetail = "Установлено: %1${'$'}s. Последний релиз на GitHub совпадает с вашей сборкой (%2${'$'}s). Стороннего обновления нет.",
+    updateRetryCheck = "Проверить снова",
     contactTitle = "Связь со мной",
     contactSubtitle = "Нашли баг или есть идея?",
     contactSupportSubtitle = "Нашли баг или есть идея? Напишите мне!",
@@ -98,7 +114,7 @@ val RussianStrings = UiStrings(
     nottifBadgeAutomated = "АВТО",
     nottifBadgeManual = "ВРУЧНУЮ",
     nottifStatusConnected = "Подключено",
-    nottifStatusDisconnected = "Не подключено",
+    nottifStatusDisconnected = "Отключено",
     nottifAccountSignedIn = "Выполнен вход",
     nottifAccountGuest = "Не в аккаунте",
     nottifCloseCd = "Закрыть",
@@ -299,11 +315,27 @@ val EnglishStrings = UiStrings(
     themeDark = "Dark",
     themeSystem = "System",
     checkForUpdateTitle = "App Update",
-    checkButtonText = "Check Version",
+    checkButtonText = "Check now",
     updateTileChecking = "Checking...",
     updateTileAvailable = "Update available",
     updateTileUpToDate = "Up to date",
     updateTileVersionLabel = "Version",
+    updateTileCardTitle = "Update",
+    updateTileNewVersionSubtitle = "New version available",
+    updateDialogTitle = "Update available",
+    updateDialogDescription = "Version %1${'$'}s (%2${'$'}s) is available. Update the app now?",
+    updateApkSizeUnit = "MB",
+    updateWhatsNewTitle = "What’s new",
+    updateWhatsNewFallback = "Performance improvements and bug fixes",
+    updateInstallLater = "Install later",
+    updateInstallNow = "Update",
+    updateDownloadProgressFormat = "Downloading %1${'$'}d%%",
+    updateChangelogEmpty = "No changelog for this release",
+    updateChangelogLoadError = "Could not load the changelog",
+    updateCloseCd = "Close",
+    updateOpenInstallPermission = "Allow installing from this source",
+    updateSheetNoUpdateDetail = "Installed: %1${'$'}s. The latest GitHub release matches what you already have (%2${'$'}s). There is nothing new to pull.",
+    updateRetryCheck = "Check again",
     contactTitle = "Contact me",
     contactSubtitle = "Found a bug or have an idea?",
     contactSupportSubtitle = "Found a bug or have an idea? Let me know!",
@@ -328,7 +360,7 @@ val EnglishStrings = UiStrings(
     nottifBadgeAutomated = "AUTO",
     nottifBadgeManual = "MANUAL",
     nottifStatusConnected = "Connected",
-    nottifStatusDisconnected = "Disconnected",
+    nottifStatusDisconnected = "Disabled",
     nottifAccountSignedIn = "Signed in",
     nottifAccountGuest = "Not signed in",
     nottifCloseCd = "Close",
@@ -462,6 +494,21 @@ val EnglishStrings = UiStrings(
     listSyncLoadingSubtitle = "SYSTEM SYNCING",
     listSyncLoadingFooter = "Please don't close the app until the process finishes"
 )
+
+fun appLocale(language: AppLanguage): java.util.Locale = when (language) {
+    AppLanguage.RU -> java.util.Locale.forLanguageTag("ru")
+    AppLanguage.EN -> java.util.Locale.US
+}
+
+fun formatApkMegabytesNumber(bytes: Long, language: AppLanguage): String {
+    val mb = bytes.toFloat() / (1024f * 1024f)
+    return String.format(appLocale(language), "%.1f", mb)
+}
+
+fun formatApkSizeLabel(bytes: Long?, language: AppLanguage, sizeUnit: String): String? {
+    if (bytes == null || bytes <= 0L) return null
+    return "${formatApkMegabytesNumber(bytes, language)} $sizeUnit"
+}
 
 fun getStrings(lang: AppLanguage): UiStrings = when(lang) {
     AppLanguage.RU -> RussianStrings

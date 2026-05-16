@@ -272,6 +272,23 @@ class AnimeLocalDataSource(
         mirrorCoordinator.requestExportIfEnabled()
     }
 
+    fun observeUpdates(): Flow<List<AnimeUpdate>> = factory.dbConnectionTrigger.flatMapLatest {
+        db().animeQueries.getAllUpdates()
+            .asFlow()
+            .mapToList(Dispatchers.IO)
+            .map { rows ->
+                rows.map { row ->
+                    AnimeUpdate(
+                        animeId = row.anime_id,
+                        title = row.title,
+                        currentEpisodes = row.current_episodes.toInt(),
+                        newEpisodes = row.new_episodes.toInt(),
+                        source = row.source,
+                    )
+                }
+            }
+    }
+
     fun getUpdates(): List<AnimeUpdate> {
         return db().animeQueries.getAllUpdates()
             .executeAsList()

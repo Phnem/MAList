@@ -368,8 +368,15 @@ class VetroApiService(
             val htmlUrl = root["html_url"]?.jsonPrimitive?.content ?: ""
             val body = root["body"]?.jsonPrimitive?.content
             val assets = root["assets"]?.jsonArray
-            val downloadUrl = assets?.firstOrNull()?.jsonObject?.get("browser_download_url")?.jsonPrimitive?.content ?: ""
-            if (tagName.isNotEmpty()) GithubReleaseInfo(tagName, htmlUrl, downloadUrl, body) else null
+            val assetObj = assets?.firstOrNull()?.jsonObject
+            val downloadUrl = assetObj?.get("browser_download_url")?.jsonPrimitive?.content ?: ""
+            val sizeBytes = assetObj?.get("size")?.jsonPrimitive?.content?.toLongOrNull() ?: 0L
+            val apkAsset = if (downloadUrl.isNotEmpty()) {
+                GithubAsset(browserDownloadUrl = downloadUrl, size = sizeBytes)
+            } else {
+                null
+            }
+            if (tagName.isNotEmpty()) GithubReleaseInfo(tagName, htmlUrl, downloadUrl, body, apkAsset) else null
         }
     }
 

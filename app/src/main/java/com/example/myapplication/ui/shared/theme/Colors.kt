@@ -1,16 +1,20 @@
 package com.example.myapplication.ui.shared.theme
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 
 val BrandBlue = Color(0xFF007AFF)
 val BrandBlueSoft = Color(0xFF5AC8FA)
 val BrandRed = Color(0xFFC62828)
 
 /** Акценты плиток настроек */
-val SettingsAccentLangDarkBlue = Color(0xFF1565C0)
-val SettingsAccentThemeDarkGreen = Color(0xFF21B1A0)
+/** Язык — яркий голубой акцент для слайдера */
+val SettingsAccentLangDarkBlue = Color(0xFF29B6F6)
+/** Тема — зелёный акцент слайдера */
+val SettingsAccentThemeDarkGreen = Color(0xFF34C85A)
 val SettingsAccentCloudLightBlue = Color(0xFF81D4FA)
-val SettingsAccentContentOrange = Color(0xFFFF9500)
+/** Контент — приглушённый оранжевый (не неон как #FF9500) */
+val SettingsAccentContentOrange = Color(0xFFE65100)
 val SettingsAccentContactLightGreen = Color(0xFF81C784)
 /** Акцент плитки доната (кофейный / тёплый) */
 val SettingsAccentDonationCoffee = Color(0xFF8D6E63)
@@ -40,12 +44,47 @@ val DarkSurfaceVariant = Color(0xFF30363D)
 val DarkTextPrimary = Color(0xFFF2F2F7)
 val DarkTextSecondary = Color(0xFF9898A0)
 val DarkBorder = Color(0xFFFFFFFF).copy(alpha = 0.08f)
-val LightBackground = Color(0xFFF4EBDD)
-val LightSurface = Color(0xFFFFF9F0)
-val LightSurfaceVariant = Color(0xFFEFE4D3)
+/** Нейтральная «чистая» светлая палитра (без тёплого крема). */
+val LightBackground = Color(0xFFF7F7F8)
+val LightSurface = Color(0xFFFFFFFF)
+val LightSurfaceVariant = Color(0xFFF0F0F3)
 val LightTextPrimary = Color(0xFF1C1C1E)
 val LightTextSecondary = Color(0xFF636366)
-val LightBorder = Color(0xFFE6D8C5)
+val LightBorder = Color(0xFFE0E0E6)
+
+/** Пастельная подложка иконки + tint с достаточным контрастом на светлой теме. */
+data class IconWellColors(
+    val background: Color,
+    val tint: Color,
+)
+
+private fun Color.relativeLuminance(): Float {
+    fun linearize(c: Float): Float =
+        if (c <= 0.04045f) c / 12.92f
+        else StrictMath.pow(((c + 0.055f) / 1.055f).toDouble(), 2.4).toFloat()
+    val r = linearize(red)
+    val g = linearize(green)
+    val b = linearize(blue)
+    return 0.2126f * r + 0.7152f * g + 0.0722f * b
+}
+
+fun iconWellColorsLight(accent: Color): IconWellColors {
+    val background = lerp(Color.White, accent, 0.18f)
+    val lum = accent.relativeLuminance()
+    val tint = when {
+        lum > 0.62f -> lerp(accent, Color(0xFF1A1A1C), 0.62f)
+        lum > 0.38f -> lerp(accent, Color(0xFF1A1A1C), 0.42f)
+        else -> lerp(accent, Color(0xFF1A1A1C), 0.22f)
+    }
+    return IconWellColors(background = background, tint = tint)
+}
+
+fun settingsIconWellColors(isDark: Boolean, accent: Color): IconWellColors =
+    if (isDark) {
+        IconWellColors(background = OverlayThemeTokens.TileIconBgDark, tint = accent)
+    } else {
+        iconWellColorsLight(accent)
+    }
 
 fun getRatingColor(rating: Int): Color {
     return when (rating) {

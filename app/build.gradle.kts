@@ -160,6 +160,7 @@ dependencies {
     implementation(libs.androidx.security.crypto)
     implementation(libs.haze)
     implementation(libs.haze.materials)
+    implementation(libs.backdrop)
 
     // 5. AndroidX Core
     implementation(libs.androidx.core.ktx)

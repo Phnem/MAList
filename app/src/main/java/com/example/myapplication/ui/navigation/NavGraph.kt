@@ -37,11 +37,11 @@ import org.koin.compose.koinInject
 @Composable
 fun AppNavGraph(
     navController: NavHostController,
+    settingsViewModel: SettingsViewModel,
     startDestination: Any = SplashRoute
 ) {
     val homeViewModel: HomeViewModel = koinViewModel()
     val addEditViewModel: AddEditViewModel = koinViewModel()
-    val settingsViewModel: SettingsViewModel = koinViewModel()
     val inspectViewModel: InspectViewModel = koinViewModel()
     val dropboxSyncManager: DropboxSyncManager = koinInject()
     val context = LocalContext.current

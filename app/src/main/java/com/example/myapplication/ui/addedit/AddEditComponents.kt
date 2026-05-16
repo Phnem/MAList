@@ -102,7 +102,7 @@ fun SharedTransitionScope.AddEditCoverPhotoSlot(
     val placeholderBg = if (isDark) {
         scheme.surface.copy(alpha = 0.38f)
     } else {
-        scheme.surfaceVariant.copy(alpha = 0.5f)
+        scheme.surfaceVariant
     }
     val corner = 28.dp
     val shape = RoundedCornerShape(corner)
@@ -110,6 +110,7 @@ fun SharedTransitionScope.AddEditCoverPhotoSlot(
     val slotModifier = modifier
         .fillMaxWidth(0.5f)
         .aspectRatio(9f / 16f)
+        .addEditMenuTileShadow(isDark, shape)
         .clip(shape)
         .then(
             if (hasImage) Modifier.background(coverBrush)
@@ -170,6 +171,7 @@ fun SharedTransitionScope.AddEditCoverPhotoSlot(
                 Box(
                     modifier = Modifier
                         .size(44.dp)
+                        .addEditMenuTileShadow(isDark, RoundedCornerShape(12.dp))
                         .clip(RoundedCornerShape(12.dp))
                         .background(
                             if (isDark) scheme.surfaceContainerHigh.copy(alpha = 0.85f)
@@ -207,34 +209,41 @@ fun SharedTransitionScope.AddEditCoverPhotoSlot(
                     overflow = TextOverflow.Ellipsis
                 )
                 Spacer(Modifier.height(22.dp))
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = if (isDark) scheme.surfaceContainerHigh
-                    else scheme.surfaceContainerHighest,
-                    shadowElevation = 0.dp,
-                    tonalElevation = 0.dp
+                val addCoverShape = RoundedCornerShape(14.dp)
+                Box(
+                    modifier = Modifier
+                        .addEditMenuTileShadow(isDark, addCoverShape)
+                        .clip(addCoverShape)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    Surface(
+                        shape = addCoverShape,
+                        color = if (isDark) scheme.surfaceContainerHigh
+                        else scheme.surfaceContainerHighest,
+                        shadowElevation = 0.dp,
+                        tonalElevation = 0.dp
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = null,
-                            tint = scheme.onSurface,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Text(
-                            text = placeholderButtonLabel,
-                            style = MaterialTheme.typography.labelLarge.copy(
-                                fontFamily = SnProFamily,
-                                fontWeight = FontWeight.SemiBold
-                            ),
-                            color = scheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = null,
+                                tint = scheme.onSurface,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = placeholderButtonLabel,
+                                style = MaterialTheme.typography.labelLarge.copy(
+                                    fontFamily = SnProFamily,
+                                    fontWeight = FontWeight.SemiBold
+                                ),
+                                color = scheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
             }
@@ -308,6 +317,7 @@ fun PillTextField(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .addEditMenuTileShadow(isDark, RoundedCornerShape(50))
                     .clip(RoundedCornerShape(50))
                     .background(bgColor)
                     .then(
@@ -401,6 +411,7 @@ fun AddEditEpisodeQuickSelect(
                 Box(
                     modifier = Modifier
                         .size(44.dp)
+                        .addEditMenuTileShadow(isDark, CircleShape)
                         .then(
                             if (isSelected) Modifier.neonGlow(
                                 color = AddEditColors.QuickSelectGlow,
@@ -417,7 +428,10 @@ fun AddEditEpisodeQuickSelect(
                                 )
                             } else {
                                 Modifier
-                                    .background(Color.Transparent)
+                                    .background(
+                                        if (isDark) Color.Transparent
+                                        else scheme.surfaceContainerHighest
+                                    )
                                     .border(
                                         width = 1.dp,
                                         color = if (isDark) Color.White.copy(alpha = 0.35f)

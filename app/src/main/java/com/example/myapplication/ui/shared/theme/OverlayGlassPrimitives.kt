@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -39,17 +40,18 @@ import androidx.compose.ui.unit.dp
  * стекла поверх surface (0.55 → 0).
  */
 fun Modifier.glassFill(isDark: Boolean): Modifier = this.then(
-    Modifier.background(
-        Brush.verticalGradient(
-            colors = if (isDark) listOf(
-                Color.White.copy(alpha = OverlayThemeTokens.GlassFillTopAlphaDark),
-                Color.White.copy(alpha = OverlayThemeTokens.GlassFillBottomAlphaDark)
-            ) else listOf(
-                Color.White.copy(alpha = OverlayThemeTokens.GlassFillTopAlphaLight),
-                Color.White.copy(alpha = OverlayThemeTokens.GlassFillBottomAlphaLight)
+    if (!isDark) {
+        Modifier
+    } else {
+        Modifier.background(
+            Brush.verticalGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = OverlayThemeTokens.GlassFillTopAlphaDark),
+                    Color.White.copy(alpha = OverlayThemeTokens.GlassFillBottomAlphaDark)
+                )
             )
         )
-    )
+    }
 )
 
 /**
@@ -62,32 +64,24 @@ fun Modifier.glassEdge(
     isDark: Boolean,
     width: Dp = OverlayThemeTokens.GlassEdgeWidth
 ): Modifier = this.drawWithContent {
+    if (!isDark) {
+        drawContent()
+        return@drawWithContent
+    }
     drawContent()
     val strokeWidth = width.toPx()
     val cornerPx = (cornerRadius.toPx() - strokeWidth / 2f).coerceAtLeast(0f)
     val topLeft = Offset(strokeWidth / 2f, strokeWidth / 2f)
     val rectSize = Size(size.width - strokeWidth, size.height - strokeWidth)
-    val edgeBrush = if (isDark) {
-        Brush.linearGradient(
-            colors = listOf(
-                Color.White.copy(alpha = OverlayThemeTokens.GlassEdgeAlphaDark),
-                Color.White.copy(alpha = (OverlayThemeTokens.GlassEdgeAlphaDark * 0.5f)),
-                Color.White.copy(alpha = OverlayThemeTokens.GlassEdgeFadeAlphaDark)
-            ),
-            start = Offset(0f, 0f),
-            end = Offset(size.width, size.height)
-        )
-    } else {
-        Brush.linearGradient(
-            colors = listOf(
-                Color.White.copy(alpha = OverlayThemeTokens.GlassEdgeAlphaLight),
-                Color.White.copy(alpha = (OverlayThemeTokens.GlassEdgeAlphaLight * 0.55f)),
-                Color.White.copy(alpha = OverlayThemeTokens.GlassEdgeFadeAlphaLight)
-            ),
-            start = Offset(0f, 0f),
-            end = Offset(size.width, size.height)
-        )
-    }
+    val edgeBrush = Brush.linearGradient(
+        colors = listOf(
+            Color.White.copy(alpha = OverlayThemeTokens.GlassEdgeAlphaDark),
+            Color.White.copy(alpha = (OverlayThemeTokens.GlassEdgeAlphaDark * 0.5f)),
+            Color.White.copy(alpha = OverlayThemeTokens.GlassEdgeFadeAlphaDark)
+        ),
+        start = Offset(0f, 0f),
+        end = Offset(size.width, size.height)
+    )
     drawRoundRect(
         brush = edgeBrush,
         topLeft = topLeft,
@@ -105,6 +99,10 @@ fun Modifier.glassRim(
     cornerRadius: Dp,
     isDark: Boolean
 ): Modifier = this.drawWithContent {
+    if (!isDark) {
+        drawContent()
+        return@drawWithContent
+    }
     drawContent()
     val strokeWidth = 0.75.dp.toPx()
     val cornerPx = (cornerRadius.toPx() - strokeWidth / 2f).coerceAtLeast(0f)
@@ -121,6 +119,43 @@ fun Modifier.glassRim(
 }
 
 /**
+ * Мягкая тень под плитками/карточками в светлой теме (как в настройках).
+ * На тёмной теме не применяется.
+ *
+ * [elevation] по умолчанию как у сетки настроек; для вложенных карточек в полупрозрачном
+ * шите (например лист обновления) задавайте меньшее значение, иначе тень выглядит грязной.
+ */
+fun Modifier.lightTileShadowInLightTheme(
+    isDark: Boolean,
+    shape: Shape,
+    elevation: Dp = OverlayThemeTokens.LightTileShadowElevation,
+): Modifier =
+    if (isDark) this
+    else this.shadow(
+        elevation = elevation,
+        shape = shape,
+        clip = false
+    )
+
+/**
+ * Тень для плашек внутри полупрозрачного листа (обновление и т.п.): приглушённые ambient/spot
+ * и [clip] = true, чтобы не оставались тёмные «уши» по углам скругления.
+ */
+fun Modifier.softPlateShadowForLightSheet(
+    isDark: Boolean,
+    shape: Shape,
+    elevation: Dp = OverlayThemeTokens.UpdateSheetNestedShadowElevation,
+): Modifier =
+    if (isDark) this
+    else this.shadow(
+        elevation = elevation,
+        shape = shape,
+        clip = true,
+        ambientColor = Color.Black.copy(alpha = 0.04f),
+        spotColor = Color.Black.copy(alpha = 0.07f),
+    )
+
+/**
  * Готовый стеклянный контейнер: panelBg → fill → rim → edge highlight.
  * Подходит как для крупных панелей (sync, sort), так и для внутренних плиток.
  */
@@ -135,7 +170,9 @@ fun OverlayGlassPanel(
     showRim: Boolean = true,
     content: @Composable BoxScope.() -> Unit
 ) {
-    val popupBg = panelBg.copy(alpha = panelBg.alpha * 0.75f)
+    val popupBg = panelBg.copy(
+        alpha = (panelBg.alpha * if (isDark) 0.75f else 0.95f).coerceIn(0f, 1f),
+    )
     Box(
         modifier = modifier
             .clip(shape)

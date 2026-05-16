@@ -23,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.border
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -47,6 +48,7 @@ import com.example.myapplication.ui.shared.theme.OverlayThemeTokens
 import com.example.myapplication.ui.shared.theme.SnProFamily
 import com.example.myapplication.ui.shared.theme.glassEdge
 import com.example.myapplication.ui.shared.theme.glassFill
+import com.example.myapplication.ui.shared.theme.softPlateShadowForLightSheet
 import org.koin.compose.koinInject
 import kotlin.math.roundToInt
 
@@ -83,6 +85,17 @@ fun StatsChartsRow(
     val tileShape = RoundedCornerShape(OverlayThemeTokens.TileCornerRadius)
     val innerPad = 12.dp
     val tileH = 240.dp
+    
+    val tileBg = if (isDark) {
+        OverlayThemeTokens.TileBackgroundDark
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+    val tileRim = if (isDark) {
+        OverlayThemeTokens.RimDark
+    } else {
+        MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)
+    }
 
     Column(
         modifier = modifier.fillMaxWidth()
@@ -104,9 +117,18 @@ fun StatsChartsRow(
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .then(
+                        if (isDark) Modifier else Modifier.softPlateShadowForLightSheet(
+                            isDark = false,
+                            shape = tileShape,
+                            elevation = OverlayThemeTokens.SortOverlayGridLightShadowElevation,
+                        )
+                    )
                     .clip(tileShape)
+                    .background(tileBg)
                     .glassFill(isDark)
                     .glassEdge(OverlayThemeTokens.TileCornerRadius, isDark)
+                    .border(1.dp, tileRim, tileShape)
                     .padding(16.dp)
             )
             return
@@ -117,9 +139,18 @@ fun StatsChartsRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(tileH)
+                .then(
+                    if (isDark) Modifier else Modifier.softPlateShadowForLightSheet(
+                        isDark = false,
+                        shape = tileShape,
+                        elevation = OverlayThemeTokens.SortOverlayGridLightShadowElevation,
+                    )
+                )
                 .clip(tileShape)
+                .background(tileBg)
                 .glassFill(isDark)
                 .glassEdge(OverlayThemeTokens.TileCornerRadius, isDark)
+                .border(1.dp, tileRim, tileShape)
                 .padding(innerPad),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -167,9 +198,18 @@ fun StatsChartsRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(tileH)
+                .then(
+                    if (isDark) Modifier else Modifier.softPlateShadowForLightSheet(
+                        isDark = false,
+                        shape = tileShape,
+                        elevation = OverlayThemeTokens.SortOverlayGridLightShadowElevation,
+                    )
+                )
                 .clip(tileShape)
+                .background(tileBg)
                 .glassFill(isDark)
                 .glassEdge(OverlayThemeTokens.TileCornerRadius, isDark)
+                .border(1.dp, tileRim, tileShape)
                 .padding(innerPad),
             verticalAlignment = Alignment.CenterVertically
         ) {

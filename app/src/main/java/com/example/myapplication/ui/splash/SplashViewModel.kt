@@ -4,8 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.DropboxSyncManager
 import com.example.myapplication.data.local.MigrationManager
+import com.example.myapplication.data.repository.AppUpdateRepository
 import com.example.myapplication.data.repository.LegacyMigrationRepository
 import com.example.myapplication.domain.PermissionChecker
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,7 +24,8 @@ class SplashViewModel(
     private val legacyMigrationRepository: LegacyMigrationRepository,
     private val migrationManager: MigrationManager,
     private val dropboxSyncManager: DropboxSyncManager,
-    private val permissionChecker: PermissionChecker
+    private val permissionChecker: PermissionChecker,
+    private val appUpdateRepository: AppUpdateRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<SplashState>(SplashState.Loading)
@@ -47,6 +50,10 @@ class SplashViewModel(
 
             // 3. MigrationManager видит файлы в Vetro и заливает их в SQLDelight (list, updates, ignored)
             migrationManager.runMigration()
+
+            viewModelScope.launch(Dispatchers.IO) {
+                runCatching { appUpdateRepository.refreshAppUpdate(force = false) }
+            }
 
             // 4. Роутинг: авторизован → Home, иначе → Welcome
             val route = if (dropboxSyncManager.hasToken()) "home" else "welcome"

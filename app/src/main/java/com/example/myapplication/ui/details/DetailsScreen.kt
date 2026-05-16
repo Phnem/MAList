@@ -4,6 +4,7 @@ import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -20,6 +21,7 @@ import androidx.compose.runtime.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur as blurCompose
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -37,13 +39,15 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.example.myapplication.data.models.Anime
-import com.example.myapplication.safeHaze
 import com.example.myapplication.isAppInDarkTheme
 import com.example.myapplication.network.AppLanguage
-import com.example.myapplication.ui.shared.theme.*
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.hazeSource
+import com.example.myapplication.ui.shared.theme.SnProFamily
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.kyant.backdrop.drawBackdrop
+import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.lens
+import com.kyant.backdrop.effects.vibrancy
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
@@ -202,91 +206,82 @@ private fun DetailsBody(
     language: AppLanguage,
     isDark: Boolean,
     getImgPath: (String?) -> String?,
-    onBack: () -> Unit
+    onBack: () -> Unit,
 ) {
     val details = (uiState as? DetailsUiState.Success)?.details
-    val glassBg = Color.Black.copy(alpha = if (isDark) 0.55f else 0.45f)
-    val chipBg = Color.Black.copy(alpha = if (isDark) 0.50f else 0.40f)
-    val hazeState = remember { HazeState() }
-    // Более "матовый" haze: меньше шума и немного меньше blur, чем дефолтные panel-стили.
-    val matteHazeStyle = remember {
-        HazeStyle(
-            tints = emptyList(),
-            noiseFactor = 0.05f,
-            blurRadius = 18.dp
-        )
-    }
-
     var descriptionExpanded by remember { mutableStateOf(false) }
+
+    val screenBg = MaterialTheme.colorScheme.background
+    val backdrop = rememberLayerBackdrop {
+        drawRect(screenBg)
+        drawContent()
+    }
+    val heroBlur = 14.dp
+    val scrimAlpha = if (isDark) 0.30f else 0.12f
+
+    val cardFill = MaterialTheme.colorScheme.background.copy(alpha = 0.85f)
+    val onCard = MaterialTheme.colorScheme.onBackground
+    val onCardMuted = MaterialTheme.colorScheme.onSurfaceVariant
+    val chipBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f)
+    val chipFg = MaterialTheme.colorScheme.onSurfaceVariant
+
+    val detailsTitle = if (language == AppLanguage.RU) "Детали" else "Details"
+    val barTint = if (isDark) Color.White.copy(alpha = 0.10f) else Color.White.copy(alpha = 0.14f)
+    val barBorder = Color.White.copy(alpha = if (isDark) 0.22f else 0.28f)
+    val barContent = Color.White
 
     Box(modifier = Modifier.fillMaxSize()) {
         val imgPath = getImgPath(anime.imageFileName)
         val context = LocalContext.current
-        if (imgPath != null) {
-            AsyncImage(
-                model = ImageRequest.Builder(context)
-                    .data(imgPath)
-                    .crossfade(true)
-                    .build(),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .hazeSource(state = hazeState)
-            )
-        } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(if (isDark) Color(0xFF1A1A2E) else Color(0xFFD8D8E0))
-                    .hazeSource(state = hazeState)
-            )
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .layerBackdrop(backdrop),
+        ) {
+            if (imgPath != null) {
+                AsyncImage(
+                    model = ImageRequest.Builder(context)
+                        .data(imgPath)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .blurCompose(heroBlur),
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(if (isDark) Color(0xFF1A1A2E) else Color(0xFFD8D8E0)),
+                )
+            }
         }
 
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = if (isDark) 0.25f else 0.10f))
-                .hazeSource(state = hazeState)
+                .background(Color.Black.copy(alpha = scrimAlpha)),
         )
 
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .fillMaxWidth()
+                .align(Alignment.BottomStart)
+                .statusBarsPadding()
+                .padding(top = 56.dp)
+                .navigationBarsPadding()
+                .verticalScroll(rememberScrollState()),
         ) {
-            Spacer(
-                Modifier
-                    .statusBarsPadding()
-                    .height(12.dp)
-            )
-
-            IconButton(
-                onClick = onBack,
-                modifier = Modifier
-                    .padding(start = 16.dp)
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(Color.Black.copy(alpha = 0.35f))
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                    tint = Color.White,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-
-            Spacer(Modifier.weight(1f))
-
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp)
                     .clip(RoundedCornerShape(24.dp))
-                    .safeHaze(state = hazeState, style = matteHazeStyle)
-                    .background(glassBg)
-                    .padding(20.dp)
+                    .background(cardFill)
+                    .padding(20.dp),
             ) {
                 val genres = details?.genres?.takeIf { it.isNotEmpty() }
                     ?: anime.tags.takeIf { it.isNotEmpty() }
@@ -294,22 +289,22 @@ private fun DetailsBody(
                 if (!genres.isNullOrEmpty()) {
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         genres.take(4).forEach { genre ->
                             Box(
                                 modifier = Modifier
                                     .clip(CircleShape)
                                     .background(chipBg)
-                                    .padding(horizontal = 14.dp, vertical = 6.dp)
+                                    .padding(horizontal = 14.dp, vertical = 6.dp),
                             ) {
                                 Text(
                                     text = genre,
                                     style = MaterialTheme.typography.labelMedium.copy(
                                         fontFamily = SnProFamily,
-                                        fontWeight = FontWeight.Medium
+                                        fontWeight = FontWeight.Medium,
                                     ),
-                                    color = Color.White
+                                    color = chipFg,
                                 )
                             }
                         }
@@ -324,11 +319,11 @@ private fun DetailsBody(
                         fontFamily = SnProFamily,
                         lineHeight = 36.sp,
                         lineBreak = LineBreak.Heading,
-                        hyphens = Hyphens.Auto
+                        hyphens = Hyphens.Auto,
                     ),
-                    color = Color.White,
+                    color = onCard,
                     maxLines = 3,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
                 )
 
                 Spacer(Modifier.height(16.dp))
@@ -336,7 +331,7 @@ private fun DetailsBody(
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Bottom
+                    verticalAlignment = Alignment.Bottom,
                 ) {
                     val apiRating = details?.rating
                     val displayRating = apiRating ?: anime.rating.takeIf { it > 0 }
@@ -347,7 +342,7 @@ private fun DetailsBody(
                                 Icons.Rounded.Star,
                                 contentDescription = null,
                                 tint = Color(0xFFFFCC4D),
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(20.dp),
                             )
                             Spacer(Modifier.width(4.dp))
                             val ratingText = if (apiRating != null && apiRating > 10) {
@@ -361,9 +356,9 @@ private fun DetailsBody(
                                 text = ratingText,
                                 style = MaterialTheme.typography.titleMedium.copy(
                                     fontWeight = FontWeight.Bold,
-                                    fontFamily = SnProFamily
+                                    fontFamily = SnProFamily,
                                 ),
-                                color = Color.White
+                                color = onCard,
                             )
                         }
                     } else {
@@ -376,9 +371,9 @@ private fun DetailsBody(
                             text = airedOn,
                             style = MaterialTheme.typography.bodyMedium.copy(
                                 fontFamily = SnProFamily,
-                                fontWeight = FontWeight.Medium
+                                fontWeight = FontWeight.Medium,
                             ),
-                            color = Color.White.copy(alpha = 0.8f)
+                            color = onCardMuted,
                         )
                     }
                 }
@@ -393,24 +388,23 @@ private fun DetailsBody(
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp)
                             .clip(RoundedCornerShape(24.dp))
-                            .safeHaze(state = hazeState, style = matteHazeStyle)
-                            .background(glassBg)
+                            .background(cardFill)
                             .padding(24.dp),
-                        contentAlignment = Alignment.Center
+                        contentAlignment = Alignment.Center,
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(20.dp),
-                                color = Color.White,
-                                strokeWidth = 2.dp
+                                color = MaterialTheme.colorScheme.primary,
+                                strokeWidth = 2.dp,
                             )
                             Text(
                                 text = if (language == AppLanguage.RU) "Загрузка..." else "Loading...",
                                 style = MaterialTheme.typography.bodyMedium.copy(fontFamily = SnProFamily),
-                                color = Color.White.copy(alpha = 0.8f)
+                                color = onCardMuted,
                             )
                         }
                     }
@@ -422,25 +416,28 @@ private fun DetailsBody(
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp)
                             .clip(RoundedCornerShape(24.dp))
-                            .safeHaze(state = hazeState, style = matteHazeStyle)
-                            .background(BrandRed.copy(alpha = 0.35f))
+                            .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.85f))
                             .padding(20.dp),
-                        contentAlignment = Alignment.Center
+                        contentAlignment = Alignment.Center,
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             Icon(
                                 Icons.Default.ErrorOutline,
                                 contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(20.dp)
+                                tint = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.size(20.dp),
                             )
                             Text(
-                                text = if (language == AppLanguage.RU) "Не удалось загрузить" else "Could not load details",
+                                text = if (language == AppLanguage.RU) {
+                                    "Не удалось загрузить"
+                                } else {
+                                    "Could not load details"
+                                },
                                 style = MaterialTheme.typography.bodyMedium.copy(fontFamily = SnProFamily),
-                                color = Color.White
+                                color = MaterialTheme.colorScheme.onErrorContainer,
                             )
                         }
                     }
@@ -454,24 +451,26 @@ private fun DetailsBody(
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp)
                                 .clip(RoundedCornerShape(24.dp))
-                                .safeHaze(state = hazeState, style = matteHazeStyle)
-                                .background(glassBg)
-                                .clickable { descriptionExpanded = !descriptionExpanded }
+                                .background(cardFill)
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                ) { descriptionExpanded = !descriptionExpanded }
                                 .padding(20.dp)
                                 .animateContentSize(
                                     animationSpec = spring(
                                         dampingRatio = Spring.DampingRatioMediumBouncy,
-                                        stiffness = Spring.StiffnessLow
-                                    )
-                                )
+                                        stiffness = Spring.StiffnessLow,
+                                    ),
+                                ),
                         ) {
                             Text(
                                 text = if (language == AppLanguage.RU) "Описание" else "Description",
                                 style = MaterialTheme.typography.labelLarge.copy(
                                     fontFamily = SnProFamily,
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.Bold,
                                 ),
-                                color = Color.White.copy(alpha = 0.6f)
+                                color = onCardMuted,
                             )
                             Spacer(Modifier.height(8.dp))
                             Text(
@@ -480,20 +479,24 @@ private fun DetailsBody(
                                     fontFamily = SnProFamily,
                                     lineHeight = 22.sp,
                                     lineBreak = LineBreak.Paragraph,
-                                    hyphens = Hyphens.Auto
+                                    hyphens = Hyphens.Auto,
                                 ),
-                                color = Color.White.copy(alpha = 0.9f),
+                                color = onCard,
                                 maxLines = if (descriptionExpanded) Int.MAX_VALUE else 4,
-                                overflow = TextOverflow.Ellipsis
+                                overflow = TextOverflow.Ellipsis,
                             )
                             if (!descriptionExpanded) {
                                 Spacer(Modifier.height(8.dp))
                                 Text(
-                                    text = if (language == AppLanguage.RU) "Нажмите, чтобы развернуть" else "Tap to expand",
+                                    text = if (language == AppLanguage.RU) {
+                                        "Нажмите, чтобы развернуть"
+                                    } else {
+                                        "Tap to expand"
+                                    },
                                     style = MaterialTheme.typography.labelSmall.copy(
-                                        fontFamily = SnProFamily
+                                        fontFamily = SnProFamily,
                                     ),
-                                    color = Color.White.copy(alpha = 0.45f)
+                                    color = onCardMuted.copy(alpha = 0.85f),
                                 )
                             }
                         }
@@ -502,7 +505,74 @@ private fun DetailsBody(
             }
 
             Spacer(Modifier.height(24.dp))
-            Spacer(Modifier.navigationBarsPadding())
+        }
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(top = 12.dp, start = 16.dp, end = 16.dp)
+                .zIndex(4f),
+        ) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .size(48.dp)
+                    .drawBackdrop(
+                        backdrop = backdrop,
+                        shape = { CircleShape },
+                        effects = {
+                            vibrancy()
+                            blur(24f.dp.toPx())
+                            lens(8f.dp.toPx(), 48f.dp.toPx())
+                        },
+                        onDrawSurface = { drawRect(barTint) },
+                    )
+                    .clip(CircleShape)
+                    .border(0.5.dp, barBorder, CircleShape)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onBack,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = barContent,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .height(48.dp)
+                    .drawBackdrop(
+                        backdrop = backdrop,
+                        shape = { RoundedCornerShape(100.dp) },
+                        effects = {
+                            vibrancy()
+                            blur(24f.dp.toPx())
+                            lens(8f.dp.toPx(), 48f.dp.toPx())
+                        },
+                        onDrawSurface = { drawRect(barTint) },
+                    )
+                    .clip(RoundedCornerShape(100.dp))
+                    .border(0.5.dp, barBorder, RoundedCornerShape(100.dp))
+                    .padding(horizontal = 28.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = detailsTitle,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = SnProFamily,
+                    color = barContent,
+                )
+            }
         }
     }
 }

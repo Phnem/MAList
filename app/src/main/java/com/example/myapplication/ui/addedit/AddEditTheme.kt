@@ -3,6 +3,7 @@ package com.example.myapplication.ui.addedit
 import android.graphics.BlurMaskFilter
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -12,6 +13,7 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.example.myapplication.ui.shared.theme.lightTileShadowInLightTheme
 
 object AddEditColors {
     val CoverGradientStart = Color(0xFF1B2540)
@@ -38,6 +40,10 @@ object AddEditColors {
 
     val SectionLabel = Color(0xFF8E8E93)
 }
+
+/** Мягкая тень под «менюшными» элементами в светлой теме (как у плиток в настройках). */
+fun Modifier.addEditMenuTileShadow(isDark: Boolean, shape: Shape): Modifier =
+    lightTileShadowInLightTheme(isDark, shape)
 
 val CoverGradientBrush = Brush.linearGradient(
     colors = listOf(AddEditColors.CoverGradientStart, AddEditColors.CoverGradientEnd),

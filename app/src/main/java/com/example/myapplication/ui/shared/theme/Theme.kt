@@ -1,8 +1,14 @@
 package com.example.myapplication.ui.shared.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.*
+import androidx.compose.material3.LocalRippleConfiguration
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RippleConfiguration
+import androidx.compose.material3.Typography
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -44,17 +50,25 @@ fun OneUiTheme(
             onPrimary = Color.White,
             onBackground = LightTextPrimary,
             onSurface = LightTextPrimary,
+            onSurfaceVariant = LightTextSecondary,
             secondary = LightTextSecondary,
-            secondaryContainer = BrandRed.copy(alpha = 0.14f),
+            secondaryContainer = BrandRed.copy(alpha = 0.12f),
             onSecondaryContainer = BrandRed,
             outline = LightBorder,
             error = BrandRed,
             surfaceContainer = LightSurface,
             surfaceContainerLow = LightSurface,
+            surfaceContainerHigh = LightSurfaceVariant,
             surfaceContainerHighest = LightSurfaceVariant
         )
     }
-    
+
+    val rippleConfiguration = if (darkTheme) {
+        RippleConfiguration(color = Color.White.copy(alpha = 0.14f))
+    } else {
+        RippleConfiguration(color = colors.primary.copy(alpha = 0.10f))
+    }
+
     MaterialTheme(
         colorScheme = colors,
         typography = Typography(
@@ -75,6 +89,8 @@ fun OneUiTheme(
             labelSmall = MaterialTheme.typography.labelSmall.copy(fontFamily = SnProFamily)
         )
     ) {
-        content()
+        CompositionLocalProvider(LocalRippleConfiguration provides rippleConfiguration) {
+            content()
+        }
     }
 }

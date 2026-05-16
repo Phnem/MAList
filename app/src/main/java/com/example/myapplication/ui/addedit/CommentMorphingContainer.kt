@@ -43,19 +43,19 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import dev.chrisbanes.haze.HazeState
+import com.example.myapplication.isAppInDarkTheme
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun SharedTransitionScope.CommentMorphingContainer(
     state: AddEditUiState,
-    hazeState: HazeState,
     onModeChange: (CommentMode) -> Unit,
     onSaveComment: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var inputText by remember(state.comment) { mutableStateOf(state.comment) }
     val focusRequester = remember { FocusRequester() }
+    val isDark = isAppInDarkTheme()
 
     BackHandler(enabled = state.commentMode == CommentMode.Editing) {
         onSaveComment(inputText)
@@ -81,6 +81,7 @@ fun SharedTransitionScope.CommentMorphingContainer(
                         )
                         .fillMaxWidth()
                         .height(56.dp)
+                        .addEditMenuTileShadow(isDark, RoundedCornerShape(50))
                         .clip(RoundedCornerShape(50))
                         .clickable { onModeChange(CommentMode.Editing) }
                         .background(Color.White)
@@ -107,6 +108,7 @@ fun SharedTransitionScope.CommentMorphingContainer(
                             clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(24.dp))
                         )
                         .fillMaxWidth()
+                        .addEditMenuTileShadow(isDark, RoundedCornerShape(24.dp))
                         .clip(RoundedCornerShape(24.dp))
                         .background(Color.White, RoundedCornerShape(24.dp))
                         .border(0.5.dp, Color.Black.copy(alpha = 0.12f), RoundedCornerShape(24.dp))
@@ -144,6 +146,7 @@ fun SharedTransitionScope.CommentMorphingContainer(
                         onClick = { onSaveComment(inputText) },
                         modifier = Modifier
                             .size(48.dp)
+                            .addEditMenuTileShadow(isDark, CircleShape)
                             .clip(CircleShape)
                             .background(Color.White)
                     ) {
@@ -165,6 +168,7 @@ fun SharedTransitionScope.CommentMorphingContainer(
                             clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(16.dp))
                         )
                         .fillMaxWidth()
+                        .addEditMenuTileShadow(isDark, RoundedCornerShape(16.dp))
                         .clip(RoundedCornerShape(16.dp))
                         .clickable { onModeChange(CommentMode.Editing) }
                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f))

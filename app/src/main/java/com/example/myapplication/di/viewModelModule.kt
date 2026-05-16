@@ -6,6 +6,7 @@ import com.example.myapplication.ui.home.HomeViewModel
 import com.example.myapplication.ui.inspect.InspectViewModel
 import com.example.myapplication.ui.settings.SettingsViewModel
 import com.example.myapplication.ui.splash.SplashViewModel
+import org.koin.android.ext.koin.androidApplication
 import org.koin.core.module.dsl.viewModel
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
@@ -16,7 +17,8 @@ val viewModelModule = module {
             legacyMigrationRepository = get(),
             migrationManager = get(),
             dropboxSyncManager = get(),
-            permissionChecker = get()
+            permissionChecker = get(),
+            appUpdateRepository = get(),
         )
     }
     viewModel {
@@ -44,10 +46,12 @@ val viewModelModule = module {
     viewModel {
         SettingsViewModel(
             repository = get(),
+            appUpdateRepository = get(),
             settingsDataStore = get(named("settings")),
             databaseFactory = get(),
             importAnimeDbUseCase = get(),
-            collectionPdfGenerator = get()
+            collectionPdfGenerator = get(),
+            app = androidApplication()
         )
     }
     viewModel {

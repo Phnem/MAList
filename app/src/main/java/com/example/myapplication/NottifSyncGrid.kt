@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -37,7 +36,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapplication.data.models.UiStrings
@@ -45,7 +43,7 @@ import com.example.myapplication.sync.ExternalListService
 import com.example.myapplication.ui.shared.theme.OverlayThemeTokens
 import com.example.myapplication.ui.shared.theme.glassEdge
 import com.example.myapplication.ui.shared.theme.glassFill
-import com.phnem.vetro.R
+import com.example.myapplication.ui.shared.theme.softPlateShadowForLightSheet
 import java.util.Locale
 
 /**
@@ -78,8 +76,6 @@ internal fun NottifSyncServiceGrid(
         val w = maxWidth
         val tileSide = (w - spacing) / 2
         val serviceW = (w - spacing * 2) / 3
-        /** ~5% высоты верхней плитки — поднять кнопку «обновить метрики». */
-        val refreshOffsetUp = tileSide * 0.05f
         Column(verticalArrangement = Arrangement.spacedBy(spacing)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -102,7 +98,6 @@ internal fun NottifSyncServiceGrid(
                     onCard = onCard,
                     muted = muted,
                     accent = accent,
-                    refreshOffsetUp = refreshOffsetUp,
                     onSyncNow = onSyncNow,
                     onCheckUpdates = onCheckUpdates
                 )
@@ -177,21 +172,28 @@ private fun NottifSquareCloudSyncTile(
     onCard: Color,
     muted: Color,
     accent: Color,
-    refreshOffsetUp: Dp,
     onSyncNow: () -> Unit,
     onCheckUpdates: () -> Unit
 ) {
     val tileShape = RoundedCornerShape(OverlayThemeTokens.TileCornerRadius)
     val tileBg = if (isDark) darkTileBase else cardBg
     val accentRim = accent.copy(alpha = if (isDark) 0.45f else 0.6f)
-    val accentGlow = accent.copy(alpha = if (isDark) 0.18f else 0.16f)
+    val accentGlow = accent.copy(
+        alpha = if (isDark) 0.18f else OverlayThemeTokens.TileGlowAlphaLight
+    )
     val connected = hasToken && syncState != SyncState.AUTH_REQUIRED
-    val connText = if (connected) strings.nottifStatusConnected else strings.nottifStatusDisconnected
 
     Box(modifier = modifier) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .then(
+                    if (isDark) Modifier else Modifier.softPlateShadowForLightSheet(
+                        isDark = false,
+                        shape = tileShape,
+                        elevation = OverlayThemeTokens.SortOverlayGridLightShadowElevation,
+                    )
+                )
                 .clip(tileShape)
                 .background(tileBg)
                 .background(
@@ -262,28 +264,27 @@ private fun NottifSquareCloudSyncTile(
             Spacer(Modifier.weight(1f))
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = connText,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (connected) OverlayThemeTokens.AccentNeonGreen else muted,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-                NottifRefreshButton(
-                    isDark = isDark,
+                val statusText = if (
+                    connected && syncState != SyncState.ERROR && syncState != SyncState.CONFLICT
+                ) {
+                    strings.nottifStatusConnected
+                } else {
+                    strings.nottifStatusDisconnected
+                }
+                NottifStatusPill(
+                    text = statusText,
                     accent = accent,
-                    isRotating = isCheckingUpdates,
-                    contentDescription = strings.nottifCheckUpdatesCd,
-                    onClick = onCheckUpdates,
-                    buttonSize = 32.dp,
-                    iconSize = 16.dp,
-                    lottieRawRes = R.raw.loading_animation_blue,
-                    lottieVisualScale = 1f,
-                    modifier = Modifier.offset(y = -refreshOffsetUp)
+                    isDark = isDark,
+                    state = syncState,
+                    isCheckingUpdates = isCheckingUpdates,
+                    modifier = Modifier.clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onCheckUpdates
+                    ),
                 )
             }
         }
@@ -305,13 +306,22 @@ private fun NottifSquareAccountTile(
     val tileBg = if (isDark) {
         MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
     } else cardBg
-    val accent = OverlayThemeTokens.AccentNeonYellow
+    val accent = if (isDark) OverlayThemeTokens.IconSyncBlue else MaterialTheme.colorScheme.primary
     val accentRim = accent.copy(alpha = if (isDark) 0.4f else 0.55f)
-    val accentGlow = accent.copy(alpha = if (isDark) 0.18f else 0.16f)
+    val accentGlow = accent.copy(
+        alpha = if (isDark) 0.18f else OverlayThemeTokens.TileGlowAlphaLight
+    )
 
     Column(
         modifier = modifier
             .fillMaxSize()
+            .then(
+                if (isDark) Modifier else Modifier.softPlateShadowForLightSheet(
+                    isDark = false,
+                    shape = tileShape,
+                    elevation = OverlayThemeTokens.SortOverlayGridLightShadowElevation,
+                )
+            )
             .clip(tileShape)
             .background(tileBg)
             .background(
@@ -410,10 +420,19 @@ private fun NottifServiceStubTile(
     val tileShape = RoundedCornerShape(OverlayThemeTokens.TileCornerRadius)
     val tileBg = if (isDark) darkTileBase else cardBg
     val accentRim = accent.copy(alpha = if (isDark) 0.4f else 0.55f)
-    val accentGlow = accent.copy(alpha = if (isDark) 0.16f else 0.14f)
+    val accentGlow = accent.copy(
+        alpha = if (isDark) 0.16f else OverlayThemeTokens.TileGlowAlphaLight
+    )
 
     Column(
         modifier = modifier
+            .then(
+                if (isDark) Modifier else Modifier.softPlateShadowForLightSheet(
+                    isDark = false,
+                    shape = tileShape,
+                    elevation = OverlayThemeTokens.SortOverlayGridLightShadowElevation,
+                )
+            )
             .clip(tileShape)
             .background(tileBg)
             .background(

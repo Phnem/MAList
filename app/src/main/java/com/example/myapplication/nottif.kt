@@ -18,6 +18,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -52,8 +53,9 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -86,10 +88,12 @@ import com.example.myapplication.ui.shared.theme.OverlayGlassPanel
 import com.example.myapplication.ui.shared.theme.OverlayThemeTokens
 import com.example.myapplication.ui.shared.theme.glassEdge
 import com.example.myapplication.ui.shared.theme.glassFill
+import com.example.myapplication.ui.shared.theme.softPlateShadowForLightSheet
 import com.example.myapplication.utils.performHaptic
 import com.example.myapplication.sync.ExternalListService
 import com.example.myapplication.sync.ExternalListSyncCoordinator
 import com.example.myapplication.sync.ListServiceAction
+import com.example.myapplication.network.AppLanguage
 import org.koin.compose.koinInject
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -157,6 +161,7 @@ fun NotificationSyncOverlay(
     syncReport: SyncReport,
     updates: List<AnimeUpdate>,
     isCheckingUpdates: Boolean,
+    currentLanguage: AppLanguage,
     onDismiss: () -> Unit,
     onLogout: () -> Unit,
     onCheckUpdates: () -> Unit,
@@ -204,7 +209,9 @@ fun NotificationSyncOverlay(
         if (lastSyncTs == 0L) "--:--"
         else DateFormat.getTimeFormat(context).format(lastSyncTs)
     }
-    val datePart = remember(lastSyncTs, strings) { formatSyncDateLine(lastSyncTs, strings) }
+    val datePart = remember(lastSyncTs, strings, currentLanguage) {
+        formatSyncDateLine(lastSyncTs, strings, currentLanguage)
+    }
     val statusWord = remember(syncState, strings) { syncStatusWord(strings, syncState) }
     val detailLine = "$datePart • $statusWord"
 
@@ -259,7 +266,9 @@ fun NotificationSyncOverlay(
                 Card(
                     shape = RoundedCornerShape(OverlayThemeTokens.PanelCornerRadius),
                     colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-                    elevation = CardDefaults.cardElevation(defaultElevation = OverlayThemeTokens.CardElevation),
+                    elevation = CardDefaults.cardElevation(
+                        defaultElevation = if (isDark) OverlayThemeTokens.CardElevation else 0.dp
+                    ),
                     modifier = Modifier
                         .padding(
                             top = OverlayThemeTokens.CardOuterPaddingTop,
@@ -280,8 +289,7 @@ fun NotificationSyncOverlay(
                             .padding(
                                 start = OverlayThemeTokens.PanelInnerPaddingStart,
                                 top = OverlayThemeTokens.PanelInnerPaddingTop,
-                                end = OverlayThemeTokens.PanelInnerPaddingEnd,
-                                bottom = OverlayThemeTokens.PanelInnerPaddingBottom
+                                end = OverlayThemeTokens.PanelInnerPaddingEnd
                             )
                             .verticalScroll(rememberScrollState())
                     ) {
@@ -382,6 +390,7 @@ fun NotificationSyncOverlay(
                                 Spacer(Modifier.height(10.dp))
                             }
                         }
+                        Spacer(Modifier.height(OverlayThemeTokens.PanelInnerPaddingBottom))
                     }
                     }
                 }
@@ -461,25 +470,25 @@ fun NotificationSyncOverlay(
                             enabled = !listSyncUi.isRunning,
                             colors = serviceActionButtonColors,
                             onClick = {
-                            hostActivity?.let { listSyncCoordinator.startListServiceActionOrAuthorize(it, svc, ListServiceAction.PULL) }
-                            serviceActionDialogTarget = null
-                        }
+                                hostActivity?.let { listSyncCoordinator.startListServiceActionOrAuthorize(it, svc, ListServiceAction.PULL) }
+                                serviceActionDialogTarget = null
+                            }
                         ) { Text(strings.nottifServiceActionPull) }
                         TextButton(
                             enabled = !listSyncUi.isRunning,
                             colors = serviceActionButtonColors,
                             onClick = {
-                            hostActivity?.let { listSyncCoordinator.startListServiceActionOrAuthorize(it, svc, ListServiceAction.PUSH) }
-                            serviceActionDialogTarget = null
-                        }
+                                hostActivity?.let { listSyncCoordinator.startListServiceActionOrAuthorize(it, svc, ListServiceAction.PUSH) }
+                                serviceActionDialogTarget = null
+                            }
                         ) { Text(strings.nottifServiceActionPush) }
                         TextButton(
                             enabled = !listSyncUi.isRunning,
                             colors = serviceActionButtonColors,
                             onClick = {
-                            hostActivity?.let { listSyncCoordinator.startListServiceActionOrAuthorize(it, svc, ListServiceAction.SYNC) }
-                            serviceActionDialogTarget = null
-                        }
+                                hostActivity?.let { listSyncCoordinator.startListServiceActionOrAuthorize(it, svc, ListServiceAction.SYNC) }
+                                serviceActionDialogTarget = null
+                            }
                         ) { Text(strings.nottifServiceActionSync) }
                     }
                 },
@@ -511,7 +520,9 @@ private fun NottifUpdateRow(
     val tileShape = RoundedCornerShape(OverlayThemeTokens.TileCornerRadius)
     val tileBg = if (isDark) darkTileBase else cardBg
     val accentRim = accentColor.copy(alpha = if (isDark) 0.4f else 0.55f)
-    val accentGlow = accentColor.copy(alpha = if (isDark) 0.16f else 0.14f)
+    val accentGlow = accentColor.copy(
+        alpha = if (isDark) 0.16f else OverlayThemeTokens.TileGlowAlphaLight
+    )
 
     Row(
         modifier = Modifier
@@ -653,7 +664,11 @@ private fun NottifPanelHeader(
     }
 }
 
-private fun formatSyncDateLine(ts: Long, strings: UiStrings): String {
+private fun formatSyncDateLine(
+    ts: Long,
+    strings: UiStrings,
+    language: AppLanguage
+): String {
     if (ts == 0L) return strings.never
     val cal = Calendar.getInstance()
     val nowDay = cal.get(Calendar.DAY_OF_YEAR)
@@ -664,7 +679,96 @@ private fun formatSyncDateLine(ts: Long, strings: UiStrings): String {
     return if (d == nowDay && y == nowYear) {
         strings.nottifDateToday
     } else {
-        SimpleDateFormat("MMM d", Locale.getDefault()).format(Date(ts))
+        val locale = when (language) {
+            AppLanguage.RU -> Locale("ru")
+            AppLanguage.EN -> Locale.ENGLISH
+        }
+        SimpleDateFormat("MMM d", locale).format(Date(ts))
+            .replaceFirstChar { ch -> if (ch.isLowerCase()) ch.titlecase(locale) else ch.toString() }
+    }
+}
+
+@Composable
+internal fun NottifStatusPill(
+    text: String,
+    accent: Color,
+    isDark: Boolean,
+    modifier: Modifier = Modifier,
+    state: SyncState,
+    isCheckingUpdates: Boolean,
+) {
+    val shape = RoundedCornerShape(12.dp)
+    val statusColor = when {
+        isCheckingUpdates || state == SyncState.SYNCING ->
+            if (isDark) accent else MaterialTheme.colorScheme.primary
+        state == SyncState.DONE || state == SyncState.IDLE ->
+            if (isDark) OverlayThemeTokens.AccentNeonGreen else MaterialTheme.colorScheme.onSurface
+        else ->
+            if (isDark) OverlayThemeTokens.AccentNeonRed else MaterialTheme.colorScheme.error
+    }
+    val content: @Composable () -> Unit = {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            when {
+                isCheckingUpdates || state == SyncState.SYNCING -> {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(14.dp),
+                        strokeWidth = 2.dp,
+                        color = statusColor,
+                    )
+                }
+                state == SyncState.DONE || state == SyncState.IDLE -> {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        tint = statusColor,
+                        modifier = Modifier.size(14.dp),
+                    )
+                }
+                else -> {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = null,
+                        tint = statusColor,
+                        modifier = Modifier.size(14.dp),
+                    )
+                }
+            }
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelSmall,
+                color = statusColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+
+    if (isDark) {
+        val background = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.44f)
+        val borderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.32f)
+        Surface(
+            modifier = modifier,
+            shape = shape,
+            color = background,
+            border = BorderStroke(1.dp, borderColor),
+            shadowElevation = 0.dp,
+            tonalElevation = 0.dp,
+        ) {
+            content()
+        }
+    } else {
+        Box(
+            modifier = modifier
+                .softPlateShadowForLightSheet(isDark = false, shape = shape, elevation = 2.dp)
+                .clip(shape)
+                .background(MaterialTheme.colorScheme.surface, shape),
+        ) {
+            content()
+        }
     }
 }
 

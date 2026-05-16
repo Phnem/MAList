@@ -70,10 +70,11 @@ data class ActionTile(
     override val icon: ImageVector?,
     override val accentColor: Color,
     override val span: Int = 1,
+    override val preferredAspectRatio: Float? = null,
     val onClick: () -> Unit,
     val updateStatus: AppUpdateStatus? = null,
     val currentVersion: String? = null,
-    val latestDownloadUrl: String? = null
+    val latestDownloadUrl: String? = null,
 ) : SettingsTile
 
 /**

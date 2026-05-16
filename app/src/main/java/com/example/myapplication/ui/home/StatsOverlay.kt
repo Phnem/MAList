@@ -75,6 +75,7 @@ import com.example.myapplication.ui.shared.theme.OverlayThemeTokens
 import com.example.myapplication.ui.shared.theme.SnProFamily
 import com.example.myapplication.ui.shared.theme.glassEdge
 import com.example.myapplication.ui.shared.theme.glassFill
+import com.example.myapplication.ui.shared.theme.softPlateShadowForLightSheet
 import java.util.Locale
 
 // ==========================================
@@ -163,7 +164,9 @@ fun StatsOverlay(
                     .fillMaxWidth(),
                 shape = RoundedCornerShape(panelCorner),
                 colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-                elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
+                elevation = CardDefaults.cardElevation(
+                    defaultElevation = if (isDark) 12.dp else 0.dp
+                )
             ) {
                 OverlayGlassPanel(
                     isDark = isDark,
@@ -431,7 +434,7 @@ private fun StatsMetricTile(
     val tileBg = if (isDark) {
         OverlayThemeTokens.TileBackgroundDark
     } else {
-        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+        MaterialTheme.colorScheme.surfaceVariant
     }
     val labelMuted = if (isDark) {
         OverlayThemeTokens.LabelMutedDark
@@ -441,11 +444,20 @@ private fun StatsMetricTile(
     val tileCorner = OverlayThemeTokens.TileCornerRadius
     val shape = RoundedCornerShape(tileCorner)
     val accentRim = accent.copy(alpha = if (isDark) 0.35f else 0.55f)
-    val accentGlow = accent.copy(alpha = if (isDark) 0.18f else 0.16f)
+    val accentGlow = accent.copy(
+        alpha = if (isDark) 0.18f else OverlayThemeTokens.TileGlowAlphaLight
+    )
 
     Column(
         modifier = modifier
             .defaultMinSize(minHeight = 116.dp)
+            .then(
+                if (isDark) Modifier else Modifier.softPlateShadowForLightSheet(
+                    isDark = false,
+                    shape = shape,
+                    elevation = OverlayThemeTokens.SortOverlayGridLightShadowElevation,
+                )
+            )
             .clip(shape)
             .background(tileBg)
             .background(

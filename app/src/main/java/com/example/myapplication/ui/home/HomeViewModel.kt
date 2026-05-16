@@ -1,5 +1,6 @@
 package com.example.myapplication.ui.home
 
+import android.app.NotificationManager
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
@@ -20,6 +21,7 @@ import com.example.myapplication.network.AppContentType
 import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.data.models.SortOption
 import com.example.myapplication.notifications.AnimeNotifier
+import com.example.myapplication.notifications.animeUpdateNotificationId
 import com.example.myapplication.DropboxSyncManager
 import com.example.myapplication.SyncReport
 import com.example.myapplication.SyncState
@@ -122,7 +124,11 @@ class HomeViewModel(
     init {
         viewModelScope.launch {
             ignoredUpdatesMap.putAll(localDataSource.getIgnoredMap())
-            _uiState.update { it.copy(updates = localDataSource.getUpdates().toImmutableList()) }
+            localDataSource.observeUpdates().collect { list ->
+                _uiState.update { it.copy(updates = list.toImmutableList()) }
+            }
+        }
+        viewModelScope.launch {
             checkForUpdates()
         }
         viewModelScope.launch {
@@ -287,6 +293,8 @@ class HomeViewModel(
         _uiState.update { it.copy(isCheckingUpdates = true) }
         viewModelScope.launch {
             runCatching {
+                ignoredUpdatesMap.clear()
+                ignoredUpdatesMap.putAll(localDataSource.getIgnoredMap())
                 val language = readLanguageFromSettings()
                 val rawUpdates = batchEpisodeCheckUseCase(
                     animeList = localDataSource.getAllAnimeList(),
@@ -295,8 +303,8 @@ class HomeViewModel(
                 val newUpdates = rawUpdates.filter { update ->
                     ignoredUpdatesMap[update.animeId] != update.newEpisodes
                 }.distinctBy { it.animeId to it.newEpisodes }
-                _uiState.update { it.copy(updates = newUpdates.toImmutableList(), isCheckingUpdates = false) }
                 localDataSource.setUpdates(newUpdates)
+                _uiState.update { it.copy(isCheckingUpdates = false) }
                 if (newUpdates.isNotEmpty()) {
                     newUpdates.forEach { update -> notifier.showUpdateNotification(update) }
                 }
@@ -318,21 +326,22 @@ class HomeViewModel(
         viewModelScope.launch {
             localDataSource.updateAnime(anime.copy(episodes = update.newEpisodes))
             localDataSource.removeUpdate(update.animeId)
-            _uiState.update { state ->
-                state.copy(updates = state.updates.filter { it.animeId != update.animeId }.toImmutableList())
-            }
+            cancelAnimeUpdateNotification(ctx, update.animeId)
         }
     }
 
-    fun dismissUpdate(update: AnimeUpdate) {
+    fun dismissUpdate(update: AnimeUpdate, ctx: Context) {
         viewModelScope.launch {
             localDataSource.addIgnored(update.animeId, update.newEpisodes)
             ignoredUpdatesMap[update.animeId] = update.newEpisodes
             localDataSource.removeUpdate(update.animeId)
-            _uiState.update { state ->
-                state.copy(updates = state.updates.filter { it.animeId != update.animeId }.toImmutableList())
-            }
+            cancelAnimeUpdateNotification(ctx, update.animeId)
         }
+    }
+
+    private fun cancelAnimeUpdateNotification(ctx: Context, animeId: String) {
+        val nm = ctx.applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        nm.cancel(animeUpdateNotificationId(animeId))
     }
 
     fun getAnimeById(id: String): Anime? {

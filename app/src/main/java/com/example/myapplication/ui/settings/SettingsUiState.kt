@@ -25,5 +25,10 @@ data class SettingsUiState(
     val latestDownloadUrl: String? = null,
     val updateChangelogMarkdown: String? = null,
     val isUpdateChangelogLoading: Boolean = false,
-    val updateChangelogError: String? = null
+    val updateChangelogError: String? = null,
+    val latestApkSizeBytes: Long? = null,
+    val isApkDownloading: Boolean = false,
+    val apkDownloadProgress: Float = 0f,
+    val pendingApkPathForInstall: String? = null,
+    val latestReleaseHtmlUrl: String? = null,
 )

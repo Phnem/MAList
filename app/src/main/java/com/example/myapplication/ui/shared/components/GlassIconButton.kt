@@ -20,15 +20,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.example.myapplication.safeHaze
-import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.HazeState
-
-private val glassButtonHazeStyle = HazeStyle(tints = emptyList(), noiseFactor = 0f, blurRadius = 28.dp)
+import com.kyant.backdrop.Backdrop
+import com.kyant.backdrop.drawBackdrop
+import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.lens
+import com.kyant.backdrop.effects.vibrancy
 
 /**
  * Универсальная Glass-кнопка с иконкой.
- * Использует safeHaze при наличии hazeState; иначе — полупрозрачный фон.
+ * С [backdrop] — жидкое стекло Kyant (blur поверх слоя списка); иначе — полупрозрачный фон.
  */
 @Composable
 fun GlassIconButton(
@@ -38,7 +38,7 @@ fun GlassIconButton(
     enabled: Boolean = true,
     size: Dp = 48.dp,
     iconSize: Dp = 24.dp,
-    hazeState: HazeState? = null,
+    backdrop: Backdrop? = null,
     backgroundColor: Color = Color.White.copy(alpha = if (enabled) 0.15f else 0.05f),
     contentDescription: String? = null,
     tint: Color = MaterialTheme.colorScheme.onSurface,
@@ -53,10 +53,20 @@ fun GlassIconButton(
             .size(size)
             .clip(CircleShape)
             .then(
-                if (hazeState != null) Modifier.safeHaze(hazeState, glassButtonHazeStyle)
-                else Modifier
+                if (backdrop != null) {
+                    Modifier.drawBackdrop(
+                        backdrop = backdrop,
+                        shape = { CircleShape },
+                        effects = {
+                            vibrancy()
+                            blur(28f.dp.toPx())
+                            lens(16f.dp.toPx(), 48f.dp.toPx())
+                        }
+                    )
+                } else {
+                    Modifier.background(backgroundColor)
+                }
             )
-            .background(backgroundColor)
             .border(0.5.dp, borderColor, CircleShape)
             .clickable(
                 enabled = enabled,

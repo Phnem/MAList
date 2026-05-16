@@ -177,7 +177,7 @@ fun SharedTransitionScope.OneUiAnimeCard(
                                 .clip(CircleShape)
                                 .background(
                                     if (isDark) Color(0xFF0D1117)
-                                    else Color(0xFFF4EBDD).copy(alpha = 0.5f)
+                                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
                                 )
                         ) {
                             Text(
