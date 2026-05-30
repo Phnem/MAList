@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.net.Uri
+import java.io.File
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
@@ -150,7 +151,7 @@ fun SharedTransitionScope.AddEditCoverPhotoSlot(
             } else if (imageFilePath != null) {
                 AsyncImage(
                     model = ImageRequest.Builder(ctx)
-                        .data(imageFilePath)
+                        .data(File(imageFilePath))
                         .crossfade(true)
                         .build(),
                     contentDescription = null,

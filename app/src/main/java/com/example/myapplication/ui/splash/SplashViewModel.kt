@@ -1,30 +1,34 @@
 package com.example.myapplication.ui.splash
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.DropboxSyncManager
+import com.example.myapplication.data.local.LegacyCollectionSafMigrator
+import com.example.myapplication.data.local.LegacyStorageMigrator
 import com.example.myapplication.data.local.MigrationManager
 import com.example.myapplication.data.repository.AppUpdateRepository
-import com.example.myapplication.data.repository.LegacyMigrationRepository
-import com.example.myapplication.domain.PermissionChecker
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 sealed interface SplashState {
     data object Loading : SplashState
-    data object Migrating : SplashState
+    data object MigratingStorage : SplashState
+    data object MigratingJson : SplashState
+    data object AwaitingLegacyFolder : SplashState
+    data object ImportingLegacyFolder : SplashState
     data class Completed(val nextRoute: String) : SplashState
 }
 
 class SplashViewModel(
-    private val legacyMigrationRepository: LegacyMigrationRepository,
+    private val legacyStorageMigrator: LegacyStorageMigrator,
+    private val legacyCollectionSafMigrator: LegacyCollectionSafMigrator,
     private val migrationManager: MigrationManager,
     private val dropboxSyncManager: DropboxSyncManager,
-    private val permissionChecker: PermissionChecker,
     private val appUpdateRepository: AppUpdateRepository,
 ) : ViewModel() {
 
@@ -35,29 +39,66 @@ class SplashViewModel(
         startAppInitialization()
     }
 
+    fun onLegacyFolderSelected(uri: Uri?) {
+        if (uri == null) {
+            if (_uiState.value is SplashState.AwaitingLegacyFolder) {
+                _uiState.update { SplashState.AwaitingLegacyFolder }
+            }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { SplashState.ImportingLegacyFolder }
+            withContext(Dispatchers.IO) {
+                legacyCollectionSafMigrator.saveTreeUriAndCopy(uri)
+            }
+            finishStartup()
+        }
+    }
+
+    fun skipLegacyFolderMigration() {
+        viewModelScope.launch {
+            finishStartup(forceWithoutImages = true)
+        }
+    }
+
     private fun startAppInitialization() {
         viewModelScope.launch {
-            // 1. Ждем разрешения к файлам
-            while (!permissionChecker.isExternalStorageManager()) {
-                delay(500)
+            if (legacyStorageMigrator.isPendingMigration()) {
+                _uiState.update { SplashState.MigratingStorage }
+            }
+            withContext(Dispatchers.IO) {
+                legacyStorageMigrator.migrateIfNeeded()
             }
 
-            // 2. Проверяем старую папку MyAnimeList
-            if (legacyMigrationRepository.needsMigration()) {
-                _uiState.update { SplashState.Migrating }
-                legacyMigrationRepository.migrateLegacyDataIfNeeded()
+            if (migrationManager.needsJsonMigration()) {
+                _uiState.update { SplashState.MigratingJson }
+                migrationManager.runMigration()
             }
 
-            // 3. MigrationManager видит файлы в Vetro и заливает их в SQLDelight (list, updates, ignored)
-            migrationManager.runMigration()
-
-            viewModelScope.launch(Dispatchers.IO) {
-                runCatching { appUpdateRepository.refreshAppUpdate(force = false) }
+            withContext(Dispatchers.IO) {
+                legacyCollectionSafMigrator.migrateAllAvailableSources()
             }
 
-            // 4. Роутинг: авторизован → Home, иначе → Welcome
-            val route = if (dropboxSyncManager.hasToken()) "home" else "welcome"
-            _uiState.update { SplashState.Completed(route) }
+            if (legacyCollectionSafMigrator.needsLegacyFolderAccess()) {
+                _uiState.update { SplashState.AwaitingLegacyFolder }
+                return@launch
+            }
+
+            finishStartup()
         }
+    }
+
+    private suspend fun finishStartup(forceWithoutImages: Boolean = false) {
+        if (!forceWithoutImages && legacyCollectionSafMigrator.needsLegacyFolderAccess()) {
+            _uiState.update { SplashState.AwaitingLegacyFolder }
+            return
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { appUpdateRepository.refreshAppUpdate(force = false) }
+        }
+
+        val route = if (dropboxSyncManager.hasToken()) "home" else "welcome"
+        _uiState.update { SplashState.Completed(route) }
     }
 }

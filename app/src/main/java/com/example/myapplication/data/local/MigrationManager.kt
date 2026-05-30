@@ -1,8 +1,6 @@
 package com.example.myapplication.data.local
 
 import android.content.Context
-import android.os.Build
-import android.os.Environment
 import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
@@ -20,7 +18,6 @@ import java.io.File
 import java.util.UUID
 
 private const val TAG = "MigrationManager"
-private const val ROOT = "Vetro"
 private const val LIST_FILE_NAME = "list.json"
 private const val IGNORED_FILE_NAME = "ignored.json"
 private const val UPDATES_FILE_NAME = "updates.json"
@@ -29,21 +26,39 @@ private val MIGRATION_COMPLETED = booleanPreferencesKey("migration_completed")
 class MigrationManager(
     private val context: Context,
     private val localDataSource: AnimeLocalDataSource,
-    private val dataStore: DataStore<Preferences>
+    private val dataStore: DataStore<Preferences>,
+    private val storagePaths: VetroStoragePaths,
 ) {
 
+    suspend fun needsJsonMigration(): Boolean {
+        if (isMigrationCompleted()) {
+            val dbEmpty = try { localDataSource.getAnimeCount() == 0 } catch (_: Exception) { true }
+            if (!dbEmpty) return false
+
+            val root = getRoot()
+            val listFile = File(root, LIST_FILE_NAME)
+            val listBackupFile = File(root, "$LIST_FILE_NAME.backup")
+            return (listFile.exists() && listFile.length() > 10) ||
+                (listBackupFile.exists() && listBackupFile.length() > 10)
+        }
+
+        val root = getRoot()
+        if (!root.exists()) return false
+
+        return findFile(root, LIST_FILE_NAME) != null ||
+            findFile(root, IGNORED_FILE_NAME) != null ||
+            findFile(root, UPDATES_FILE_NAME) != null
+    }
+
     suspend fun runMigration() {
-        // Safety net: if the flag says "completed" but the DB is empty
-        // and list.json or list.json.backup still exists, a previous buggy run set the flag
-        // without actually importing. Reset and retry.
         if (isMigrationCompleted()) {
             val dbEmpty = try { localDataSource.getAnimeCount() == 0 } catch (e: Exception) { true }
             if (dbEmpty) {
                 val root = getRoot()
                 val listFile = File(root, LIST_FILE_NAME)
                 val listBackupFile = File(root, "$LIST_FILE_NAME.backup")
-                val hasListFile = (listFile.exists() && listFile.length() > 10) || 
-                                 (listBackupFile.exists() && listBackupFile.length() > 10)
+                val hasListFile = (listFile.exists() && listFile.length() > 10) ||
+                    (listBackupFile.exists() && listBackupFile.length() > 10)
                 if (hasListFile) {
                     Log.w(TAG, "DB is empty but migration flag was set and list.json(.backup) exists — resetting flag")
                     resetMigrationFlag()
@@ -59,23 +74,12 @@ class MigrationManager(
 
         val root = getRoot()
 
-        // Check if we can actually access the storage directory.
-        // On Android 11+, MANAGE_EXTERNAL_STORAGE must be granted first.
-        // If not granted yet, root.exists()/canRead() will return false even
-        // though the files are really there. In that case we must NOT mark
-        // migration as completed — we need to retry later after permission.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
-            Log.w(TAG, "Storage permission not granted yet, deferring migration")
-            return
-        }
-
         if (!root.exists()) {
             Log.d(TAG, "Root directory does not exist: ${root.absolutePath}, nothing to migrate")
             setMigrationCompleted()
             return
         }
 
-        // Try original files first, then .backup files
         val listFile = findFile(root, LIST_FILE_NAME)
         val ignoredFile = findFile(root, IGNORED_FILE_NAME)
         val updatesFile = findFile(root, UPDATES_FILE_NAME)
@@ -87,7 +91,6 @@ class MigrationManager(
             return
         }
 
-        // Only migrate if the DB is actually empty (avoid duplicates on re-run)
         val dbCount = try { localDataSource.getAnimeCount() } catch (e: Exception) { 0 }
 
         var migratedCount = 0
@@ -125,7 +128,7 @@ class MigrationManager(
         setMigrationCompleted()
         Log.d(TAG, "Migration completed. Total anime migrated: $migratedCount")
 
-        exportDatabaseToPublicFolder()
+        exportDatabaseToAppFolder()
 
         if (listFile != null && listFile.exists()) listFile.delete()
         if (ignoredFile != null && ignoredFile.exists()) ignoredFile.delete()
@@ -135,7 +138,7 @@ class MigrationManager(
         File(root, "$UPDATES_FILE_NAME.backup").delete()
     }
 
-    private fun exportDatabaseToPublicFolder() {
+    private fun exportDatabaseToAppFolder() {
         try {
             val internalDb = context.getDatabasePath("anime.db")
             val publicDbFile = File(getRoot(), "anime.db")
@@ -143,7 +146,7 @@ class MigrationManager(
             val internalShm = context.getDatabasePath("anime.db-shm")
             if (internalDb.exists()) {
                 internalDb.copyTo(publicDbFile, overwrite = true)
-                Log.d(TAG, "Database exported to public folder: ${publicDbFile.absolutePath}")
+                Log.d(TAG, "Database exported to app folder: ${publicDbFile.absolutePath}")
             }
             if (internalWal.exists()) {
                 internalWal.copyTo(File(getRoot(), "anime.db-wal"), overwrite = true)
@@ -152,20 +155,20 @@ class MigrationManager(
                 internalShm.copyTo(File(getRoot(), "anime.db-shm"), overwrite = true)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to export DB to public folder", e)
+            Log.e(TAG, "Failed to export DB to app folder", e)
         }
     }
-    
+
     private fun findFile(root: File, fileName: String): File? {
         val originalFile = File(root, fileName)
         if (originalFile.exists()) return originalFile
-        
+
         val backupFile = File(root, "$fileName.backup")
         if (backupFile.exists()) {
             Log.d(TAG, "Found $fileName.backup instead of $fileName")
             return backupFile
         }
-        
+
         return null
     }
 
@@ -185,9 +188,7 @@ class MigrationManager(
         }
     }
 
-    private fun getRoot(): File {
-        return File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), ROOT)
-    }
+    private fun getRoot(): File = storagePaths.vetroRoot
 
     private fun parseListJson(file: File): List<Anime> {
         val restoredList = mutableListOf<Anime>()

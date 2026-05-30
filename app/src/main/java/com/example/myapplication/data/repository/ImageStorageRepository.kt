@@ -5,7 +5,7 @@ package com.example.myapplication.data.repository
  */
 interface ImageStorageRepository {
     /**
-     * Сохраняет изображение по URI в коллекцию (Documents/Vetro/collection).
+     * Сохраняет изображение по URI в коллекцию (app storage/Vetro/collection).
      * @return Result с именем файла при успехе или ошибкой при неудаче.
      */
     suspend fun saveImage(uri: String, animeId: String): Result<String>

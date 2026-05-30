@@ -102,7 +102,7 @@ fun AnimeListActionMenu(
             verticalAlignment = Alignment.Top
         ) {
             AsyncImage(
-                model = state.imageUrl,
+                model = state.imageUrl.takeIf { it.isNotBlank() }?.let { java.io.File(it) },
                 contentDescription = "Anime Poster",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier

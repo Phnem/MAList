@@ -74,7 +74,6 @@ class MainActivity : ComponentActivity() {
             window.disableStatusBarContrastEnforced()
         }
         handleExternalListOAuthIntent(intent)
-        checkPerms()
 
         setContent {
             val isSystemDark = isSystemInDarkTheme()
@@ -202,17 +201,6 @@ class MainActivity : ComponentActivity() {
     private fun handleExternalListOAuthIntent(intent: Intent?) {
         val uri = intent?.data ?: return
         externalListSyncCoordinator.handleOAuthRedirect(uri)
-    }
-
-    private fun checkPerms() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !android.os.Environment.isExternalStorageManager()) {
-            val intent = android.content.Intent(
-                android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-                android.net.Uri.parse("package:$packageName")
-            )
-            startActivity(intent)
-            android.widget.Toast.makeText(this, "Need file access", android.widget.Toast.LENGTH_LONG).show()
-        }
     }
 
     override fun onResume() {

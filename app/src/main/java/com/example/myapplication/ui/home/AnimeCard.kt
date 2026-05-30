@@ -53,6 +53,7 @@ import com.example.myapplication.ui.shared.theme.LightBorder
 import com.example.myapplication.ui.shared.theme.getRatingColor
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
+import java.io.File
 
 @Immutable
 data class AnimeCardState(
@@ -134,7 +135,7 @@ fun SharedTransitionScope.OneUiAnimeCard(
                     val context = LocalContext.current
                     AsyncImage(
                         model = ImageRequest.Builder(context)
-                            .data(imgPath)
+                            .data(File(imgPath))
                             .crossfade(true)
                             .build(),
                         contentDescription = state.title,

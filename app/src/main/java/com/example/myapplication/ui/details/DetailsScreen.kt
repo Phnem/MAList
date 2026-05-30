@@ -38,6 +38,7 @@ import androidx.navigation.NavController
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
+import java.io.File
 import com.example.myapplication.data.models.Anime
 import com.example.myapplication.isAppInDarkTheme
 import com.example.myapplication.network.AppLanguage
@@ -242,7 +243,7 @@ private fun DetailsBody(
             if (imgPath != null) {
                 AsyncImage(
                     model = ImageRequest.Builder(context)
-                        .data(imgPath)
+                        .data(File(imgPath))
                         .crossfade(true)
                         .build(),
                     contentDescription = null,

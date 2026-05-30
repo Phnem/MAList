@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
-import android.os.Environment
 import android.util.Log
 import androidx.core.content.edit
 import com.dropbox.core.DbxRequestConfig
@@ -16,6 +15,7 @@ import com.dropbox.core.v2.files.FileMetadata
 import com.dropbox.core.v2.files.WriteMode
 import com.example.myapplication.data.local.AnimeLocalDataSource
 import com.example.myapplication.data.local.SQLDelightDatabaseFactory
+import com.example.myapplication.data.local.VetroStoragePaths
 import com.example.myapplication.utils.DropboxContentHasher
 import com.example.myapplication.worker.SyncWorker
 import kotlinx.coroutines.CoroutineScope
@@ -78,11 +78,13 @@ private const val PREF_NETWORK_MODE = "pref_network_mode"
 private const val PREF_SYNC_MODE = "pref_sync_mode"
 private const val DB_NAME = "anime.db"
 private const val COLLECTION_DIR = "collection"
+private val IMAGE_EXTENSIONS = setOf("jpg", "jpeg", "png", "webp")
 
 class DropboxSyncManager(
     private val context: Context,
     private val databaseFactory: SQLDelightDatabaseFactory,
-    private val animeLocalDataSource: AnimeLocalDataSource
+    private val animeLocalDataSource: AnimeLocalDataSource,
+    storagePaths: VetroStoragePaths,
 ) {
     private val _syncMode = MutableStateFlow(SyncMode.AUTO)
     private val _networkMode = MutableStateFlow(NetworkMode.WIFI_AND_MOBILE)
@@ -92,9 +94,7 @@ class DropboxSyncManager(
     var client: DbxClientV2? = null
     private val appContext: Context = context.applicationContext
     private val prefs: SharedPreferences = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    private val rootDir: File =
-        File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), "Vetro")
-            .also { if (!it.exists()) it.mkdirs() }
+    private val rootDir: File = storagePaths.vetroRoot
     private var debounceJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -292,7 +292,9 @@ class DropboxSyncManager(
         val imgDir = File(rootDir, COLLECTION_DIR)
         if (!imgDir.exists()) imgDir.mkdirs()
 
-        val localImages = imgDir.listFiles()?.filter { it.isFile && it.extension == "jpg" } ?: emptyList()
+        val localImages = imgDir.listFiles()?.filter {
+            it.isFile && it.extension.lowercase() in IMAGE_EXTENSIONS
+        } ?: emptyList()
 
         localImages.forEach { localImg ->
             val remotePath = "/$COLLECTION_DIR/${localImg.name}"

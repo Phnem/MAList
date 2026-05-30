@@ -13,27 +13,33 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -46,18 +52,32 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.phnem.vetro.R
+import com.example.myapplication.isAppInDarkTheme
 import com.example.myapplication.ui.shared.theme.BrandBlue
+import com.example.myapplication.ui.shared.theme.DarkSurface
+import com.example.myapplication.ui.shared.theme.LightSurface
 import com.example.myapplication.ui.shared.theme.SnProFamily
 
 @Composable
 fun VetroSplashScreen(
     uiState: SplashState,
-    onSplashComplete: (String) -> Unit
+    migrationTitle: String,
+    migrationSubtitle: String,
+    jsonMigrationTitle: String,
+    jsonMigrationSubtitle: String,
+    legacyFolderTitle: String,
+    legacyFolderSubtitle: String,
+    legacyFolderAction: String,
+    legacyFolderSkip: String,
+    onPickLegacyFolder: () -> Unit,
+    onSkipLegacyFolder: () -> Unit,
+    onSplashComplete: (String) -> Unit,
 ) {
-    val isDark = isSystemInDarkTheme()
+    val isDark = isAppInDarkTheme()
     val bgColor = MaterialTheme.colorScheme.background
 
     LaunchedEffect(uiState) {
@@ -66,26 +86,46 @@ fun VetroSplashScreen(
         }
     }
 
+    val showMigrationCard = uiState is SplashState.MigratingStorage ||
+        uiState is SplashState.MigratingJson ||
+        uiState is SplashState.ImportingLegacyFolder
+    val showFolderCard = uiState is SplashState.AwaitingLegacyFolder
+
+    val cardTitle = when (uiState) {
+        SplashState.MigratingStorage -> migrationTitle
+        SplashState.MigratingJson -> jsonMigrationTitle
+        SplashState.ImportingLegacyFolder -> migrationTitle
+        SplashState.AwaitingLegacyFolder -> legacyFolderTitle
+        else -> migrationTitle
+    }
+    val cardSubtitle = when (uiState) {
+        SplashState.MigratingStorage -> migrationSubtitle
+        SplashState.MigratingJson -> jsonMigrationSubtitle
+        SplashState.ImportingLegacyFolder -> migrationSubtitle
+        SplashState.AwaitingLegacyFolder -> legacyFolderSubtitle
+        else -> migrationSubtitle
+    }
+
     val infiniteTransition = rememberInfiniteTransition(label = "logo_pulse")
     val logoScale by infiniteTransition.animateFloat(
         initialValue = 0.95f,
         targetValue = 1.05f,
-            animationSpec = infiniteRepeatable(
+        animationSpec = infiniteRepeatable(
             animation = tween(1200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
+            repeatMode = RepeatMode.Reverse,
         ),
-        label = "logo_scale"
+        label = "logo_scale",
     )
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(bgColor),
-        contentAlignment = Alignment.Center
+        contentAlignment = Alignment.Center,
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.Center,
         ) {
             Box(
                 modifier = Modifier
@@ -94,13 +134,13 @@ fun VetroSplashScreen(
                     .clip(RoundedCornerShape(32.dp))
                     .background(if (isDark) Color(0xFF1A1D26) else Color.White)
                     .padding(16.dp),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 Image(
-                    painter = painterResource(id = R.drawable.ico),
+                    painter = painterResource(id = R.mipmap.ic_launcher_foreground),
                     contentDescription = "Vetro Logo",
                     modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Fit
+                    contentScale = ContentScale.Fit,
                 )
             }
 
@@ -111,76 +151,212 @@ fun VetroSplashScreen(
                 style = MaterialTheme.typography.displaySmall.copy(
                     fontFamily = SnProFamily,
                     fontWeight = FontWeight.Black,
-                    letterSpacing = (-0.5).sp
+                    letterSpacing = (-0.5).sp,
                 ),
-                color = MaterialTheme.colorScheme.onBackground
+                color = MaterialTheme.colorScheme.onBackground,
             )
         }
 
         AnimatedVisibility(
-            visible = uiState is SplashState.Migrating,
-            enter = slideInVertically(
-                initialOffsetY = { it },
-                animationSpec = spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow)
-            ) + fadeIn(tween(400)),
-            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(tween(300)),
+            visible = showMigrationCard,
+            enter = splashCardEnter(),
+            exit = splashCardExit(),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 64.dp)
-                .padding(horizontal = 24.dp)
+                .padding(horizontal = 24.dp),
         ) {
-            Card(
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(BrandBlue.copy(alpha = 0.15f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            color = BrandBlue,
-                            strokeWidth = 2.5.dp,
-                            strokeCap = StrokeCap.Round
-                        )
-                    }
+            SplashInfoCard(
+                title = cardTitle,
+                subtitle = cardSubtitle,
+                showProgress = true,
+            )
+        }
 
-                    Spacer(modifier = Modifier.width(16.dp))
+        AnimatedVisibility(
+            visible = showFolderCard,
+            enter = splashCardEnter(),
+            exit = splashCardExit(),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 64.dp)
+                .padding(horizontal = 24.dp),
+        ) {
+            SplashFolderCard(
+                title = cardTitle,
+                subtitle = cardSubtitle,
+                actionLabel = legacyFolderAction,
+                skipLabel = legacyFolderSkip,
+                onPickFolder = onPickLegacyFolder,
+                onSkip = onSkipLegacyFolder,
+            )
+        }
+    }
+}
 
-                    Column {
-                        Text(
-                            text = "Оптимизация...",
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontFamily = SnProFamily,
-                                fontWeight = FontWeight.Bold
-                            ),
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Адаптируем данные под новую версию. Это займет пару секунд.",
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontFamily = SnProFamily
-                            ),
-                            color = MaterialTheme.colorScheme.secondary,
-                            lineHeight = 16.sp
-                        )
-                    }
+private fun splashCardEnter() = slideInVertically(
+    initialOffsetY = { it },
+    animationSpec = spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow),
+) + fadeIn(tween(400))
+
+private fun splashCardExit() = slideOutVertically(targetOffsetY = { it }) + fadeOut(tween(300))
+
+@Composable
+private fun SplashBottomCard(
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val isDark = isAppInDarkTheme()
+    Card(
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isDark) DarkSurface else LightSurface,
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (isDark) Color.White.copy(alpha = 0.08f)
+            else MaterialTheme.colorScheme.outline.copy(alpha = 0.12f),
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        content()
+    }
+}
+
+@Composable
+private fun SplashInfoCard(
+    title: String,
+    subtitle: String,
+    showProgress: Boolean,
+) {
+    SplashBottomCard {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (showProgress) {
+                SplashAccentIconBubble {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = BrandBlue,
+                        strokeWidth = 2.5.dp,
+                        strokeCap = StrokeCap.Round,
+                    )
                 }
+                Spacer(modifier = Modifier.width(16.dp))
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                SplashCardText(title = title, subtitle = subtitle)
             }
         }
+    }
+}
+
+@Composable
+private fun SplashFolderCard(
+    title: String,
+    subtitle: String,
+    actionLabel: String,
+    skipLabel: String,
+    onPickFolder: () -> Unit,
+    onSkip: () -> Unit,
+) {
+    val isDark = isAppInDarkTheme()
+    val skipColor = if (isDark) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant
+
+    SplashBottomCard {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
+            ) {
+                SplashAccentIconBubble {
+                    Icon(
+                        imageVector = Icons.Outlined.FolderOpen,
+                        contentDescription = null,
+                        tint = BrandBlue,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    SplashCardText(title = title, subtitle = subtitle)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            Button(
+                onClick = onPickFolder,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(100),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = BrandBlue,
+                    contentColor = Color.White,
+                ),
+            ) {
+                Text(
+                    text = actionLabel,
+                    fontFamily = SnProFamily,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+
+            TextButton(
+                onClick = onSkip,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = skipLabel,
+                    fontFamily = SnProFamily,
+                    fontWeight = FontWeight.Medium,
+                    color = skipColor,
+                    textAlign = TextAlign.Center,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SplashAccentIconBubble(content: @Composable () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .clip(CircleShape)
+            .background(BrandBlue.copy(alpha = 0.15f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        content()
+    }
+}
+
+@Composable
+private fun SplashCardText(title: String, subtitle: String) {
+    Column {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium.copy(
+                fontFamily = SnProFamily,
+                fontWeight = FontWeight.Bold,
+            ),
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = subtitle,
+            style = MaterialTheme.typography.bodySmall.copy(
+                fontFamily = SnProFamily,
+            ),
+            color = MaterialTheme.colorScheme.secondary,
+            lineHeight = 16.sp,
+        )
     }
 }

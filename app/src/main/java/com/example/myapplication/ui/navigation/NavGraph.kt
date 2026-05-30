@@ -7,6 +7,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleOut
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -28,8 +30,12 @@ import com.example.myapplication.ui.inspect.InspectScreen
 import com.example.myapplication.ui.inspect.InspectViewModel
 import com.example.myapplication.ui.settings.SettingsScreen
 import com.example.myapplication.ui.settings.SettingsViewModel
+import com.example.myapplication.ui.splash.SplashState
 import com.example.myapplication.ui.splash.SplashViewModel
 import com.example.myapplication.ui.splash.VetroSplashScreen
+import com.example.myapplication.network.AppLanguage
+import com.example.myapplication.utils.getStrings
+import java.util.Locale
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 
@@ -58,8 +64,30 @@ fun AppNavGraph(
             composable<SplashRoute> {
                 val splashViewModel: SplashViewModel = koinViewModel()
                 val splashState by splashViewModel.uiState.collectAsStateWithLifecycle()
+                val splashStrings = getStrings(
+                    if (Locale.getDefault().language.equals("ru", ignoreCase = true)) {
+                        AppLanguage.RU
+                    } else {
+                        AppLanguage.EN
+                    }
+                )
+                val legacyFolderLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.OpenDocumentTree(),
+                ) { uri ->
+                    splashViewModel.onLegacyFolderSelected(uri)
+                }
                 VetroSplashScreen(
                     uiState = splashState,
+                    migrationTitle = splashStrings.splashStorageMigrationTitle,
+                    migrationSubtitle = splashStrings.splashStorageMigrationSubtitle,
+                    jsonMigrationTitle = splashStrings.splashJsonMigrationTitle,
+                    jsonMigrationSubtitle = splashStrings.splashJsonMigrationSubtitle,
+                    legacyFolderTitle = splashStrings.splashLegacyFolderTitle,
+                    legacyFolderSubtitle = splashStrings.splashLegacyFolderSubtitle,
+                    legacyFolderAction = splashStrings.splashLegacyFolderAction,
+                    legacyFolderSkip = splashStrings.splashLegacyFolderSkip,
+                    onPickLegacyFolder = { legacyFolderLauncher.launch(null) },
+                    onSkipLegacyFolder = { splashViewModel.skipLegacyFolderMigration() },
                     onSplashComplete = { nextRoute ->
                         when (nextRoute) {
                             "home" -> navController.navigate(HomeRoute) {

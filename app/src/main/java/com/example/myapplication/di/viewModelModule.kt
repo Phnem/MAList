@@ -14,10 +14,10 @@ import org.koin.dsl.module
 val viewModelModule = module {
     viewModel {
         SplashViewModel(
-            legacyMigrationRepository = get(),
+            legacyStorageMigrator = get(),
+            legacyCollectionSafMigrator = get(),
             migrationManager = get(),
             dropboxSyncManager = get(),
-            permissionChecker = get(),
             appUpdateRepository = get(),
         )
     }

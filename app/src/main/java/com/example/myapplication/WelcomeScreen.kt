@@ -147,7 +147,7 @@ fun WelcomeScreen(
                     .padding(4.dp)
             ) {
                 Image(
-                    painter = painterResource(id = R.drawable.ico),
+                    painter = painterResource(id = R.mipmap.ic_launcher_foreground),
                     contentDescription = null,
                     modifier = Modifier
                         .fillMaxSize()

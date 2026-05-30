@@ -260,5 +260,13 @@ data class UiStrings(
     /** Подпись в стиле референса (caps / mono). */
     val listSyncLoadingSubtitle: String,
     /** Нижняя подсказка на оверлее синхронизации. */
-    val listSyncLoadingFooter: String
+    val listSyncLoadingFooter: String,
+    val splashStorageMigrationTitle: String,
+    val splashStorageMigrationSubtitle: String,
+    val splashJsonMigrationTitle: String,
+    val splashJsonMigrationSubtitle: String,
+    val splashLegacyFolderTitle: String,
+    val splashLegacyFolderSubtitle: String,
+    val splashLegacyFolderAction: String,
+    val splashLegacyFolderSkip: String,
 )
