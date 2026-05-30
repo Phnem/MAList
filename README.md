@@ -8,11 +8,12 @@
 
 <p align="center">
   <b>Offline-first media tracker built on The Depth of Light design language.</b><br>
+  Part of the 3.2.x design family introducing a new depth-based visual system.<br>
   Anime · Movies · TV Shows · Anything structured
 </p>
 
 <p align="center">
-  Kotlin · Compose · Ktor · Koin · SQLDelight
+  Kotlin · Compose · SQLDelight · Ktor · Koin · kyant0 Blur
 </p>
 
 ---
@@ -101,14 +102,19 @@ Workflow:
 
 <h3>🎨 Visual & UI Evolution</h3>
 
+- Fully redesigned glassmorphism system
+- Migrated from Haze to kyant0 blur engine
+- Improved blur quality and rendering consistency
+
+- Updated global lighting model:
+  - heavy glow → subtle light accents
+  - cleaner depth hierarchy
+  - improved light theme appearance
+
 - Fully reworked light theme:
   - improved palette
   - better contrast
   - refined accent system
-
-- Updated global lighting model:
-  - heavy glow → subtle light accents
-  - more consistent visuals across screens
 
 - Tile-based genre system:
   - unified across Add / Edit / Sorting
@@ -121,22 +127,32 @@ Workflow:
 - Users provide their own key
 - Prevents abuse and improves transparency
 
+<h3>📦 Modern Android Storage</h3>
+
+- Migrated from legacy public storage to scoped app storage
+- Removed MANAGE_EXTERNAL_STORAGE permission
+- No storage permission prompts on Android 13+
+- Automatic migration of existing databases and collection images
+- Fully compliant with modern Android privacy requirements
+
+Result:
+- No "All files access" permission
+- No storage prompts on Android 13+
+- Better privacy
+- Play Store friendly
+
+<h3>🎨 Adaptive Icons</h3>
+
+- New adaptive launcher icons
+- Native Android 13+ monochrome icon support
+- Material You integration
+
 <h3>🔄 Sync & Integrations</h3>
 
-- New Sync system UI
-- Import / Export / Sync workflows
-
-Integrations:
-
-- Shikimori API
-- AniList API
-
-Capabilities:
-
-- Import external libraries → into Vetro
-- Export Vetro collection → external services
-
-⚠️ Experimental feature
+- Redesigned Sync Center
+- Added Import / Export workflows
+- Added AniList integration
+- Added Shikimori integration
 
 <h3>🛠 Data & Tools</h3>
 
@@ -149,7 +165,6 @@ Capabilities:
 - Context-aware sarcasm engine
 
 Features:
-
 - 600+ dynamic phrases in Statistics
 - App reacts to your taste:
   - judges it
@@ -158,6 +173,10 @@ Features:
 <h3>🎬 UX & Interaction</h3>
 
 - Visual Search gestures added
+- Built-in update system
+- In-app update installation
+- Numeric notification indicators
+- Modern Material-inspired settings switches
 - Improved navigation flow
 - Better animation consistency
 
@@ -198,7 +217,7 @@ Features:
 
 <h3>Networking</h3>
 
-- Ktor (CIO)
+- Ktor (OkHttp Engine)
 - Apollo GraphQL
 - Structured error handling
 
@@ -207,27 +226,43 @@ Features:
 <h2>⚡ Performance</h2>
 
 - Removed Paging3 → no pagination lag
+- New kyant0 blur renderer
+- Reduced GPU overhead
+- Optimized SQLDelight database access
+- Reduced database startup overhead
 - Reduced recompositions
+- Faster synchronization checks
+- Improved memory efficiency
 - Optimized LazyColumn behavior
-- GPU improvements
 - Image loading optimization (Coil 3.x)
 - XML removal → no runtime parsing
 
 Result:
-
 - smooth scrolling
 - instant search
 - stable rendering
 
 ---
 
-<h2>☁️ Cloud Sync (Optional)</h2>
+<h2>☁️ Sync & Integrations</h2>
 
-Dropbox-based sync:
+Supported services:
+- Dropbox
+- Shikimori
+- AniList
 
+Capabilities:
+- Cloud backup & restore
+- Import collections from external services
+- Export Vetro collections
+- Cross-platform migration
+
+Dropbox features:
 - File hashing (DropboxContentHasher)
-- Simple and reliable restore
-- No complex delta sync
+- Safe database restore
+- Reliable backup synchronization
+
+⚠️ Third-party library synchronization is still experimental.
 
 Local-first architecture remains unchanged.
 
