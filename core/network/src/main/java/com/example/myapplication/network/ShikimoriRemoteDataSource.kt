@@ -39,6 +39,14 @@ class ShikimoriRemoteDataSource(
         searchResponse.map { it.toApiSearchResult(language) }
     }
 
+    suspend fun searchManga(query: String, limit: Int = 20, language: AppLanguage = AppLanguage.EN): Result<List<ApiSearchResult>> = runCatching {
+        val searchResponse = client.get("https://shikimori.one/api/mangas") {
+            parameter("search", query.trim())
+            parameter("limit", limit)
+        }.body<List<ShikimoriSearchItemDto>>()
+        searchResponse.map { it.toApiSearchResult(language) }
+    }
+
     suspend fun findTotalEpisodes(query: String): Result<Pair<Int, String>?> = runCatching {
         val searchResponse = client.get("https://shikimori.one/api/animes") {
             parameter("search", query.trim())

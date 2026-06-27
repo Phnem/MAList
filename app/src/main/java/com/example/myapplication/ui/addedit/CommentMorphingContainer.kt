@@ -49,6 +49,8 @@ import com.example.myapplication.isAppInDarkTheme
 @Composable
 fun SharedTransitionScope.CommentMorphingContainer(
     state: AddEditUiState,
+    addCommentLabel: String,
+    commentPlaceholder: String,
     onModeChange: (CommentMode) -> Unit,
     onSaveComment: (String) -> Unit,
     modifier: Modifier = Modifier
@@ -87,7 +89,7 @@ fun SharedTransitionScope.CommentMorphingContainer(
                         .background(Color.White)
                 ) {
                     Text(
-                        text = "Добавить комментарий",
+                        text = addCommentLabel,
                         color = Color.Black,
                         style = MaterialTheme.typography.labelLarge
                     )
@@ -133,7 +135,7 @@ fun SharedTransitionScope.CommentMorphingContainer(
                             Box {
                                 if (inputText.isEmpty()) {
                                     Text(
-                                        "Ваш комментарий...",
+                                        commentPlaceholder,
                                         color = Color.Black.copy(alpha = 0.4f),
                                         style = MaterialTheme.typography.bodyLarge
                                     )

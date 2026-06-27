@@ -81,8 +81,16 @@ class SQLDelightDatabaseFactory(private val context: Context) {
             val ver = db.rawQuery("PRAGMA user_version", null).use { c ->
                 if (c.moveToFirst()) c.getLong(0) else 0L
             }
-            if (ver >= targetVersion) return@use
             val cols = readAnimeColumns()
+            
+            // Fix for users who had their version bumped to 7 by the legacy logic without running 6.sqm
+            if (ver >= 7L && !cols.contains("isPrivate")) {
+                Log.d("SQLDelight", "Downgrading user_version to 6 because isPrivate is missing")
+                db.execSQL("PRAGMA user_version = 6")
+            } else if (ver >= targetVersion) {
+                return@use
+            }
+
             val hasSync = cols.contains("sync_status")
             val hasComment = cols.contains("comment")
             val hasEpisodeCheckColumns = cols.contains("anilist_id")
@@ -92,10 +100,10 @@ class SQLDelightDatabaseFactory(private val context: Context) {
                 && cols.contains("mal_not_found_at")
                 && cols.contains("shikimori_not_found_at")
             when {
-                hasSync && hasComment && hasEpisodeCheckColumns ->
-                    db.execSQL("PRAGMA user_version = $targetVersion")
-                hasSync && !hasComment && targetVersion > 1 ->
-                    db.execSQL("PRAGMA user_version = ${targetVersion - 1}")
+                hasSync && hasComment && hasEpisodeCheckColumns && ver < 6L ->
+                    db.execSQL("PRAGMA user_version = 6")
+                hasSync && !hasComment && ver < 3L ->
+                    db.execSQL("PRAGMA user_version = 3")
             }
         }
     }

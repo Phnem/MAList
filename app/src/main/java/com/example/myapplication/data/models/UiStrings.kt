@@ -157,6 +157,8 @@ data class UiStrings(
     val devImportDbSubtitle: String,
     val devFpsOverlayTitle: String,
     val devFpsOverlaySubtitle: String,
+    val devAdaptiveGlassTitle: String,
+    val devAdaptiveGlassSubtitle: String,
     val devExportLogsCd: String,
     val devImportDbCd: String,
     val devImportDbResultAddedTemplate: String,
@@ -270,3 +272,9 @@ data class UiStrings(
     val splashLegacyFolderAction: String,
     val splashLegacyFolderSkip: String,
 )
+
+val UiStrings.typeManga: String
+    get() = if (this.languageName == "RU") "Манга" else "Manga"
+
+val UiStrings.typeSeries: String
+    get() = if (this.languageName == "RU") "ТВ-Сериал" else "TV Series"

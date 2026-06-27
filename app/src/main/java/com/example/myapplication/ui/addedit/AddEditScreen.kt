@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.example.myapplication.isAppInDarkTheme
+import com.example.myapplication.utils.getAddEditCommentStrings
 import com.example.myapplication.utils.getStrings
 import com.example.myapplication.utils.performHaptic
 import com.example.myapplication.ui.shared.components.StarRatingBar
@@ -76,6 +77,7 @@ fun AddEditScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val currentLanguage by viewModel.uiLanguage.collectAsStateWithLifecycle()
     val strings = getStrings(currentLanguage)
+    val commentStrings = getAddEditCommentStrings(currentLanguage)
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) {
         viewModel.onEvent(AddEditEvent.OnImageUriChanged(it))
     }
@@ -308,6 +310,8 @@ fun AddEditScreen(
                     AnimatedFormRow(index = 13, collisionState = collisionState) {
                         CommentMorphingContainer(
                             state = uiState,
+                            addCommentLabel = commentStrings.addButton,
+                            commentPlaceholder = commentStrings.placeholder,
                             onModeChange = {
                                 viewModel.onEvent(AddEditEvent.OnCommentModeChanged(it))
                             },

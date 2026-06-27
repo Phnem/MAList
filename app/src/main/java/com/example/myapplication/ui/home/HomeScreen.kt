@@ -28,13 +28,24 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asComposeRenderEffect
@@ -56,8 +67,9 @@ import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.example.myapplication.ui.shared.ListSyncLoadingOverlay
+import com.example.myapplication.ui.shared.LocalAdaptiveGlassScrollInProgress
 import com.example.myapplication.ui.shared.customOverscroll
-import com.example.myapplication.DropboxSyncManager
+
 import com.example.myapplication.GlassActionDock
 import com.example.myapplication.GlassBottomNavigation
 import com.example.myapplication.GenreFilterOverlay
@@ -68,12 +80,17 @@ import com.example.myapplication.data.models.*
 import com.example.myapplication.data.repository.GenreRepository
 import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.sync.ExternalListSyncCoordinator
+import com.example.myapplication.sync.supabase.CollectionImageRestoreCoordinator
+import com.example.myapplication.sync.supabase.SupabaseSyncCoordinator
+import com.example.myapplication.utils.getCloudSyncPillStrings
 import com.example.myapplication.utils.getStrings
+import com.example.myapplication.utils.systemAppLanguage
 import com.example.myapplication.utils.performHaptic
 import com.example.myapplication.ui.navigation.navigateToAddEdit
 import com.example.myapplication.ui.navigation.navigateToDetails
 import com.example.myapplication.ui.navigation.navigateToInspect
 import com.example.myapplication.ui.navigation.navigateToWelcome
+import com.example.myapplication.ui.navigation.navigateToSettings
 import com.example.myapplication.ui.shared.theme.*
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
@@ -87,17 +104,28 @@ import org.koin.compose.koinInject
 fun HomeScreen(
     navController: NavController,
     viewModel: HomeViewModel,
-    dropboxSyncManager: DropboxSyncManager,
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope
 ) {
     val genreRepository: GenreRepository = koinInject()
     val listSyncCoordinator: ExternalListSyncCoordinator = koinInject()
+    val supabaseSyncCoordinator: SupabaseSyncCoordinator = koinInject()
+    val collectionImageRestoreCoordinator: CollectionImageRestoreCoordinator = koinInject()
     val listSyncUi by listSyncCoordinator.syncUiState.collectAsStateWithLifecycle()
+    val isSupabaseSyncing by supabaseSyncCoordinator.isSyncing.collectAsStateWithLifecycle()
+    val isCloudImageRestoring by collectionImageRestoreCoordinator.isRestoring.collectAsStateWithLifecycle()
     val currentLanguage by viewModel.uiLanguage.collectAsStateWithLifecycle()
     val strings = getStrings(currentLanguage)
+    val cloudSyncPillStrings = getCloudSyncPillStrings(systemAppLanguage())
     val syncReport by viewModel.syncReport.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val list by viewModel.animeListFlow.collectAsStateWithLifecycle()
+    var cloudSyncPillDismissed by remember { mutableStateOf(false) }
+    val showCloudSyncPill =
+        uiState.isListLoaded &&
+            !cloudSyncPillDismissed &&
+            (isSupabaseSyncing || isCloudImageRestoring)
+    val dismissCloudSyncPill = { cloudSyncPillDismissed = true }
     val kbd = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
     val view = LocalView.current
@@ -112,6 +140,10 @@ fun HomeScreen(
     var showSortOverlay by remember { mutableStateOf(false) }
     val sortVisibleState = remember { MutableTransitionState(false) }
     sortVisibleState.targetState = showSortOverlay
+
+    var showMediaTypeFilterOverlay by remember { mutableStateOf(false) }
+    val mediaTypeFilterVisibleState = remember { MutableTransitionState(false) }
+    mediaTypeFilterVisibleState.targetState = showMediaTypeFilterOverlay
 
     val genreFilterVisibleState = remember { MutableTransitionState(false) }
     genreFilterVisibleState.targetState = uiState.isGenreFilterVisible
@@ -139,6 +171,12 @@ fun HomeScreen(
         viewModel.checkForUpdates()
     }
 
+    LaunchedEffect(isSupabaseSyncing, isCloudImageRestoring) {
+        if (!isSupabaseSyncing && !isCloudImageRestoring) {
+            cloudSyncPillDismissed = false
+        }
+    }
+
     var isDockVisible by remember { mutableStateOf(true) }
     val finalDockVisible = isDockVisible || isSearchVisible
     val nestedScrollConnection = remember {
@@ -164,6 +202,14 @@ fun HomeScreen(
     }
 
     val listState = rememberLazyListState()
+    val listScrollInProgress by remember { derivedStateOf { listState.isScrollInProgress } }
+
+    LaunchedEffect(listScrollInProgress) {
+        if (listScrollInProgress) {
+            cloudSyncPillDismissed = true
+        }
+    }
+
     var overscrollAmount by remember { mutableFloatStateOf(0f) }
     val isHeaderFloating by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 20 } }
     val showScrollToTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 4 } }
@@ -175,7 +221,8 @@ fun HomeScreen(
 
     val shouldBlur = (isSearchVisible && uiState.searchQuery.isBlank()) ||
             showCSheet || animeToDelete != null || animeToFavorite != null ||
-            uiState.isGenreFilterVisible || showNotificationsOverlay || showSortOverlay || listSyncUi.isRunning
+            uiState.isGenreFilterVisible || showNotificationsOverlay || showSortOverlay ||
+            showMediaTypeFilterOverlay || listSyncUi.isRunning
     val blurAmount by animateDpAsState(
         targetValue = when {
             notificationsBlockingChildDialog -> 20.dp
@@ -194,17 +241,31 @@ fun HomeScreen(
 
     val openWorkspaceSort: () -> Unit = {
         performHaptic(view, "light")
+        dismissCloudSyncPill()
         showSortOverlay = !showSortOverlay
         if (showSortOverlay) {
             showNotificationsOverlay = false
+            showMediaTypeFilterOverlay = false
             viewModel.setGenreFilterVisible(false)
         }
     }
     val openWorkspaceNotifications: () -> Unit = {
         performHaptic(view, "light")
+        dismissCloudSyncPill()
         showNotificationsOverlay = !showNotificationsOverlay
         if (showNotificationsOverlay) {
             showSortOverlay = false
+            showMediaTypeFilterOverlay = false
+            viewModel.setGenreFilterVisible(false)
+        }
+    }
+    val openMediaTypeFilter: () -> Unit = {
+        performHaptic(view, "light")
+        dismissCloudSyncPill()
+        showMediaTypeFilterOverlay = !showMediaTypeFilterOverlay
+        if (showMediaTypeFilterOverlay) {
+            showSortOverlay = false
+            showNotificationsOverlay = false
             viewModel.setGenreFilterVisible(false)
         }
     }
@@ -216,13 +277,15 @@ fun HomeScreen(
         // Иначе system bar insets добавляются в paddingValues — фон не заливает полосы сверху/снизу
         contentWindowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp)
     ) { paddingValues ->
+        CompositionLocalProvider(LocalAdaptiveGlassScrollInProgress provides listScrollInProgress) {
         Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
             Box(modifier = Modifier.fillMaxSize().background(bgColor))
 
             if (notifVisibleState.currentState || notifVisibleState.targetState) {
                 Box(modifier = Modifier.zIndex(5f).fillMaxSize()) {
                     NotificationSyncOverlay(
-                        syncManager = dropboxSyncManager,
+                        syncCoordinator = koinInject(),
+                        authRepository = koinInject(),
                         visibleState = notifVisibleState,
                         strings = getStrings(currentLanguage),
                         syncReport = syncReport,
@@ -231,7 +294,6 @@ fun HomeScreen(
                         currentLanguage = currentLanguage,
                         onDismiss = { showNotificationsOverlay = false },
                         onLogout = {
-                            dropboxSyncManager.logout()
                             navController.navigateToWelcome()
                         },
                         onCheckUpdates = {
@@ -298,6 +360,18 @@ fun HomeScreen(
                 }
             }
 
+            if (mediaTypeFilterVisibleState.currentState || mediaTypeFilterVisibleState.targetState) {
+                Box(modifier = Modifier.zIndex(5f).fillMaxSize()) {
+                    MediaTypeFilterOverlay(
+                        visibleState = mediaTypeFilterVisibleState,
+                        strings = getStrings(currentLanguage),
+                        selected = uiState.libraryMediaTypeFilter,
+                        onSelect = { viewModel.setLibraryMediaTypeFilter(it) },
+                        onDismiss = { showMediaTypeFilterOverlay = false },
+                    )
+                }
+            }
+
             if (listSyncUi.isRunning) {
                 Box(
                     modifier = Modifier
@@ -321,7 +395,6 @@ fun HomeScreen(
 
             Column(modifier = Modifier.fillMaxSize().homeScrollBlur(blurAmount)) {
                 Box(modifier = Modifier.fillMaxSize().weight(1f).background(bgColor)) {
-                    val list by viewModel.animeListFlow.collectAsStateWithLifecycle()
                     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
                     val apiSearchModels by viewModel.apiSearchWithStatus.collectAsStateWithLifecycle()
 
@@ -335,7 +408,10 @@ fun HomeScreen(
                         ) {
                             PullToRefreshBox(
                                 isRefreshing = isRefreshing,
-                                onRefresh = { viewModel.refreshList() },
+                                onRefresh = {
+                                    dismissCloudSyncPill()
+                                    viewModel.refreshList()
+                                },
                                 modifier = Modifier.fillMaxSize()
                             ) {
                                 LazyColumn(
@@ -347,7 +423,9 @@ fun HomeScreen(
                                         .layerBackdrop(backdrop)
                                 ) {
                                     item {
-                                        MalistWorkspaceTopBar(strings = getStrings(currentLanguage))
+                                        VetroWorkspaceTopBar(
+                                            strings = getStrings(currentLanguage),
+                                        )
                                     }
 
                                     val showApiFirst = list.isEmpty() && uiState.searchQuery.isNotEmpty()
@@ -436,7 +514,12 @@ fun HomeScreen(
                                                         ),
                                                         episodesCount = anime.episodes,
                                                         categoryLabel = anime.categoryType.takeIf { it.isNotBlank() },
-                                                        imagePath = viewModel.getImgPath(anime.imageFileName)
+                                                        imagePath = viewModel.getImgPath(anime.imageFileName),
+                                                        mediaTypeLabel = when (anime.mediaType) {
+                                                            com.example.myapplication.data.models.MediaType.ANIME -> strings.typeAnime
+                                                            com.example.myapplication.data.models.MediaType.MANGA -> strings.typeManga
+                                                            com.example.myapplication.data.models.MediaType.TV_SERIES -> strings.typeSeries
+                                                        }
                                                     )
                                                 }
                                                 with(sharedTransitionScope) {
@@ -486,10 +569,14 @@ fun HomeScreen(
                             }
                         }
                     }
-                    CloudRestoreIndicator(
-                        isRestoring = uiState.isRestoringFromCloud && list.isEmpty() && uiState.isListLoaded,
-                        strings = strings,
-                        modifier = Modifier.align(Alignment.Center)
+                    CloudSyncPill(
+                        visible = showCloudSyncPill,
+                        label = cloudSyncPillStrings.label,
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .statusBarsPadding()
+                            .padding(top = 8.dp)
+                            .zIndex(4f),
                     )
                 }
             }
@@ -512,14 +599,19 @@ fun HomeScreen(
                             nav = navController,
                             sharedTransitionScope = sharedTransitionScope,
                             animatedVisibilityScope = animatedVisibilityScope,
-                            onShowStats = { showCSheet = true },
+                            onShowStats = {
+                                dismissCloudSyncPill()
+                                showCSheet = true
+                            },
                             onShowNotifs = {},
                             onInspectClick = {
                                 performHaptic(view, "light")
+                                dismissCloudSyncPill()
                                 navController.navigateToInspect()
                             },
                             onSearchClick = {
                                 performHaptic(view, "light")
+                                dismissCloudSyncPill()
                                 isSearchVisible = !isSearchVisible
                                 if (!isSearchVisible) {
                                     viewModel.updateSearchQuery("")
@@ -527,8 +619,12 @@ fun HomeScreen(
                                     kbd?.hide()
                                 }
                             },
+                            onSettingsClick = {
+                                dismissCloudSyncPill()
+                                navController.navigateToSettings()
+                            },
                             isSearchActive = isSearchVisible,
-                            modifier = Modifier
+                            modifier = Modifier,
                         )
                     }
                 }
@@ -540,35 +636,79 @@ fun HomeScreen(
                 exit = slideOutVertically { it } + fadeOut(),
                 modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 16.dp).windowInsetsPadding(WindowInsets.ime).padding(bottom = 16.dp).zIndex(10f)
             ) {
-                SimpGlassCard(backdrop = backdrop, shape = RoundedCornerShape(28.dp), modifier = Modifier.fillMaxWidth().height(56.dp)) {
-                    BasicTextField(
-                        value = uiState.searchQuery,
-                        onValueChange = {
-                            viewModel.updateSearchQuery(it)
-                            if (it.isNotEmpty()) performHaptic(view, "light")
-                        },
-                        modifier = Modifier.fillMaxSize().focusRequester(searchFocusRequester).padding(horizontal = 20.dp),
-                        singleLine = true,
-                        textStyle = TextStyle(fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface, fontFamily = SnProFamily),
-                        cursorBrush = SolidColor(BrandBlue),
-                        decorationBox = { innerTextField ->
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(imageVector = Icons.Default.Search, contentDescription = null, tint = BrandBlue)
-                                Spacer(Modifier.width(12.dp))
-                                Box {
-                                    if (uiState.searchQuery.isEmpty()) {
-                                        Text("Search in collection...", color = MaterialTheme.colorScheme.secondary, fontSize = 16.sp, fontFamily = SnProFamily)
-                                    }
-                                    innerTextField()
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        val filters = listOf(
+                            com.example.myapplication.data.models.MediaType.ANIME to strings.typeAnime,
+                            com.example.myapplication.data.models.MediaType.MANGA to strings.typeManga,
+                            com.example.myapplication.data.models.MediaType.TV_SERIES to strings.typeSeries
+                        )
+                        filters.forEach { (type, label) ->
+                            val isSelected = uiState.searchMediaTypeFilter == type
+                            val scale by androidx.compose.animation.core.animateFloatAsState(
+                                targetValue = if (isSelected) 1.1f else 1.0f,
+                                animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.7f, stiffness = androidx.compose.animation.core.Spring.StiffnessLow),
+                                label = "scale"
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .padding(horizontal = 4.dp)
+                                    .scale(scale)
+                                    .clip(CircleShape)
+                                    .clickable { viewModel.setSearchMediaTypeFilter(type) }
+                            ) {
+                                com.example.myapplication.SimpGlassCard(
+                                    backdrop = backdrop,
+                                    shape = CircleShape,
+                                    modifier = Modifier.matchParentSize()
+                                ) {}
+                                Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                                    Text(
+                                        text = label,
+                                        color = if (isSelected) Color.White else Color.White.copy(alpha = 0.8f),
+                                        fontSize = 13.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        fontFamily = SnProFamily
+                                    )
                                 }
                             }
-                        },
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = {
-                            kbd?.hide()
-                            focusManager.clearFocus()
-                        })
-                    )
+                        }
+                    }
+                    SimpGlassCard(backdrop = backdrop, shape = RoundedCornerShape(28.dp), modifier = Modifier.fillMaxWidth().height(56.dp)) {
+                        BasicTextField(
+                            value = uiState.searchQuery,
+                            onValueChange = {
+                                viewModel.updateSearchQuery(it)
+                                if (it.isNotEmpty()) performHaptic(view, "light")
+                            },
+                            modifier = Modifier.fillMaxSize().focusRequester(searchFocusRequester).padding(horizontal = 20.dp),
+                            singleLine = true,
+                            textStyle = TextStyle(fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface, fontFamily = SnProFamily),
+                            cursorBrush = SolidColor(BrandBlue),
+                            decorationBox = { innerTextField ->
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(imageVector = Icons.Default.Search, contentDescription = null, tint = BrandBlue)
+                                    Spacer(Modifier.width(12.dp))
+                                    Box {
+                                        if (uiState.searchQuery.isEmpty()) {
+                                            Text("Search in collection...", color = MaterialTheme.colorScheme.secondary, fontSize = 16.sp, fontFamily = SnProFamily)
+                                        }
+                                        innerTextField()
+                                    }
+                                }
+                            },
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                            keyboardActions = KeyboardActions(onSearch = {
+                                kbd?.hide()
+                                focusManager.clearFocus()
+                            })
+                        )
+                    }
                 }
                 LaunchedEffect(Unit) {
                     searchFocusRequester.requestFocus()
@@ -670,9 +810,10 @@ fun HomeScreen(
                             updatesCount = uiState.updates.size,
                             onOpenSort = openWorkspaceSort,
                             onOpenNotifications = openWorkspaceNotifications,
+                            onOpenMediaTypeFilter = openMediaTypeFilter,
                             dockButtonBackground = Color.Transparent,
                             useDockSizing = false,
-                            modifier = Modifier.align(Alignment.CenterEnd)
+                            modifier = Modifier.align(Alignment.CenterEnd),
                         )
                     }
                 }
@@ -685,6 +826,7 @@ fun HomeScreen(
                         updates = uiState.updates,
                         onOpenSort = openWorkspaceSort,
                         onOpenNotifications = openWorkspaceNotifications,
+                        onOpenMediaTypeFilter = openMediaTypeFilter,
                         modifier = Modifier.padding(top = 12.dp)
                     )
                 }
@@ -702,6 +844,7 @@ fun HomeScreen(
                 footerPhrase = uiState.statsFooterPhrase,
                 onDismiss = { showCSheet = false }
             )
+        }
         }
     }
 }
@@ -819,7 +962,12 @@ private fun LazyListScope.apiSearchResultsSection(
             modifier = Modifier.padding(horizontal = 16.dp),
             displayGenres = apiGenres,
             addLabel = strings.addButton,
-            addedLabel = strings.addedButton
+            addedLabel = strings.addedButton,
+            mediaTypeLabel = when (uiState.searchMediaTypeFilter) {
+                com.example.myapplication.data.models.MediaType.ANIME -> strings.typeAnime
+                com.example.myapplication.data.models.MediaType.MANGA -> strings.typeManga
+                com.example.myapplication.data.models.MediaType.TV_SERIES -> strings.typeSeries
+            }
         )
     }
 }

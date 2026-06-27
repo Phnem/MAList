@@ -20,5 +20,12 @@ data class Anime(
     val shikimoriId: Int? = null,
     val anilistNotFoundAt: Long? = null,
     val malNotFoundAt: Long? = null,
-    val shikimoriNotFoundAt: Long? = null
+    val shikimoriNotFoundAt: Long? = null,
+    val mediaType: MediaType = MediaType.ANIME
 )
+
+enum class MediaType {
+    ANIME,
+    MANGA,
+    TV_SERIES
+}

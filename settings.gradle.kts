@@ -25,7 +25,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Vetro"
+rootProject.name = "vetro-collection"
 include(":app")
 include(":core:designsystem")
 include(":core:database")

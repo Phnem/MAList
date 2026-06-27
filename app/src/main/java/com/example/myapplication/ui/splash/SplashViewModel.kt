@@ -3,7 +3,8 @@ package com.example.myapplication.ui.splash
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.myapplication.DropboxSyncManager
+import com.example.myapplication.sync.supabase.AuthRepository
+import com.example.myapplication.data.local.ImageCompressionMigrator
 import com.example.myapplication.data.local.LegacyCollectionSafMigrator
 import com.example.myapplication.data.local.LegacyStorageMigrator
 import com.example.myapplication.data.local.MigrationManager
@@ -21,6 +22,7 @@ sealed interface SplashState {
     data object MigratingJson : SplashState
     data object AwaitingLegacyFolder : SplashState
     data object ImportingLegacyFolder : SplashState
+    data object RestoringFromCloud : SplashState
     data class Completed(val nextRoute: String) : SplashState
 }
 
@@ -28,8 +30,9 @@ class SplashViewModel(
     private val legacyStorageMigrator: LegacyStorageMigrator,
     private val legacyCollectionSafMigrator: LegacyCollectionSafMigrator,
     private val migrationManager: MigrationManager,
-    private val dropboxSyncManager: DropboxSyncManager,
+    private val authRepository: AuthRepository,
     private val appUpdateRepository: AppUpdateRepository,
+    private val imageCompressionMigrator: ImageCompressionMigrator,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<SplashState>(SplashState.Loading)
@@ -50,8 +53,9 @@ class SplashViewModel(
             _uiState.update { SplashState.ImportingLegacyFolder }
             withContext(Dispatchers.IO) {
                 legacyCollectionSafMigrator.saveTreeUriAndCopy(uri)
+                imageCompressionMigrator.compressExistingImages()
             }
-            finishStartup()
+            finishStartup(legacyFolderPromptDismissed = true)
         }
     }
 
@@ -84,12 +88,23 @@ class SplashViewModel(
                 return@launch
             }
 
+            withContext(Dispatchers.IO) {
+                imageCompressionMigrator.compressExistingImages()
+            }
+
             finishStartup()
         }
     }
 
-    private suspend fun finishStartup(forceWithoutImages: Boolean = false) {
-        if (!forceWithoutImages && legacyCollectionSafMigrator.needsLegacyFolderAccess()) {
+    private suspend fun finishStartup(
+        forceWithoutImages: Boolean = false,
+        legacyFolderPromptDismissed: Boolean = false,
+    ) {
+        if (
+            !forceWithoutImages &&
+            !legacyFolderPromptDismissed &&
+            legacyCollectionSafMigrator.needsLegacyFolderAccess()
+        ) {
             _uiState.update { SplashState.AwaitingLegacyFolder }
             return
         }
@@ -98,7 +113,7 @@ class SplashViewModel(
             runCatching { appUpdateRepository.refreshAppUpdate(force = false) }
         }
 
-        val route = if (dropboxSyncManager.hasToken()) "home" else "welcome"
+        val route = if (authRepository.hasToken() || authRepository.isGuest) "home" else "welcome"
         _uiState.update { SplashState.Completed(route) }
     }
 }

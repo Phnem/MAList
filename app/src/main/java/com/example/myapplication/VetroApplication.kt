@@ -24,6 +24,7 @@ class VetroApplication : Application(), SingletonImageLoader.Factory {
             androidContext(this@VetroApplication)
             modules(
                 coreNetworkModule,
+                com.example.myapplication.sync.supabase.supabaseModule,
                 appModule,
                 databaseModule,
                 viewModelModule

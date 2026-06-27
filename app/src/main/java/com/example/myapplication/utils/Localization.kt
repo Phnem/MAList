@@ -22,7 +22,7 @@ val RussianStrings = UiStrings(
     noResultsInLibrary = "Нет в вашем списке",
     noFavorites = "Нет избранного",
     filterByGenre = "По жанрам",
-    genreAnime = "Аниме",
+    genreAnime = "Аниме / Манга",
     genreMovies = "Фильмы",
     genreSeries = "Сериалы",
     genreFilterAnimeTitle = "Аниме-сериалы",
@@ -104,7 +104,7 @@ val RussianStrings = UiStrings(
     nottifAccountTitle = "Мой Vetro",
     nottifLogoutConfirmTitle = "Выйти из аккаунта?",
     nottifLogoutConfirmBody = "Локальные данные будут удалены. Вы будете перенаправлены на экран приветствия.",
-    nottifSyncNow = "Синхронизировать",
+    nottifSyncNow = "Синх.",
     nottifLastSyncSuccess = "Успешно",
     nottifLastSyncSyncing = "Синхронизация…",
     nottifLastSyncError = "Ошибка",
@@ -127,11 +127,11 @@ val RussianStrings = UiStrings(
     contentTypeTitle = "Тип контента",
     typeAnime = "Аниме",
     typeMovies = "ТВ",
-    cloudSettingsTitle = "Облачные настройки",
-    cloudSettingsSubtitle = "Подменю для настройки синхронизации и резервного копирования",
+    cloudSettingsTitle = "Настройки аккаунта",
+    cloudSettingsSubtitle = "Синхронизация, вход и пароль",
     cloudTotalSize = "Общий размер",
     cloudFiles = "Файлов",
-    syncLabel = "Синхронизировать",
+    syncLabel = "Синх.",
     wifiOnly = "Только Wi-Fi",
     anyNetwork = "Любая сеть",
     lastSync = "Последняя синхр.",
@@ -142,8 +142,8 @@ val RussianStrings = UiStrings(
     addedButton = "Добавлено",
     viaApi = "через API",
     episodesShort = "эп.",
-    cloudRestoreTitle = "Восстановление базы данных...",
-    cloudRestoreSubtitle = "Загружаем вашу коллекцию из облака. Пожалуйста, подождите.",
+    cloudRestoreTitle = "Загрузка обложек…",
+    cloudRestoreSubtitle = "Скачиваем фото из облака. Пожалуйста, подождите.",
     devSectionTitle = "Для разработчиков",
     devMirrorDbTitle = "Зеркалировать внутреннюю БД",
     devMirrorDbSubtitle = "После каждого изменения копировать базу в app storage/Vetro/anime.db",
@@ -155,6 +155,8 @@ val RussianStrings = UiStrings(
     devImportDbSubtitle = "Выбрать .db и добавить отсутствующие записи",
     devFpsOverlayTitle = "Диагностика производительности (FPS)",
     devFpsOverlaySubtitle = "Показывать FPS-плашку поверх всех экранов приложения",
+    devAdaptiveGlassTitle = "Adaptive glass при скролле",
+    devAdaptiveGlassSubtitle = "Снижает blur и lens во время прокрутки списка для экономии GPU. Выключите для сравнения с полным glass.",
     devExportLogsCd = "Экспорт логов",
     devImportDbCd = "Импорт базы",
     devImportDbResultAddedTemplate = "Импорт завершен: добавлено %d записей",
@@ -276,7 +278,7 @@ val EnglishStrings = UiStrings(
     noResultsInLibrary = "Not in your list",
     noFavorites = "No favorites yet",
     filterByGenre = "By genres",
-    genreAnime = "Anime",
+    genreAnime = "Anime / Manga",
     genreMovies = "Movies",
     genreSeries = "TV Series",
     genreFilterAnimeTitle = "Anime Series",
@@ -381,8 +383,8 @@ val EnglishStrings = UiStrings(
     contentTypeTitle = "Content Type",
     typeAnime = "Anime",
     typeMovies = "TV",
-    cloudSettingsTitle = "Cloud Settings",
-    cloudSettingsSubtitle = "Submenu for sync and backup settings",
+    cloudSettingsTitle = "Account settings",
+    cloudSettingsSubtitle = "Sync, sign-in, and password",
     cloudTotalSize = "Total Size",
     cloudFiles = "Files",
     syncLabel = "Sync Now",
@@ -396,8 +398,8 @@ val EnglishStrings = UiStrings(
     addedButton = "Added",
     viaApi = "via API",
     episodesShort = "ep.",
-    cloudRestoreTitle = "Restoring database...",
-    cloudRestoreSubtitle = "Loading your collection from the cloud. Please wait.",
+    cloudRestoreTitle = "Downloading covers…",
+    cloudRestoreSubtitle = "Fetching photos from the cloud. Please wait.",
     devSectionTitle = "For developers",
     devMirrorDbTitle = "Mirror internal database",
     devMirrorDbSubtitle = "Copy DB changes to app storage/Vetro/anime.db after each write",
@@ -409,6 +411,8 @@ val EnglishStrings = UiStrings(
     devImportDbSubtitle = "Pick a .db file and add missing entries",
     devFpsOverlayTitle = "Performance diagnostics (FPS)",
     devFpsOverlaySubtitle = "Show an FPS overlay above all app screens",
+    devAdaptiveGlassTitle = "Adaptive glass on scroll",
+    devAdaptiveGlassSubtitle = "Reduces blur and lens while the list scrolls to save GPU. Turn off to compare with full glass.",
     devExportLogsCd = "Export logs",
     devImportDbCd = "Import database",
     devImportDbResultAddedTemplate = "Import finished: added %d entries",
@@ -529,4 +533,190 @@ fun formatApkSizeLabel(bytes: Long?, language: AppLanguage, sizeUnit: String): S
 fun getStrings(lang: AppLanguage): UiStrings = when(lang) {
     AppLanguage.RU -> RussianStrings
     AppLanguage.EN -> EnglishStrings
+}
+
+/** Язык интерфейса по системной локали: ru → RU, иначе EN. */
+fun systemAppLanguage(): AppLanguage =
+    if (java.util.Locale.getDefault().language.equals("ru", ignoreCase = true)) {
+        AppLanguage.RU
+    } else {
+        AppLanguage.EN
+    }
+
+/** Отдельно от [UiStrings]: у data class уже ~251 поле, лимит JVM — 255 параметров конструктора. */
+data class DevRepairDbStrings(
+    val title: String,
+    val subtitle: String,
+    val contentDescription: String,
+    val resultTemplate: String,
+    val resultNothing: String,
+    val resultFailed: String,
+    val logDialogTitle: String,
+    val logDialogMessage: String,
+    val logDialogCreate: String,
+    val logDialogCancel: String,
+    val logShareTitle: String,
+)
+
+private val RussianDevRepairDbStrings = DevRepairDbStrings(
+    title = "Исправить БД",
+    subtitle = "Проверить коллекцию и подтянуть недостающие данные из API",
+    contentDescription = "Исправить базу данных",
+    resultTemplate = "Готово: исправлено %1${'$'}d из %2${'$'}d, пропущено %3${'$'}d, ошибок %4${'$'}d",
+    resultNothing = "Проверка завершена: все записи в порядке",
+    resultFailed = "Не удалось выполнить проверку базы данных",
+    logDialogTitle = "Исправление завершено",
+    logDialogMessage = "Создать текстовый лог этой проверки? Его можно отправить в Telegram, почту или другое приложение.",
+    logDialogCreate = "Создать",
+    logDialogCancel = "Отмена",
+    logShareTitle = "Отправить лог исправления БД",
+)
+
+private val EnglishDevRepairDbStrings = DevRepairDbStrings(
+    title = "Repair database",
+    subtitle = "Scan the collection and fetch missing data from the API",
+    contentDescription = "Repair database",
+    resultTemplate = "Done: fixed %1${'$'}d of %2${'$'}d, skipped %3${'$'}d, failed %4${'$'}d",
+    resultNothing = "Check finished: all entries look complete",
+    resultFailed = "Failed to run database repair",
+    logDialogTitle = "Repair finished",
+    logDialogMessage = "Create a text log of this run? You can share it via Telegram, email, or another app.",
+    logDialogCreate = "Create",
+    logDialogCancel = "Cancel",
+    logShareTitle = "Share database repair log",
+)
+
+fun getDevRepairDbStrings(lang: AppLanguage): DevRepairDbStrings = when (lang) {
+    AppLanguage.RU -> RussianDevRepairDbStrings
+    AppLanguage.EN -> EnglishDevRepairDbStrings
+}
+
+/** Отдельно от [UiStrings]: лимит JVM — 255 параметров конструктора. */
+data class WelcomeStrings(
+    val appSubtitle: String,
+    val supabaseBadge: String,
+    val supabaseHint: String,
+    val signInGoogle: String,
+    val signInGithub: String,
+    val orContinueWith: String,
+    val emailLabel: String,
+    val passwordLabel: String,
+    val forgotPassword: String,
+    val signInButton: String,
+    val continueGuest: String,
+    val privacyNote: String,
+    val oauthPasswordHint: String,
+    val enterEmailFirst: String,
+    val loginFailedFormat: String,
+    val resetPasswordSuccessFormat: String,
+    val resetPasswordErrorFormat: String,
+)
+
+private val RussianWelcomeStrings = WelcomeStrings(
+    appSubtitle = "Менеджер коллекции аниме и манги",
+    supabaseBadge = "Аккаунт Supabase",
+    supabaseHint = "Войдите через Supabase, чтобы синхронизировать коллекцию между устройствами",
+    signInGoogle = "Войти через Google",
+    signInGithub = "Войти через GitHub",
+    orContinueWith = "или по email",
+    emailLabel = "Email",
+    passwordLabel = "Пароль",
+    forgotPassword = "Забыли пароль?",
+    signInButton = "Войти",
+    continueGuest = "Продолжить как гость",
+    privacyNote = "Мы не передаём ваши данные третьим лицам и используем шифрование",
+    oauthPasswordHint = "Входили через Google или GitHub? Сначала войдите так же и задайте пароль в настройках аккаунта.",
+    enterEmailFirst = "Сначала введите email",
+    loginFailedFormat = "Ошибка входа: %1\$s",
+    resetPasswordSuccessFormat = "Если аккаунт существует, на %1\$s отправлено письмо для сброса пароля",
+    resetPasswordErrorFormat = "Ошибка: %1\$s",
+)
+
+private val EnglishWelcomeStrings = WelcomeStrings(
+    appSubtitle = "Your ultimate anime and manga collection manager",
+    supabaseBadge = "Supabase account",
+    supabaseHint = "Sign in with Supabase to sync your collection across devices",
+    signInGoogle = "Sign in with Google",
+    signInGithub = "Sign in with GitHub",
+    orContinueWith = "or continue with",
+    emailLabel = "Email",
+    passwordLabel = "Password",
+    forgotPassword = "Forgot password?",
+    signInButton = "Sign in",
+    continueGuest = "Continue as Guest",
+    privacyNote = "We don't share your data with third parties and use encryption",
+    oauthPasswordHint = "Signed in with Google or GitHub before? Sign in the same way first, then set a password in account settings.",
+    enterEmailFirst = "Enter your email first",
+    loginFailedFormat = "Login failed: %1\$s",
+    resetPasswordSuccessFormat = "If the account exists, a password reset email was sent to %1\$s",
+    resetPasswordErrorFormat = "Error: %1\$s",
+)
+
+fun getWelcomeStrings(lang: AppLanguage): WelcomeStrings = when (lang) {
+    AppLanguage.RU -> RussianWelcomeStrings
+    AppLanguage.EN -> EnglishWelcomeStrings
+}
+
+data class GithubUpdateStrings(
+    val devTitle: String,
+    val devSubtitle: String,
+    val warningTitle: String,
+    val warningBody: String,
+    val warningCancel: String,
+    val warningContinue: String,
+)
+
+private val RussianGithubUpdateStrings = GithubUpdateStrings(
+    devTitle = "Обновления через GitHub",
+    devSubtitle = "Проверка релизов и установка APK из GitHub. Выключено по умолчанию — для сборок F-Droid, где обновления через магазин.",
+    warningTitle = "Обновление приложения",
+    warningBody = "Если вы установили это приложение из F-Droid, обновляться нужно только там — встроенная проверка GitHub для такой сборки не работает.\n\nЕсли версия установлена с GitHub — включите переключатель «Обновления через GitHub» в меню разработчика.",
+    warningCancel = "Отмена",
+    warningContinue = "Продолжить",
+)
+
+private val EnglishGithubUpdateStrings = GithubUpdateStrings(
+    devTitle = "GitHub updates",
+    devSubtitle = "Check releases and install APKs from GitHub. Off by default for F-Droid builds that update via the store.",
+    warningTitle = "App update",
+    warningBody = "If you installed this app from F-Droid, you must update it there only — built-in GitHub checks do not work for that build.\n\nIf you installed from GitHub, enable the \"GitHub updates\" switch in the developer menu.",
+    warningCancel = "Cancel",
+    warningContinue = "Continue",
+)
+
+fun getGithubUpdateStrings(lang: AppLanguage): GithubUpdateStrings = when (lang) {
+    AppLanguage.RU -> RussianGithubUpdateStrings
+    AppLanguage.EN -> EnglishGithubUpdateStrings
+}
+
+data class AddEditCommentStrings(
+    val addButton: String,
+    val placeholder: String,
+)
+
+private val RussianAddEditCommentStrings = AddEditCommentStrings(
+    addButton = "Добавить комментарий",
+    placeholder = "Ваш комментарий...",
+)
+
+private val EnglishAddEditCommentStrings = AddEditCommentStrings(
+    addButton = "Add comment",
+    placeholder = "Your comment...",
+)
+
+fun getAddEditCommentStrings(lang: AppLanguage): AddEditCommentStrings = when (lang) {
+    AppLanguage.RU -> RussianAddEditCommentStrings
+    AppLanguage.EN -> EnglishAddEditCommentStrings
+}
+
+data class CloudSyncPillStrings(
+    val label: String,
+)
+
+private val RussianCloudSyncPillStrings = CloudSyncPillStrings(label = "Синх.")
+private val EnglishCloudSyncPillStrings = CloudSyncPillStrings(label = "Sync")
+
+fun getCloudSyncPillStrings(lang: AppLanguage): CloudSyncPillStrings = when (lang) {
+    AppLanguage.RU -> RussianCloudSyncPillStrings
+    AppLanguage.EN -> EnglishCloudSyncPillStrings
 }

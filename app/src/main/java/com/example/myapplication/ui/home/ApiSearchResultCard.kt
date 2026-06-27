@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
+import coil3.size.Size
 import com.example.myapplication.domain.search.rating10To5
 import com.example.myapplication.isAppInDarkTheme
 import com.example.myapplication.network.ApiSearchResult
@@ -60,7 +61,8 @@ data class ApiSearchResultCardState(
     val episodesText: String,
     val posterUrl: String?,
     val isAdded: Boolean,
-    val isLoading: Boolean
+    val isLoading: Boolean,
+    val mediaTypeLabel: String
 )
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -75,6 +77,7 @@ fun ApiSearchResultCard(
     displayGenres: PersistentList<String>? = null,
     addLabel: String = "Add",
     addedLabel: String = "Added",
+    mediaTypeLabel: String = "",
     /** На экранах с локальной тёмной темой (Visual Search) глобальный [isAppInDarkTheme] может быть false — форсируем тёмный вид карточки. */
     forceDarkCardStyle: Boolean = false
 ) {
@@ -91,7 +94,8 @@ fun ApiSearchResultCard(
             },
             posterUrl = result.posterUrl,
             isAdded = isAdded,
-            isLoading = isLoading
+            isLoading = isLoading,
+            mediaTypeLabel = mediaTypeLabel
         )
     }
 
@@ -140,12 +144,31 @@ fun ApiSearchResultCard(
                     AsyncImage(
                         model = ImageRequest.Builder(context)
                             .data(url)
+                            .size(Size(280, 400))
                             .crossfade(true)
                             .build(),
                         contentDescription = state.title,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
                     )
+                }
+                if (state.mediaTypeLabel.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(4.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color.Black.copy(alpha = 0.6f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = state.mediaTypeLabel,
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = SnProFamily
+                        )
+                    }
                 }
             }
 

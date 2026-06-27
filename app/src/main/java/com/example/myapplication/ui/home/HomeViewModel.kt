@@ -22,9 +22,7 @@ import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.data.models.SortOption
 import com.example.myapplication.notifications.AnimeNotifier
 import com.example.myapplication.notifications.animeUpdateNotificationId
-import com.example.myapplication.DropboxSyncManager
 import com.example.myapplication.SyncReport
-import com.example.myapplication.SyncState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -54,7 +52,6 @@ class HomeViewModel(
     private val repository: AnimeRepository,
     private val localDataSource: AnimeLocalDataSource,
     private val notifier: AnimeNotifier,
-    private val dropboxSyncManager: DropboxSyncManager,
     private val imageStorage: ImageStorageRepository,
     private val settingsDataStore: DataStore<Preferences>,
     private val addFromApiUseCase: AddFromApiUseCase,
@@ -86,18 +83,14 @@ class HomeViewModel(
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppLanguage.EN)
 
-    val syncReport: StateFlow<SyncReport> = dropboxSyncManager.syncReport
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = SyncReport()
-        )
+    val syncReport = MutableStateFlow(com.example.myapplication.SyncReport())
 
     val animeListFlow: StateFlow<kotlinx.collections.immutable.ImmutableList<Anime>> = repository.observeAnimeList(
         searchQuery = _uiState.map { it.searchQuery },
         sortOption = _uiState.map { it.sortOption },
         sortAscending = _uiState.map { it.sortAscending },
-        filterTags = _uiState.map { it.filterTags }
+        filterTags = _uiState.map { it.filterTags },
+        mediaTypeFilter = _uiState.map { it.libraryMediaTypeFilter }
     ).map { it.toImmutableList() }
      .onEach { if (!_uiState.value.isListLoaded) _uiState.update { s -> s.copy(isListLoaded = true) } }
      .stateIn(
@@ -130,13 +123,6 @@ class HomeViewModel(
         }
         viewModelScope.launch {
             checkForUpdates()
-        }
-        viewModelScope.launch {
-            try {
-                dropboxSyncManager.syncState.collect { state ->
-                    _uiState.update { it.copy(isRestoringFromCloud = state == SyncState.SYNCING) }
-                }
-            } catch (_: Exception) { }
         }
         viewModelScope.launch(Dispatchers.IO) {
             runCatching { statsFooterPhraseUseCase.warmCatalog() }
@@ -189,7 +175,12 @@ class HomeViewModel(
             kotlinx.coroutines.delay(400)
             if (_uiState.value.searchQuery.trim() != trimmed) return@launch
             _uiState.update { it.copy(apiSearchLoading = true, apiSearchError = null) }
-            val contentType = settingsContentType.value
+            val mediaType = _uiState.value.searchMediaTypeFilter
+            val contentType = when (mediaType) {
+                com.example.myapplication.data.models.MediaType.ANIME -> AppContentType.ANIME
+                com.example.myapplication.data.models.MediaType.MANGA -> AppContentType.MANGA
+                com.example.myapplication.data.models.MediaType.TV_SERIES -> AppContentType.SERIES
+            }
             val language = uiLanguage.value
             repository.searchApi(trimmed, contentType, language)
                 .fold(
@@ -225,6 +216,9 @@ class HomeViewModel(
         val q = result.title.normalizeForSearch()
         if (q.isEmpty()) return false
         return localList.any { anime ->
+            // Enforce media type check (categoryType is ANIME, MANGA, TV_SERIES)
+            if (anime.mediaType.name != result.categoryType && !(anime.mediaType.name == "TV_SERIES" && result.categoryType == "SERIES")) return@any false
+            
             val t = anime.title.normalizeForSearch()
             t.isNotEmpty() && (t.contains(q) || q.contains(t))
         }
@@ -265,6 +259,15 @@ class HomeViewModel(
         _uiState.update {
             it.copy(filterTags = tags.toImmutableList(), filterCategory = category)
         }
+    }
+
+    fun setLibraryMediaTypeFilter(filter: com.example.myapplication.data.models.MediaType?) {
+        _uiState.update { it.copy(libraryMediaTypeFilter = filter) }
+    }
+
+    fun setSearchMediaTypeFilter(filter: com.example.myapplication.data.models.MediaType) {
+        _uiState.update { it.copy(searchMediaTypeFilter = filter) }
+        updateSearchQuery(_uiState.value.searchQuery)
     }
 
     fun deleteAnime(id: String) {

@@ -13,6 +13,11 @@ securityCrypto = "1.1.0-alpha06"
 # Markdown renderer (GitHub changelog)
 markdownRenderer = "0.39.2"
 
+# --- Supabase ---
+supabase = "3.1.2"
+googleId = "1.1.1"
+credentials = "1.3.0"
+
 # --- Compose & UI ---
 composeBom = "2025.12.00"
 navigationCompose = "2.9.7"
@@ -22,7 +27,7 @@ coil = "3.3.0"
 lottie = "6.6.2"
 
 # --- Data & Network ---
-dropbox = "7.0.0"
+
 apollo = "4.1.0"
 sqldelight = "2.0.2"
 okhttp = "4.12.0"
@@ -78,9 +83,6 @@ markdown-renderer = { module = "com.mikepenz:multiplatform-markdown-renderer", v
 markdown-renderer-m3 = { module = "com.mikepenz:multiplatform-markdown-renderer-m3", version.ref = "markdownRenderer" }
 markdown-renderer-coil3 = { module = "com.mikepenz:multiplatform-markdown-renderer-coil3", version.ref = "markdownRenderer" }
 
-# --- Dropbox ---
-dropbox-core = { module = "com.dropbox.core:dropbox-core-sdk", version.ref = "dropbox" }
-dropbox-android = { module = "com.dropbox.core:dropbox-android-sdk", version.ref = "dropbox" }
 
 # --- DataStore & Work ---
 datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
@@ -111,6 +113,19 @@ ktor-client-logging = { group = "io.ktor", name = "ktor-client-logging" }
 
 # --- Apollo ---
 apollo-runtime = { module = "com.apollographql.apollo:apollo-runtime", version.ref = "apollo" }
+
+# --- Supabase ---
+supabase-bom = { module = "io.github.jan-tennert.supabase:bom", version.ref = "supabase" }
+supabase-postgrest = { module = "io.github.jan-tennert.supabase:postgrest-kt" }
+supabase-auth = { module = "io.github.jan-tennert.supabase:auth-kt" }
+supabase-realtime = { module = "io.github.jan-tennert.supabase:realtime-kt" }
+supabase-storage = { module = "io.github.jan-tennert.supabase:storage-kt" }
+supabase-functions = { module = "io.github.jan-tennert.supabase:functions-kt" }
+
+# --- Google Identity ---
+googleid = { module = "com.google.android.libraries.identity.googleid:googleid", version.ref = "googleId" }
+androidx-credentials = { module = "androidx.credentials:credentials", version.ref = "credentials" }
+androidx-credentials-play-services-auth = { module = "androidx.credentials:credentials-play-services-auth", version.ref = "credentials" }
 
 # --- Activity ---
 activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity" }

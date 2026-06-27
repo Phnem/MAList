@@ -63,7 +63,11 @@ class DetailsViewModel(
             _uiState.value = DetailsUiState.Loading
             val startTime = System.currentTimeMillis()
 
-            repository.fetchDetails(anime.title, language)
+            repository.fetchDetails(
+                title = anime.title,
+                language = language,
+                isManga = anime.mediaType == com.example.myapplication.data.models.MediaType.MANGA
+            )
                 .fold(
                     onSuccess = { details ->
                         val elapsed = System.currentTimeMillis() - startTime

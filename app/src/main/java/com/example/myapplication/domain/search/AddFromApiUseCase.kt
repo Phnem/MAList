@@ -10,6 +10,18 @@ import com.example.myapplication.network.ApiSearchResult
 /** Конвертация рейтинга из шкалы 1–10 в 5 звёзд: rating5 = min(5, floor(rating10/2) + 1). */
 fun rating10To5(rating10: Int): Int = (rating10 / 2 + 1).coerceIn(1, 5)
 
+fun mapApiGenresToTagIds(genres: List<String>, genreRepository: GenreRepository): List<String> =
+    genres.mapNotNull { apiGenre ->
+        val normalized = apiGenre.trim()
+        if (normalized.isBlank()) return@mapNotNull null
+        genreRepository.allGenres.find { def ->
+            def.id.equals(normalized, ignoreCase = true) ||
+                def.ru.equals(normalized, ignoreCase = true) ||
+                def.en.equals(normalized, ignoreCase = true) ||
+                def.id.replace("-", " ").equals(normalized.replace("-", " "), ignoreCase = true)
+        }?.id
+    }.distinct().take(5)
+
 /**
  * Adds a media item from API search result to the local database.
  * Downloads poster from URL, maps genres to app genre IDs, converts rating to 5-star, saves via SaveAnimeUseCase.
@@ -30,16 +42,7 @@ class AddFromApiUseCase(
 
         val rating10 = (result.rating ?: 0).let { if (it > 10) it / 10 else it }
         val rating5 = rating10To5(rating10)
-        val selectedTags = result.genres.mapNotNull { apiGenre ->
-            val normalized = apiGenre.trim()
-            if (normalized.isBlank()) return@mapNotNull null
-            genreRepository.allGenres.find { def ->
-                def.id.equals(normalized, ignoreCase = true) ||
-                    def.ru.equals(normalized, ignoreCase = true) ||
-                    def.en.equals(normalized, ignoreCase = true) ||
-                    def.id.replace("-", " ").equals(normalized.replace("-", " "), ignoreCase = true)
-            }?.id
-        }.distinct().take(5)
+        val selectedTags = mapApiGenresToTagIds(result.genres, genreRepository)
 
         val params = SaveAnimeParams(
             animeId = null,

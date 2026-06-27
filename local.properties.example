@@ -19,3 +19,22 @@ MAL_CLIENT_SECRET=
 ANILIST_CLIENT_ID=
 ANILIST_CLIENT_SECRET=
 
+# --- Vetro Collection Sync (Supabase + Google / GitHub) ---
+# Callback в приложение (НЕ путать с GitHub OAuth App callback):
+#   vetrocollection://auth-callback
+# В Supabase Dashboard → Authentication → URL Configuration → Redirect URLs добавьте:
+#   vetrocollection://auth-callback
+#
+# GitHub OAuth App → Authorization callback URL (другой URL, менять нельзя — так и надо):
+#   https://<project-ref>.supabase.co/auth/v1/callback
+#
+# Один аккаунт для Google + GitHub:
+#   Supabase Dashboard → Authentication → Settings → включить «Manual linking»
+#   В приложении: войти основным способом → Облако → «Привязать Google/GitHub»
+#   Автослияние работает только при одинаковом подтверждённом email у обоих провайдеров.
+#
+# Если таблица anime пустая после синка — SQL Editor → выполни:
+#   supabase/migrations/20260625120000_align_production_schema.sql
+GOOGLE_WEB_CLIENT_ID=
+SUPABASE_URL=
+SUPABASE_ANON_KEY=

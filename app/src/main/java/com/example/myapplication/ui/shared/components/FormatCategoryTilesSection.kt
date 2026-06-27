@@ -280,11 +280,13 @@ fun FormatCategoryTile(
     tileShape: RoundedCornerShape,
     tileBg: Color,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    compactLayout: Boolean = false,
+    alwaysAccentIcon: Boolean = false,
 ) {
     val scheme = MaterialTheme.colorScheme
     val mutedIconTint = scheme.onSurfaceVariant.copy(alpha = 0.42f)
-    val targetIconTint = if (useAccentIcon) accentColor else mutedIconTint
+    val targetIconTint = if (alwaysAccentIcon || useAccentIcon) accentColor else mutedIconTint
     val animatedIconTint by animateColorAsState(
         targetValue = targetIconTint,
         animationSpec = spring(
@@ -302,9 +304,36 @@ fun FormatCategoryTile(
         ),
         label = "formatTileBorder"
     )
-    val labelColor = scheme.onSurface
+    val labelColor = when {
+        showAccentBorder -> accentColor
+        alwaysAccentIcon -> accentColor.copy(alpha = 0.88f)
+        else -> scheme.onSurface
+    }
+    val iconSize = if (compactLayout) 24.dp else 28.dp
+    val verticalPad = if (compactLayout) 8.dp else 10.dp
+    val iconLabelGap = if (compactLayout) 4.dp else 8.dp
+    val textStyle = if (compactLayout) {
+        MaterialTheme.typography.labelSmall.copy(
+            fontFamily = SnProFamily,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 10.sp,
+            lineHeight = 12.sp,
+        )
+    } else {
+        MaterialTheme.typography.labelLarge.copy(
+            fontFamily = SnProFamily,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+    val boxModifier = if (compactLayout) {
+        modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = 84.dp)
+    } else {
+        modifier.aspectRatio(1f)
+    }
 
-    Box(modifier = modifier.aspectRatio(1f)) {
+    Box(modifier = boxModifier) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -317,7 +346,7 @@ fun FormatCategoryTile(
                     indication = null,
                     onClick = onClick
                 )
-                .padding(horizontal = 8.dp, vertical = 10.dp),
+                .padding(horizontal = 6.dp, vertical = verticalPad),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
@@ -325,15 +354,12 @@ fun FormatCategoryTile(
                 imageVector = icon,
                 contentDescription = null,
                 tint = animatedIconTint,
-                modifier = Modifier.size(28.dp)
+                modifier = Modifier.size(iconSize)
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(iconLabelGap))
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelLarge.copy(
-                    fontFamily = SnProFamily,
-                    fontWeight = FontWeight.SemiBold
-                ),
+                style = textStyle,
                 color = labelColor,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,

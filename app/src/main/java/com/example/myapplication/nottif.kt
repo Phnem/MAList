@@ -155,7 +155,8 @@ internal fun SyncMetricPill(
 
 @Composable
 fun NotificationSyncOverlay(
-    syncManager: DropboxSyncManager,
+    syncCoordinator: com.example.myapplication.sync.supabase.SupabaseSyncCoordinator,
+    authRepository: com.example.myapplication.sync.supabase.AuthRepository,
     visibleState: MutableTransitionState<Boolean>,
     strings: UiStrings,
     syncReport: SyncReport,
@@ -169,9 +170,11 @@ fun NotificationSyncOverlay(
     onDismissUpdate: (AnimeUpdate) -> Unit = {},
     onBlockingChildDialogChange: (Boolean) -> Unit = {}
 ) {
-    val syncState by syncManager.syncState.collectAsStateWithLifecycle()
-    val syncMode by syncManager.syncMode.collectAsStateWithLifecycle()
-    val hasToken by syncManager.hasTokenFlow.collectAsStateWithLifecycle()
+    val isSyncing by syncCoordinator.isSyncing.collectAsStateWithLifecycle()
+    val isUserSignedIn by authRepository.isUserSignedIn.collectAsStateWithLifecycle(initialValue = false)
+    val syncState = if (isSyncing) SyncState.SYNCING else SyncState.IDLE
+    val syncMode = SyncMode.AUTO
+    val hasToken = isUserSignedIn
 
     val context = LocalContext.current
     val view = LocalView.current
@@ -202,7 +205,7 @@ fun NotificationSyncOverlay(
     )
 
     val lastSyncTs = remember(syncState, visibleState.currentState, visibleState.targetState) {
-        context.getSharedPreferences("dropbox_prefs", android.content.Context.MODE_PRIVATE)
+        context.getSharedPreferences("sync_prefs", android.content.Context.MODE_PRIVATE)
             .getLong("last_sync_time", 0L)
     }
     val timeStr = remember(lastSyncTs) {
@@ -334,7 +337,7 @@ fun NotificationSyncOverlay(
                             accent = lastSyncAccent,
                             onSyncNow = {
                                 performHaptic(view, "light")
-                                scope.launch { syncManager.syncNow() }
+                                scope.launch { syncCoordinator.syncNow() }
                             },
                             onCheckUpdates = {
                                 performHaptic(view, "light")
@@ -680,7 +683,7 @@ private fun formatSyncDateLine(
         strings.nottifDateToday
     } else {
         val locale = when (language) {
-            AppLanguage.RU -> Locale("ru")
+            AppLanguage.RU -> java.util.Locale.forLanguageTag("ru")
             AppLanguage.EN -> Locale.ENGLISH
         }
         SimpleDateFormat("MMM d", locale).format(Date(ts))

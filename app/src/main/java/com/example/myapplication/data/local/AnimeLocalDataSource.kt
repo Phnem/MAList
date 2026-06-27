@@ -5,6 +5,7 @@ import app.cash.sqldelight.coroutines.mapToList
 import com.example.myapplication.data.local.AnimeDatabase
 import com.example.myapplication.data.models.Anime
 import com.example.myapplication.data.models.AnimeUpdate
+import com.example.myapplication.data.models.MediaType
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
@@ -25,34 +26,62 @@ class AnimeLocalDataSource(
     /**
      * Реактивный поток; при reconnectDatabase() переподписывается на новое подключение (hot swap).
      */
-    fun observeAllAnime(): Flow<List<Anime>> = factory.dbConnectionTrigger.flatMapLatest {
-        db().animeQueries
-            .getAllAnimeWithTagsConcat()
-            .asFlow()
-            .mapToList(Dispatchers.IO)
-            .map { rows ->
-                rows.map { row ->
-                    Anime(
-                        id = row.id,
-                        title = row.title,
-                        episodes = row.episodes.toInt(),
-                        rating = row.rating.toInt(),
-                        imageFileName = row.imagePath,
-                        orderIndex = row.orderIndex.toInt(),
-                        dateAdded = row.dateAdded,
-                        isFavorite = row.isFavorite == 1L,
-                        tags = parseTagsConcat(row.tagsConcat),
-                        categoryType = row.categoryType ?: "",
-                        comment = row.comment,
-                        anilistId = row.anilist_id?.toInt(),
-                        malId = row.mal_id?.toInt(),
-                        shikimoriId = row.shikimori_id?.toInt(),
-                        anilistNotFoundAt = row.anilist_not_found_at,
-                        malNotFoundAt = row.mal_not_found_at,
-                        shikimoriNotFoundAt = row.shikimori_not_found_at
-                    )
+    fun observeAllAnime(filterType: MediaType? = null): Flow<List<Anime>> = factory.dbConnectionTrigger.flatMapLatest {
+        if (filterType == null) {
+            db().animeQueries.getAllAnimeWithTagsConcat().asFlow()
+                .mapToList(Dispatchers.IO)
+                .map { rows ->
+                    rows.map { row ->
+                        Anime(
+                            id = row.id,
+                            title = row.title,
+                            episodes = row.episodes.toInt(),
+                            rating = row.rating.toInt(),
+                            imageFileName = row.imagePath,
+                            orderIndex = row.orderIndex.toInt(),
+                            dateAdded = row.dateAdded,
+                            isFavorite = row.isFavorite == 1L,
+                            tags = parseTagsConcat(row.tagsConcat),
+                            categoryType = row.categoryType ?: "",
+                            comment = row.comment,
+                            anilistId = row.anilist_id?.toInt(),
+                            malId = row.mal_id?.toInt(),
+                            shikimoriId = row.shikimori_id?.toInt(),
+                            anilistNotFoundAt = row.anilist_not_found_at,
+                            malNotFoundAt = row.mal_not_found_at,
+                            shikimoriNotFoundAt = row.shikimori_not_found_at,
+                            mediaType = runCatching { MediaType.valueOf(row.mediaType) }.getOrDefault(MediaType.ANIME)
+                        )
+                    }
                 }
-            }
+        } else {
+            db().animeQueries.getAnimeWithTagsConcatByType(filterType.name).asFlow()
+                .mapToList(Dispatchers.IO)
+                .map { rows ->
+                    rows.map { row ->
+                        Anime(
+                            id = row.id,
+                            title = row.title,
+                            episodes = row.episodes.toInt(),
+                            rating = row.rating.toInt(),
+                            imageFileName = row.imagePath,
+                            orderIndex = row.orderIndex.toInt(),
+                            dateAdded = row.dateAdded,
+                            isFavorite = row.isFavorite == 1L,
+                            tags = parseTagsConcat(row.tagsConcat),
+                            categoryType = row.categoryType ?: "",
+                            comment = row.comment,
+                            anilistId = row.anilist_id?.toInt(),
+                            malId = row.mal_id?.toInt(),
+                            shikimoriId = row.shikimori_id?.toInt(),
+                            anilistNotFoundAt = row.anilist_not_found_at,
+                            malNotFoundAt = row.mal_not_found_at,
+                            shikimoriNotFoundAt = row.shikimori_not_found_at,
+                            mediaType = runCatching { MediaType.valueOf(row.mediaType) }.getOrDefault(MediaType.ANIME)
+                        )
+                    }
+                }
+        }
     }
 
     /** Закрывает старый коннект и открывает новый (после миграции .copyTo). */
@@ -85,8 +114,8 @@ class AnimeLocalDataSource(
                     malId = row.mal_id,
                     shikimoriId = row.shikimori_id,
                     anilistNotFoundAt = row.anilist_not_found_at,
-                    malNotFoundAt = row.mal_not_found_at,
-                    shikimoriNotFoundAt = row.shikimori_not_found_at
+                    shikimoriNotFoundAt = row.shikimori_not_found_at,
+                    mediaType = row.mediaType
                 )
             }
     }
@@ -111,8 +140,8 @@ class AnimeLocalDataSource(
                     malId = row.mal_id,
                     shikimoriId = row.shikimori_id,
                     anilistNotFoundAt = row.anilist_not_found_at,
-                    malNotFoundAt = row.mal_not_found_at,
-                    shikimoriNotFoundAt = row.shikimori_not_found_at
+                    shikimoriNotFoundAt = row.shikimori_not_found_at,
+                    mediaType = row.mediaType
                 )
             }
     }
@@ -138,7 +167,8 @@ class AnimeLocalDataSource(
         shikimoriId: Long? = null,
         anilistNotFoundAt: Long? = null,
         malNotFoundAt: Long? = null,
-        shikimoriNotFoundAt: Long? = null
+        shikimoriNotFoundAt: Long? = null,
+        mediaType: String = MediaType.ANIME.name
     ): Anime = Anime(
         id = id,
         title = title,
@@ -156,7 +186,8 @@ class AnimeLocalDataSource(
         shikimoriId = shikimoriId?.toInt(),
         anilistNotFoundAt = anilistNotFoundAt,
         malNotFoundAt = malNotFoundAt,
-        shikimoriNotFoundAt = shikimoriNotFoundAt
+        shikimoriNotFoundAt = shikimoriNotFoundAt,
+        mediaType = runCatching { MediaType.valueOf(mediaType) }.getOrDefault(MediaType.ANIME)
     )
 
     suspend fun insertAnime(anime: Anime) {
@@ -180,7 +211,11 @@ class AnimeLocalDataSource(
                 shikimori_id = anime.shikimoriId?.toLong(),
                 anilist_not_found_at = anime.anilistNotFoundAt,
                 mal_not_found_at = anime.malNotFoundAt,
-                shikimori_not_found_at = anime.shikimoriNotFoundAt
+                shikimori_not_found_at = anime.shikimoriNotFoundAt,
+                isPrivate = 0L,
+                encryptionIv = null,
+                deletedAt = null,
+                mediaType = anime.mediaType.name
             )
 
             // Insert tags
@@ -214,6 +249,10 @@ class AnimeLocalDataSource(
                 anilist_not_found_at = anime.anilistNotFoundAt,
                 mal_not_found_at = anime.malNotFoundAt,
                 shikimori_not_found_at = anime.shikimoriNotFoundAt,
+                isPrivate = 0L,
+                encryptionIv = null,
+                deletedAt = null,
+                mediaType = anime.mediaType.name,
                 id = anime.id
             )
 
@@ -259,7 +298,11 @@ class AnimeLocalDataSource(
                     shikimori_id = anime.shikimoriId?.toLong(),
                     anilist_not_found_at = anime.anilistNotFoundAt,
                     mal_not_found_at = anime.malNotFoundAt,
-                    shikimori_not_found_at = anime.shikimoriNotFoundAt
+                    shikimori_not_found_at = anime.shikimoriNotFoundAt,
+                    isPrivate = 0L,
+                    encryptionIv = null,
+                    deletedAt = null,
+                    mediaType = anime.mediaType.name
                 )
                 anime.tags.forEach { tag ->
                     db().animeQueries.insertAnimeTag(

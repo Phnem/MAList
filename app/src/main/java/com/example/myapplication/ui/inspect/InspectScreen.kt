@@ -72,8 +72,6 @@ import com.example.myapplication.ui.home.ApiSearchResultCard
 import com.example.myapplication.ui.shared.theme.InspectVisualSearchTheme
 import com.example.myapplication.utils.getStrings
 import com.example.myapplication.utils.performHaptic
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeSource
 import kotlin.math.abs
 
 @OptIn(ExperimentalSharedTransitionApi::class)
@@ -95,7 +93,6 @@ fun InspectScreen(
     val geminiKeyState by viewModel.geminiKeyUiState.collectAsStateWithLifecycle()
     val lifecycleOwner = LocalLifecycleOwner.current
     val windowInfo = LocalWindowInfo.current
-    val inspectHazeState = remember { HazeState() }
     val requiresGeminiSetup =
         contentMode == InspectContentMode.MoviesSeries && !geminiKeyState.hasValidSavedKey
     val onSelectMode: (Int) -> Unit = { index ->
@@ -155,7 +152,6 @@ fun InspectScreen(
                     clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(32.dp))
                 )
                 .clip(RoundedCornerShape(32.dp))
-                .hazeSource(inspectHazeState)
         ) {
             InspectVisualSearchTheme {
                 val cardShape = RoundedCornerShape(22.dp)

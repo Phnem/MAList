@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.example.myapplication.data.local.DevPreferencesKeys
 import com.example.myapplication.data.models.AppUpdatePersistedKind
 import com.example.myapplication.data.models.AppUpdateSnapshot
 import com.example.myapplication.domain.settings.AppReleaseVersionComparer
@@ -39,6 +40,9 @@ class AppUpdateRepository(
     suspend fun refreshAppUpdate(force: Boolean): Boolean = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
         val prefs = settingsDataStore.data.first()
+        if (prefs[DevPreferencesKeys.GITHUB_UPDATES_ENABLED] != true) {
+            return@withContext true
+        }
         val last = prefs[KEY_LAST_CHECK_MS] ?: 0L
         if (!force && last > 0L && (now - last) < AUTO_CHECK_THROTTLE_MS) {
             return@withContext true

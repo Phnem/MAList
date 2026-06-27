@@ -48,14 +48,20 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavController
 import com.example.myapplication.isAppInDarkTheme
-import com.example.myapplication.DropboxSyncManager
+
 import com.phnem.vetro.R
 import com.example.myapplication.data.models.*
 import com.example.myapplication.network.AppContentType
 import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.utils.formatApkSizeLabel
+import com.example.myapplication.utils.GithubUpdateStrings
+import com.example.myapplication.utils.DevRepairDbStrings
+import com.example.myapplication.utils.getDevRepairDbStrings
+import com.example.myapplication.utils.getGithubUpdateStrings
 import com.example.myapplication.utils.getStrings
 import com.example.myapplication.utils.performHaptic
 import com.example.myapplication.ui.shared.theme.*
@@ -70,8 +76,6 @@ import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeSource
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -90,7 +94,6 @@ private const val TRIBUTE_DONATION_URL = "https://web.tribute.tg/e/Tb"
 fun SettingsScreen(
     navController: NavController,
     viewModel: SettingsViewModel,
-    dropboxSyncManager: DropboxSyncManager,
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope
 ) {
@@ -101,9 +104,13 @@ fun SettingsScreen(
     val context = LocalContext.current
 
     val strings = getStrings(uiState.language)
+    val devRepairStrings = getDevRepairDbStrings(uiState.language)
+    val githubUpdateStrings = getGithubUpdateStrings(uiState.language)
     var showCloudSheet by remember { mutableStateOf(false) }
     var showContactSheet by remember { mutableStateOf(false) }
     var showUpdateChangelogSheet by remember { mutableStateOf(false) }
+    var showFdroidUpdateDialog by remember { mutableStateOf(false) }
+    var showGithubUpdatesEnableDialog by remember { mutableStateOf(false) }
     val tiles = rememberSettingsTiles(
         uiState = uiState,
         strings = strings,
@@ -113,7 +120,6 @@ fun SettingsScreen(
         onContactClick = { showContactSheet = true }
     )
     val collisionState = rememberInertialCollisionState()
-    val settingsHazeState = remember { HazeState() }
     var showDeveloperSection by rememberSaveable { mutableStateOf(false) }
     val importDbPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -127,10 +133,20 @@ fun SettingsScreen(
         viewModel.onReturnedFromInstallSettings(context)
     }
 
-    BackHandler(enabled = showCloudSheet || showContactSheet || showUpdateChangelogSheet) {
-        showCloudSheet = false
-        showContactSheet = false
-        showUpdateChangelogSheet = false
+    BackHandler(
+        enabled = showCloudSheet || showContactSheet || showUpdateChangelogSheet ||
+            uiState.showRepairDbLogDialog || showFdroidUpdateDialog || showGithubUpdatesEnableDialog,
+    ) {
+        when {
+            showGithubUpdatesEnableDialog -> showGithubUpdatesEnableDialog = false
+            showFdroidUpdateDialog -> showFdroidUpdateDialog = false
+            uiState.showRepairDbLogDialog -> viewModel.discardRepairDbLog()
+            else -> {
+                showCloudSheet = false
+                showContactSheet = false
+                showUpdateChangelogSheet = false
+            }
+        }
     }
 
     val blurRadius by animateDpAsState(
@@ -152,6 +168,56 @@ fun SettingsScreen(
         Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
         viewModel.clearImportDbMessage()
     }
+    LaunchedEffect(uiState.repairDbMessage) {
+        val msg = uiState.repairDbMessage ?: return@LaunchedEffect
+        Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+        viewModel.clearRepairDbMessage()
+    }
+
+    if (uiState.showRepairDbLogDialog) {
+        RepairDbLogDialog(
+            devRepairStrings = devRepairStrings,
+            onCreateLog = {
+                performHaptic(view, "light")
+                viewModel.exportRepairDbLog(context)
+            },
+            onDismiss = {
+                performHaptic(view, "light")
+                viewModel.discardRepairDbLog()
+            },
+        )
+    }
+
+    if (showFdroidUpdateDialog) {
+        FdroidUpdateWarningDialog(
+            strings = githubUpdateStrings,
+            onDismiss = {
+                performHaptic(view, "light")
+                showFdroidUpdateDialog = false
+            },
+            onContinue = {
+                performHaptic(view, "light")
+                showFdroidUpdateDialog = false
+                viewModel.openFdroidUpdateWebsite(context)
+            },
+        )
+    }
+
+    if (showGithubUpdatesEnableDialog) {
+        FdroidUpdateWarningDialog(
+            strings = githubUpdateStrings,
+            onDismiss = {
+                performHaptic(view, "light")
+                showGithubUpdatesEnableDialog = false
+            },
+            onContinue = {
+                performHaptic(view, "light")
+                showGithubUpdatesEnableDialog = false
+                showDeveloperSection = false
+                viewModel.setDevGithubUpdatesEnabled(true)
+            },
+        )
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
     with(sharedTransitionScope) {
@@ -166,7 +232,6 @@ fun SettingsScreen(
                     clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(32.dp))
                 )
                 .clip(RoundedCornerShape(32.dp))
-                .hazeSource(settingsHazeState)
                 .background(bg)
         ) {
             val backdrop = rememberLayerBackdrop {
@@ -209,6 +274,7 @@ fun SettingsScreen(
                                         strings.updateApkSizeUnit,
                                     )
                                     val updateState: UpdateTileState = when {
+                                        !uiState.devGithubUpdatesEnabled -> UpdateTileState.UpToDate
                                         uiState.isApkDownloading ->
                                             UpdateTileState.Downloading(uiState.apkDownloadProgress)
                                         uiState.updateStatus == AppUpdateStatus.LOADING ->
@@ -236,9 +302,13 @@ fun SettingsScreen(
                                             indication = null
                                         ) {
                                             performHaptic(view, "light")
-                                            showUpdateChangelogSheet = true
-                                            viewModel.notifyUpdateChangelogSheetPresentedFromSettings()
-                                            viewModel.loadUpdateChangelog(context)
+                                            if (uiState.devGithubUpdatesEnabled) {
+                                                showUpdateChangelogSheet = true
+                                                viewModel.notifyUpdateChangelogSheetPresentedFromSettings()
+                                                viewModel.loadUpdateChangelog(context)
+                                            } else {
+                                                showFdroidUpdateDialog = true
+                                            }
                                         }
                                     ) {
                                         UpdateTile(
@@ -304,6 +374,8 @@ fun SettingsScreen(
                         ) {
                             DeveloperSettingsSection(
                                 strings = strings,
+                                githubUpdateStrings = githubUpdateStrings,
+                                devRepairStrings = devRepairStrings,
                                 uiState = uiState,
                                 expanded = showDeveloperSection,
                                 onExpandToggle = {
@@ -322,6 +394,18 @@ fun SettingsScreen(
                                     performHaptic(view, "light")
                                     viewModel.setDevFpsOverlay(it)
                                 },
+                                onAdaptiveGlassToggle = {
+                                    performHaptic(view, "light")
+                                    viewModel.setDevAdaptiveGlassScroll(it)
+                                },
+                                onGithubUpdatesToggle = { enabled ->
+                                    performHaptic(view, "light")
+                                    if (enabled) {
+                                        showGithubUpdatesEnableDialog = true
+                                    } else {
+                                        viewModel.setDevGithubUpdatesEnabled(false)
+                                    }
+                                },
                                 onExportLogs = {
                                     performHaptic(view, "light")
                                     viewModel.exportLogs(context)
@@ -333,6 +417,10 @@ fun SettingsScreen(
                                 onImportDb = {
                                     performHaptic(view, "light")
                                     importDbPicker.launch("*/*")
+                                },
+                                onRepairDb = {
+                                    performHaptic(view, "light")
+                                    viewModel.repairDatabase()
                                 }
                             )
                         }
@@ -492,7 +580,18 @@ fun SettingsScreen(
         exit = SettingsOverlayMotion.panelFadeOutScaleOut(),
     ) {
         Box(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .then(
+                    if (showCloudSheet) {
+                        Modifier
+                            .statusBarsPadding()
+                            .navigationBarsPadding()
+                            .padding(vertical = 36.dp)
+                    } else {
+                        Modifier
+                    },
+                ),
             contentAlignment = Alignment.Center,
         ) {
             with(sharedTransitionScope) {
@@ -530,7 +629,6 @@ fun SettingsScreen(
                                 onDismiss = { showCloudSheet = false },
                                 onLogout = {
                                     showCloudSheet = false
-                                    dropboxSyncManager.logout()
                                     navController.navigateToWelcome()
                                 },
                                 sharedModifier = sharedModifier,
@@ -557,17 +655,188 @@ fun SettingsScreen(
 }
 
 @Composable
+private fun FdroidUpdateWarningDialog(
+    strings: GithubUpdateStrings,
+    onDismiss: () -> Unit,
+    onContinue: () -> Unit,
+) {
+    val isDark = isAppInDarkTheme()
+    val accent = if (isDark) BrandBlueSoft else BrandRed
+    val surface =
+        if (isDark) OverlayThemeTokens.TileBackgroundDark
+        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f)
+    val borderColor = if (isDark) accent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    val muted =
+        if (isDark) OverlayThemeTokens.LabelMutedDark
+        else MaterialTheme.colorScheme.onSurfaceVariant
+    val shape = RoundedCornerShape(24.dp)
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 28.dp),
+            shape = shape,
+            color = surface,
+            tonalElevation = 0.dp,
+            shadowElevation = if (isDark) 0.dp else OverlayThemeTokens.SettingsDialogPanelShadowElevation,
+            border = BorderStroke(1.5.dp, borderColor),
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 22.dp, vertical = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = strings.warningTitle,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontFamily = SnProFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    color = onSurface,
+                )
+                Text(
+                    text = strings.warningBody,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontFamily = SnProFamily,
+                    color = muted,
+                    lineHeight = 20.sp,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text(
+                            text = strings.warningCancel,
+                            fontFamily = SnProFamily,
+                            color = muted,
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Button(
+                        onClick = onContinue,
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = accent,
+                            contentColor = Color.White,
+                        ),
+                    ) {
+                        Text(
+                            text = strings.warningContinue,
+                            fontFamily = SnProFamily,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RepairDbLogDialog(
+    devRepairStrings: DevRepairDbStrings,
+    onCreateLog: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val isDark = isAppInDarkTheme()
+    val accent = if (isDark) BrandBlueSoft else BrandRed
+    val surface =
+        if (isDark) OverlayThemeTokens.TileBackgroundDark
+        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f)
+    val borderColor = if (isDark) accent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    val muted =
+        if (isDark) OverlayThemeTokens.LabelMutedDark
+        else MaterialTheme.colorScheme.onSurfaceVariant
+    val shape = RoundedCornerShape(24.dp)
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 28.dp),
+            shape = shape,
+            color = surface,
+            tonalElevation = 0.dp,
+            shadowElevation = if (isDark) 0.dp else OverlayThemeTokens.SettingsDialogPanelShadowElevation,
+            border = BorderStroke(1.5.dp, borderColor),
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 22.dp, vertical = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = devRepairStrings.logDialogTitle,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontFamily = SnProFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    color = onSurface,
+                )
+                Text(
+                    text = devRepairStrings.logDialogMessage,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontFamily = SnProFamily,
+                    color = muted,
+                    lineHeight = 20.sp,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text(
+                            text = devRepairStrings.logDialogCancel,
+                            fontFamily = SnProFamily,
+                            color = muted,
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Button(
+                        onClick = onCreateLog,
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = accent,
+                            contentColor = Color.White,
+                        ),
+                    ) {
+                        Text(
+                            text = devRepairStrings.logDialogCreate,
+                            fontFamily = SnProFamily,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun DeveloperSettingsSection(
     strings: UiStrings,
+    githubUpdateStrings: GithubUpdateStrings,
+    devRepairStrings: DevRepairDbStrings,
     uiState: SettingsUiState,
     expanded: Boolean,
     onExpandToggle: () -> Unit,
     onMirrorDbToggle: (Boolean) -> Unit,
     onHideShareToggle: (Boolean) -> Unit,
     onFpsOverlayToggle: (Boolean) -> Unit,
+    onAdaptiveGlassToggle: (Boolean) -> Unit,
+    onGithubUpdatesToggle: (Boolean) -> Unit,
     onExportLogs: () -> Unit,
     onExportPdf: () -> Unit,
-    onImportDb: () -> Unit
+    onImportDb: () -> Unit,
+    onRepairDb: () -> Unit
 ) {
     val isDark = isAppInDarkTheme()
     val tileBg =
@@ -626,6 +895,13 @@ private fun DeveloperSettingsSection(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     DeveloperSwitchRow(
+                        title = githubUpdateStrings.devTitle,
+                        subtitle = githubUpdateStrings.devSubtitle,
+                        checked = uiState.devGithubUpdatesEnabled,
+                        accent = accent,
+                        onCheckedChange = onGithubUpdatesToggle,
+                    )
+                    DeveloperSwitchRow(
                         title = strings.devMirrorDbTitle,
                         subtitle = strings.devMirrorDbSubtitle,
                         checked = uiState.devMirrorDbToDocuments,
@@ -665,6 +941,22 @@ private fun DeveloperSettingsSection(
                         icon = Icons.Default.FileOpen,
                         accent = accent,
                         onClick = onImportDb
+                    )
+                    DeveloperActionRow(
+                        title = devRepairStrings.title,
+                        subtitle = devRepairStrings.subtitle,
+                        isLoading = uiState.isRepairingDb,
+                        iconDescription = devRepairStrings.contentDescription,
+                        icon = Icons.Default.AutoFixHigh,
+                        accent = accent,
+                        onClick = onRepairDb
+                    )
+                    DeveloperSwitchRow(
+                        title = strings.devAdaptiveGlassTitle,
+                        subtitle = strings.devAdaptiveGlassSubtitle,
+                        checked = uiState.devAdaptiveGlassScroll,
+                        accent = accent,
+                        onCheckedChange = onAdaptiveGlassToggle,
                     )
                     DeveloperSwitchRow(
                         title = strings.devFpsOverlayTitle,
@@ -824,7 +1116,7 @@ fun rememberSettingsTiles(
             id = "cloud",
             title = strings.cloudSettingsTitle,
             subtitle = strings.cloudSettingsSubtitle,
-            icon = Icons.Outlined.Cloud,
+            icon = Icons.Outlined.ManageAccounts,
             accentColor = SettingsAccentCloudLightBlue,
             span = 2,
             onClick = onCloudClick

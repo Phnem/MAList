@@ -15,6 +15,9 @@ interface ImageStorageRepository {
      */
     fun getImageFilePath(fileName: String): String?
 
+    /** True if the image exists locally (including compressed-name variants). */
+    fun hasLocalImage(fileName: String): Boolean
+
     /**
      * Удаляет файл изображения из коллекции. Возвращает true при успехе.
      */

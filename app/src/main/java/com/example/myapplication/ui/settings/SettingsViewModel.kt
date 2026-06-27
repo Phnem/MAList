@@ -28,10 +28,14 @@ import com.example.myapplication.data.models.AppUpdateStatus
 import com.example.myapplication.data.models.toUiStatus
 import com.phnem.vetro.BuildConfig
 import com.example.myapplication.data.local.CollectionPdfGenerator
+import com.example.myapplication.data.local.DevPreferencesKeys
 import com.example.myapplication.data.local.SQLDelightDatabaseFactory
 import com.example.myapplication.data.repository.AnimeRepository
 import com.example.myapplication.data.repository.AppUpdateRepository
 import com.example.myapplication.domain.settings.ImportAnimeDbUseCase
+import com.example.myapplication.domain.settings.RepairDbSessionLog
+import com.example.myapplication.domain.settings.RepairAnimeDbUseCase
+import com.example.myapplication.utils.getDevRepairDbStrings
 import com.example.myapplication.utils.getStrings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -56,6 +60,7 @@ private val KEY_DEV_HIDE_SHARE = booleanPreferencesKey("dev_hide_share_button")
 private val KEY_DEV_FPS_OVERLAY = booleanPreferencesKey("dev_fps_overlay")
 private const val LOG_TAG = "SettingsViewModel"
 private const val UPDATE_APK_NAME = "vetro-update.apk"
+const val FDROID_UPDATE_WEBSITE_URL = "https://phnem.github.io/Vetro-Studio/collection"
 
 private data class SettingsTransientState(
     val isUpdateChangelogLoading: Boolean = false,
@@ -67,6 +72,10 @@ private data class SettingsTransientState(
     val isExportingPdf: Boolean = false,
     val isImportingDb: Boolean = false,
     val importDbMessage: String? = null,
+    val isRepairingDb: Boolean = false,
+    val repairDbMessage: String? = null,
+    val showRepairDbLogDialog: Boolean = false,
+    val pendingRepairDbLog: String? = null,
     val isApkDownloading: Boolean = false,
     val apkDownloadProgress: Float = 0f,
     val pendingApkPathForInstall: String? = null,
@@ -77,8 +86,10 @@ private fun mergeSettingsUi(
     snap: AppUpdateSnapshot,
     t: SettingsTransientState,
 ): SettingsUiState {
+    val githubUpdatesEnabled = prefs[DevPreferencesKeys.GITHUB_UPDATES_ENABLED] == true
     val updateStatus =
-        if (t.isUpdateChangelogLoading) AppUpdateStatus.LOADING
+        if (!githubUpdatesEnabled) AppUpdateStatus.IDLE
+        else if (t.isUpdateChangelogLoading) AppUpdateStatus.LOADING
         else snap.persistedKind.toUiStatus()
 
     return SettingsUiState(
@@ -88,10 +99,15 @@ private fun mergeSettingsUi(
         devMirrorDbToDocuments = prefs[KEY_DEV_MIRROR_DB] ?: false,
         devHideShareButton = prefs[KEY_DEV_HIDE_SHARE] ?: false,
         devFpsOverlay = prefs[KEY_DEV_FPS_OVERLAY] ?: false,
+        devAdaptiveGlassScroll = prefs[DevPreferencesKeys.ADAPTIVE_GLASS_SCROLL] ?: true,
+        devGithubUpdatesEnabled = githubUpdatesEnabled,
         isExportingLogs = t.isExportingLogs,
         isExportingPdf = t.isExportingPdf,
         isImportingDb = t.isImportingDb,
         importDbMessage = t.importDbMessage,
+        isRepairingDb = t.isRepairingDb,
+        repairDbMessage = t.repairDbMessage,
+        showRepairDbLogDialog = t.showRepairDbLogDialog,
         updateStatus = updateStatus,
         currentVersion = t.currentVersionDisplay,
         latestVersion = snap.latestTag,
@@ -113,6 +129,7 @@ class SettingsViewModel(
     private val settingsDataStore: DataStore<Preferences>,
     private val databaseFactory: SQLDelightDatabaseFactory,
     private val importAnimeDbUseCase: ImportAnimeDbUseCase,
+    private val repairAnimeDbUseCase: RepairAnimeDbUseCase,
     private val collectionPdfGenerator: CollectionPdfGenerator,
     private val app: Application
 ) : ViewModel() {
@@ -129,9 +146,11 @@ class SettingsViewModel(
     /** When true, [MainActivity] may show the global update sheet (not on splash, not deduped by settings). */
     val startupUpdateOverlayEligible: StateFlow<Boolean> = combine(
         appUpdateRepository.appUpdateSnapshot,
+        settingsDataStore.data,
         _transient,
-    ) { snap, tr ->
-        snap.startupOverlayEligible && !tr.updateSheetShownFromSettingsThisSession
+    ) { snap, prefs, tr ->
+        val githubEnabled = prefs[DevPreferencesKeys.GITHUB_UPDATES_ENABLED] == true
+        githubEnabled && snap.startupOverlayEligible && !tr.updateSheetShownFromSettingsThisSession
     }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     private var downloadReceiverRegistered = false
@@ -212,6 +231,27 @@ class SettingsViewModel(
         }
     }
 
+    fun setDevAdaptiveGlassScroll(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsDataStore.edit { it[DevPreferencesKeys.ADAPTIVE_GLASS_SCROLL] = enabled }
+        }
+    }
+
+    fun setDevGithubUpdatesEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsDataStore.edit { it[DevPreferencesKeys.GITHUB_UPDATES_ENABLED] = enabled }
+        }
+    }
+
+    fun openFdroidUpdateWebsite(context: Context) {
+        runCatching {
+            context.startActivity(
+                Intent(Intent.ACTION_VIEW, Uri.parse(FDROID_UPDATE_WEBSITE_URL))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }
+    }
+
     private suspend fun ensureCurrentVersionFromPackage(context: Context) {
         if (_transient.value.currentVersionDisplay.isNotEmpty()) return
         val v = runCatching {
@@ -224,6 +264,9 @@ class SettingsViewModel(
     fun loadUpdateChangelog(context: Context) {
         if (_transient.value.isUpdateChangelogLoading) return
         viewModelScope.launch {
+            val githubEnabled =
+                settingsDataStore.data.first()[DevPreferencesKeys.GITHUB_UPDATES_ENABLED] == true
+            if (!githubEnabled) return@launch
             ensureCurrentVersionFromPackage(context)
             val lang = AppLanguage.valueOf(settingsDataStore.data.first()[KEY_LANG] ?: "EN")
             val strings = getStrings(lang)
@@ -430,7 +473,7 @@ class SettingsViewModel(
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
                 val dbFile = context.getDatabasePath("anime.db")
-                val shareText = "Check out Vetro — media list manager: https://github.com/Phnem/Vetra"
+                val shareText = "Check out Vetro — media list manager: https://github.com/Phnem/Vetro-Collection"
                 val sendIntent = if (dbFile.exists()) {
                     databaseFactory.checkpoint()
                     val exportDir = File(context.cacheDir, "share").apply { mkdirs() }
@@ -574,7 +617,105 @@ class SettingsViewModel(
     fun clearImportDbMessage() {
         _transient.update { it.copy(importDbMessage = null) }
     }
+
+    fun repairDatabase() {
+        if (_transient.value.isRepairingDb) return
+        val repairStrings = getDevRepairDbStrings(uiState.value.language)
+        viewModelScope.launch {
+            _transient.update {
+                it.copy(
+                    isRepairingDb = true,
+                    repairDbMessage = null,
+                    showRepairDbLogDialog = false,
+                    pendingRepairDbLog = null,
+                )
+            }
+            val sessionLog = RepairDbSessionLog()
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    repairAnimeDbUseCase(
+                        language = uiState.value.language,
+                        contentType = uiState.value.contentType,
+                        sessionLog = sessionLog,
+                    )
+                }
+                val message = repairStrings.resultTemplate.format(
+                    result.repairedCount,
+                    result.scannedCount,
+                    result.skippedCount,
+                    result.failedCount,
+                )
+                _transient.update {
+                    it.copy(
+                        isRepairingDb = false,
+                        repairDbMessage = message,
+                        showRepairDbLogDialog = true,
+                        pendingRepairDbLog = sessionLog.asText(),
+                    )
+                }
+            } catch (e: Exception) {
+                sessionLog.error("Repair aborted", e)
+                Log.w(LOG_TAG, "Failed to repair DB", e)
+                _transient.update {
+                    it.copy(
+                        isRepairingDb = false,
+                        repairDbMessage = repairStrings.resultFailed,
+                        showRepairDbLogDialog = true,
+                        pendingRepairDbLog = sessionLog.asText(),
+                    )
+                }
+            }
+        }
+    }
+
+    fun discardRepairDbLog() {
+        _transient.update {
+            it.copy(showRepairDbLogDialog = false, pendingRepairDbLog = null)
+        }
+    }
+
+    fun exportRepairDbLog(context: Context) {
+        val logText = _transient.value.pendingRepairDbLog ?: run {
+            discardRepairDbLog()
+            return
+        }
+        val shareTitle = getDevRepairDbStrings(uiState.value.language).logShareTitle
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    val exportDir = File(context.cacheDir, "share").apply { mkdirs() }
+                    val exportFile = File(exportDir, REPAIR_DB_LOG_NAME)
+                    exportFile.writeText(logText)
+                    val uri = FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        exportFile,
+                    )
+                    val sendIntent = Intent().apply {
+                        action = Intent.ACTION_SEND
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        putExtra(Intent.EXTRA_TEXT, shareTitle)
+                        type = "text/plain"
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    withContext(Dispatchers.Main) {
+                        context.startActivity(Intent.createChooser(sendIntent, shareTitle))
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(LOG_TAG, "Failed to export repair DB log", e)
+            } finally {
+                discardRepairDbLog()
+            }
+        }
+    }
+
+    fun clearRepairDbMessage() {
+        _transient.update { it.copy(repairDbMessage = null) }
+    }
 }
+
+private const val REPAIR_DB_LOG_NAME = "vetro_repair_db_log.txt"
 
 /** Android 15+ / Compose: system `View` INFO lines for setRequestedFrameRate(NaN). */
 private fun filterSystemViewFrameRateSpam(log: String): String =

@@ -10,6 +10,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.os.Build
 
 class ImageStorageRepositoryImpl(
     private val context: Context,
@@ -21,13 +24,17 @@ class ImageStorageRepositoryImpl(
 
     override suspend fun saveImage(uri: String, animeId: String): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
-            val name = "img_${animeId}_${System.currentTimeMillis()}.jpg"
+            val name = "img_${animeId}_${System.currentTimeMillis()}.webp"
             val inputStream = context.contentResolver.openInputStream(Uri.parse(uri))
                 ?: error("Failed to open URI: $uri")
-            inputStream.use { input ->
-                FileOutputStream(File(getImgDir(), name)).use { output ->
-                    input.copyTo(output)
-                }
+            
+            val bitmap = inputStream.use { BitmapFactory.decodeStream(it) }
+                ?: error("Failed to decode image from URI: $uri")
+                
+            val compressed = compressAndDownscale(bitmap)
+            
+            FileOutputStream(File(getImgDir(), name)).use { output ->
+                output.write(compressed)
             }
             name
         }
@@ -36,6 +43,8 @@ class ImageStorageRepositoryImpl(
     override fun getImageFilePath(fileName: String): String? {
         return resolveImageFile(fileName)?.absolutePath
     }
+
+    override fun hasLocalImage(fileName: String): Boolean = resolveImageFile(fileName) != null
 
     override fun deleteImage(fileName: String): Boolean {
         val normalized = normalizeFileName(fileName)
@@ -46,16 +55,71 @@ class ImageStorageRepositoryImpl(
     override suspend fun saveImageFromUrl(url: String, animeId: String): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
             if (!url.startsWith("http")) error("Invalid URL: $url")
-            val name = "img_${animeId}_${System.currentTimeMillis()}.jpg"
+            val name = "img_${animeId}_${System.currentTimeMillis()}.webp"
             val bytes = httpClient.get(url).bodyAsBytes()
-            File(getImgDir(), name).writeBytes(bytes)
+            
+            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                ?: error("Failed to decode image from URL: $url")
+                
+            val compressed = compressAndDownscale(bitmap)
+            
+            File(getImgDir(), name).writeBytes(compressed)
             name
         }
+    }
+    
+    private fun compressAndDownscale(original: Bitmap): ByteArray {
+        val maxDimension = 600f
+        val width = original.width
+        val height = original.height
+        
+        val scaledBitmap = if (width > maxDimension || height > maxDimension) {
+            val scale = maxDimension / Math.max(width, height)
+            Bitmap.createScaledBitmap(
+                original,
+                (width * scale).toInt(),
+                (height * scale).toInt(),
+                true
+            )
+        } else {
+            original
+        }
+
+        val outputStream = java.io.ByteArrayOutputStream()
+        val format = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Bitmap.CompressFormat.WEBP_LOSSY
+        } else {
+            @Suppress("DEPRECATION")
+            Bitmap.CompressFormat.WEBP
+        }
+        scaledBitmap.compress(format, 80, outputStream)
+        
+        if (scaledBitmap != original) {
+            scaledBitmap.recycle()
+        }
+        // DO NOT recycle the original bitmap here if it might be used elsewhere, 
+        // but since we decode it just for this, we could recycle it.
+        original.recycle()
+        
+        return outputStream.toByteArray()
     }
 
     private fun resolveImageFile(storedName: String): File? {
         if (storedName.isBlank()) return null
         val fileName = normalizeFileName(storedName)
+
+        if (storedName.startsWith("collection-attachment://")) {
+            val attachmentId = storedName.removePrefix("collection-attachment://")
+            val syncCacheDir = File(context.cacheDir, "attachments/sync")
+            syncCacheDir.listFiles()?.firstOrNull { file ->
+                file.isFile && file.nameWithoutExtension == attachmentId
+            }?.let { return it }
+            val idPrefix = attachmentId.take(8)
+            getImgDir().listFiles()?.firstOrNull { file ->
+                file.isFile && file.name.contains(idPrefix) && file.name.endsWith("_c.webp")
+            }?.let { return it }
+            return null
+        }
 
         if (storedName.contains('/') || storedName.contains('\\')) {
             val absolute = File(storedName)
@@ -68,12 +132,32 @@ class ImageStorageRepositoryImpl(
         val inApp = File(getImgDir(), fileName)
         if (inApp.exists()) return inApp
 
+        findCompressedVariant(inApp)?.let { return it }
+
         val legacy = File(storagePaths.legacyCollectionDir(), fileName)
         if (legacy.exists() && legacy.isFile) {
             promoteToAppStorage(legacy, fileName)
             return File(getImgDir(), fileName).takeIf { it.exists() }
         }
 
+        findCompressedVariant(File(getImgDir(), fileName))?.let { return it }
+        findCompressedVariant(legacy)?.let { return it }
+
+        return null
+    }
+
+    private fun findCompressedVariant(original: File): File? {
+        val baseName = original.nameWithoutExtension
+            .substringBeforeLast("_c")
+            .substringBeforeLast('.')
+        if (baseName.isBlank()) return null
+        val dir = original.parentFile ?: return null
+        val compressed = File(dir, "${baseName}_c.webp")
+        if (compressed.exists()) return compressed
+        listOf("webp", "jpg", "jpeg", "png").forEach { ext ->
+            val candidate = File(dir, "$baseName.$ext")
+            if (candidate.exists()) return candidate
+        }
         return null
     }
 

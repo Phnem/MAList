@@ -277,6 +277,12 @@ Local-first architecture remains unchanged.
 
 ---
 
+### 📫 Connect with me
+
+[![Telegram](https://img.shields.io/badge/Telegram-@Vetro__chat-26A5E4?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/Vetro_chat)
+
+---
+
 <h2>📄 License</h2>
 
 This project is licensed under the <b>MIT License</b>.  

@@ -22,6 +22,7 @@ class VetroApiService(
     private val httpClient: HttpClient,
     private val shikimori: ShikimoriRemoteDataSource,
     private val aniList: AniListRemoteDataSource,
+    private val remanga: com.example.myapplication.network.remanga.RemangaRemoteDataSource,
     private val heavyRate: TokenBucketRateLimiter,
     private val searchRate: TokenBucketRateLimiter,
     private val burstRate: TokenBucketRateLimiter
@@ -29,15 +30,31 @@ class VetroApiService(
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    override suspend fun fetchDetails(title: String, language: AppLanguage): Result<AnimeDetails?> {
+    override suspend fun fetchDetails(title: String, language: AppLanguage, isManga: Boolean, apiId: String?): Result<AnimeDetails?> {
         return runCatching {
             heavyRate.acquire()
-            val query = title.trim()
-            when (language) {
-                AppLanguage.EN -> aniList.fetchAnimeDetails(query).getOrNull()
-                    ?: shikimori.fetchAnimeDetails(query).getOrNull()
-                AppLanguage.RU -> shikimori.fetchAnimeDetails(query).getOrNull()
-                    ?: aniList.fetchAnimeDetails(query).getOrNull()
+            if (isManga) {
+                // Try Remanga first if we have the slug
+                if (apiId != null) {
+                    val remangaDetails = remanga.getMangaDetails(apiId)
+                    if (remangaDetails != null) return@runCatching remangaDetails
+                }
+                // Fallback to Shikimori/Anilist
+                val query = title.trim()
+                when (language) {
+                    AppLanguage.EN -> aniList.fetchAnimeDetails(query).getOrNull()
+                        ?: shikimori.fetchAnimeDetails(query).getOrNull()
+                    AppLanguage.RU -> shikimori.fetchAnimeDetails(query).getOrNull()
+                        ?: aniList.fetchAnimeDetails(query).getOrNull()
+                }
+            } else {
+                val query = title.trim()
+                when (language) {
+                    AppLanguage.EN -> aniList.fetchAnimeDetails(query).getOrNull()
+                        ?: shikimori.fetchAnimeDetails(query).getOrNull()
+                    AppLanguage.RU -> shikimori.fetchAnimeDetails(query).getOrNull()
+                        ?: aniList.fetchAnimeDetails(query).getOrNull()
+                }
             }
         }
     }
@@ -55,6 +72,10 @@ class VetroApiService(
                         ?: shikimori.findTotalEpisodes(title.trim()).getOrNull()
                         ?: checkJikan(title.trim())
                 }
+                AppContentType.MANGA -> {
+                    val res = searchJikanManga(title.trim(), AppLanguage.EN).firstOrNull()
+                    res?.episodes?.takeIf { it > 0 }?.let { it to "JIKAN" }
+                }
                 AppContentType.MOVIE, AppContentType.SERIES -> checkTmdb(title.trim())
             }
         }
@@ -67,6 +88,7 @@ class VetroApiService(
             if (q.isEmpty()) return@runCatching emptyList<ApiSearchResult>()
             when (contentType) {
                 AppContentType.ANIME -> searchAnimeApis(q, language)
+                AppContentType.MANGA -> searchMangaApis(q, language)
                 AppContentType.MOVIE -> filterAndRankByQuery(q, searchTmdbMovie(q))
                 AppContentType.SERIES -> filterAndRankByQuery(q, searchTmdbTv(q))
             }
@@ -159,6 +181,12 @@ class VetroApiService(
     private fun normalizeForSearch(s: String): String =
         s.lowercase().replace(Regex("[^\\p{L}\\p{N}]"), "")
 
+    private fun resultDedupKey(r: ApiSearchResult): String {
+        val titleKey = normalizeForSearch(r.title)
+        if (titleKey.isEmpty()) return ""
+        return r.externalId?.let { "$titleKey::$it" } ?: titleKey
+    }
+
     private fun searchMatchType(result: ApiSearchResult, query: String): SearchMatch {
         val q = query.trim()
         if (q.isEmpty()) return SearchMatch.NONE
@@ -182,7 +210,7 @@ class VetroApiService(
             .mapNotNull { r ->
                 val match = searchMatchType(r, query)
                 if (match == SearchMatch.NONE) return@mapNotNull null
-                val key = normalizeForSearch(r.title)
+                val key = resultDedupKey(r)
                 if (key.isEmpty() || !seen.add(key)) return@mapNotNull null
                 r to match
             }
@@ -254,6 +282,96 @@ class VetroApiService(
                 categoryType = "ANIME",
                 externalId = obj["mal_id"]?.jsonPrimitive?.intOrNull?.toString()
                     ?: obj["mal_id"]?.jsonPrimitive?.content
+            )
+        }
+    }.getOrElse { emptyList() }
+
+    private suspend fun searchMangaApis(query: String, language: AppLanguage): List<ApiSearchResult> {
+        val raw = mutableListOf<ApiSearchResult>()
+        val seenKeys = mutableSetOf<String>()
+        fun addIfNew(r: ApiSearchResult) {
+            val key = resultDedupKey(r)
+            if (key.isEmpty()) return
+
+            val existing = raw.find { resultDedupKey(it) == key }
+            if (existing != null) {
+                // Merge data if existing is missing something
+                val merged = existing.copy(
+                    episodes = if (existing.episodes == 0) r.episodes else existing.episodes,
+                    genres = if (existing.genres.isEmpty()) r.genres else existing.genres,
+                    posterUrl = if (existing.posterUrl.isNullOrEmpty()) r.posterUrl else existing.posterUrl
+                )
+                raw[raw.indexOf(existing)] = merged
+            } else {
+                seenKeys.add(key)
+                raw.add(r)
+            }
+        }
+        
+        // 1. Remanga (Primary source for manga, especially Russian)
+        val remangaRes = remanga.searchManga(query, 6)
+        remangaRes.forEach { addIfNew(it) }
+
+        // 2. Shikimori (Fallback 1)
+        val shikiRes = shikimori.searchManga(query, 30, language).getOrNull() ?: emptyList()
+        val shikiRanked = filterAndRankByQuery(query, shikiRes).take(3)
+        shikiRanked.forEach { addIfNew(it) }
+        
+        // 3. AniList (Fallback 2)
+        val aniRes = aniList.searchAnime(query, 30, language, isManga = true).getOrNull() ?: emptyList()
+        val aniRanked = filterAndRankByQuery(query, aniRes).take(3)
+        aniRanked.forEach { addIfNew(it) }
+        
+        val ranked = filterAndRankByQuery(query, raw)
+        if (ranked.isNotEmpty()) return ranked
+        if (raw.isEmpty()) return emptyList()
+        return raw
+            .sortedWith(compareByDescending<ApiSearchResult> { it.rating ?: Int.MIN_VALUE })
+            .take(20)
+    }
+
+    private suspend fun searchJikanManga(query: String, language: AppLanguage): List<ApiSearchResult> = runCatching {
+        val response = httpClient.get {
+            url {
+                protocol = URLProtocol.HTTPS
+                host = "api.jikan.moe"
+                appendPathSegments("v4", "manga")
+                parameters.append("q", query)
+                parameters.append("limit", "20")
+            }
+        }.bodyAsText()
+        val root = json.parseToJsonElement(response).jsonObject
+        val data = root["data"]?.jsonArray ?: return@runCatching emptyList()
+        data.mapNotNull { el ->
+            val obj = el.jsonObject
+            val titleJp = obj["title"]?.jsonPrimitive?.content ?: return@mapNotNull null
+            val titleEng = obj["title_english"]?.jsonPrimitive?.content ?: ""
+            val (displayTitle, altTitle) = when {
+                titleEng.isNotBlank() -> titleEng to titleJp.takeIf { it != titleEng }
+                else -> titleJp to null
+            }
+            val desc = obj["synopsis"]?.jsonPrimitive?.content?.replace(Regex("<[^>]+>"), "")?.trim() ?: ""
+            val episodes = obj["chapters"]?.jsonPrimitive?.intOrNull ?: obj["volumes"]?.jsonPrimitive?.intOrNull ?: 0
+            val score = obj["score"]?.jsonPrimitive?.content?.toFloatOrNull()?.toInt()
+            val jpg = obj["images"]?.jsonObject?.get("jpg")?.jsonObject
+            val image = jpg?.get("large_image_url")?.jsonPrimitive?.content
+                ?: jpg?.get("image_url")?.jsonPrimitive?.content
+            val genres = obj["genres"]?.jsonArray?.mapNotNull { g ->
+                g.jsonObject["name"]?.jsonPrimitive?.content
+            } ?: emptyList()
+            val type = obj["type"]?.jsonPrimitive?.content ?: ""
+            ApiSearchResult(
+                title = displayTitle,
+                altTitle = altTitle,
+                posterUrl = image,
+                episodes = episodes,
+                description = desc,
+                type = type,
+                genres = genres,
+                rating = score,
+                source = "JIKAN",
+                categoryType = "MANGA",
+                externalId = obj["mal_id"]?.jsonPrimitive?.content
             )
         }
     }.getOrElse { emptyList() }

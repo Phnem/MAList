@@ -35,12 +35,12 @@ android {
         applicationId = "com.phnem.vetro"
         minSdk = 26
         targetSdk = 36
-        versionCode = 327
-        versionName = "v3.2.7-Beta"
+        versionCode = 328
+        versionName = "v3.2.8-Beta"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "GITHUB_OWNER", "\"Phnem\"")
-        buildConfigField("String", "GITHUB_REPO", "\"Vetra\"")
+        buildConfigField("String", "GITHUB_REPO", "\"Vetro-Collection\"")
         buildConfigField(
             "String",
             "SHIKIMORI_CLIENT_ID",
@@ -86,6 +86,21 @@ android {
             "ANILIST_REDIRECT_URI",
             "\"${oauthProp("ANILIST_REDIRECT_URI")}\""
         )
+        buildConfigField(
+            "String",
+            "GOOGLE_WEB_CLIENT_ID",
+            "\"${oauthProp("GOOGLE_WEB_CLIENT_ID")}\""
+        )
+        buildConfigField(
+            "String",
+            "SUPABASE_URL",
+            "\"${oauthProp("SUPABASE_URL")}\""
+        )
+        buildConfigField(
+            "String",
+            "SUPABASE_ANON_KEY",
+            "\"${oauthProp("SUPABASE_ANON_KEY")}\""
+        )
     }
 
     buildFeatures {
@@ -117,7 +132,6 @@ kotlin {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
         freeCompilerArgs.addAll(
             "-Xcontext-receivers",
-            "-opt-in=dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi"
         )
     }
 }
@@ -158,8 +172,6 @@ dependencies {
     implementation(libs.activity.compose)
     implementation(libs.datastore.preferences)
     implementation(libs.androidx.security.crypto)
-    implementation(libs.haze)
-    implementation(libs.haze.materials)
     implementation(libs.backdrop)
 
     // 5. AndroidX Core
@@ -167,9 +179,17 @@ dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
 
-    // 6. Dropbox
-    implementation(libs.dropbox.core)
-    implementation(libs.dropbox.android)
+    // 6. Supabase + Google Identity
+    implementation(platform(libs.supabase.bom))
+    implementation(libs.supabase.postgrest)
+    implementation(libs.supabase.auth)
+    implementation(libs.supabase.realtime)
+    implementation(libs.supabase.storage)
+    implementation(libs.supabase.functions)
+    
+    implementation(libs.googleid)
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services.auth)
 
     // 7. OkHttp, WorkManager
     implementation(libs.okhttp)

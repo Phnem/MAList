@@ -1,0 +1,11 @@
+CREATE TABLE sync_cursors (
+    entity_name TEXT PRIMARY KEY NOT NULL,
+    last_pulled_at INTEGER NOT NULL DEFAULT 0
+);
+
+getCursor:
+SELECT last_pulled_at FROM sync_cursors WHERE entity_name = ?;
+
+setCursor:
+INSERT OR REPLACE INTO sync_cursors(entity_name, last_pulled_at)
+VALUES (?, ?);

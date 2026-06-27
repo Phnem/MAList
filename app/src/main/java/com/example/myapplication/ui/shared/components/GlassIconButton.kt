@@ -20,11 +20,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.example.myapplication.ui.shared.GlassPreset
+import com.example.myapplication.ui.shared.adaptiveGlassBackdrop
+import com.example.myapplication.ui.shared.rememberAdaptiveGlassEffects
 import com.kyant.backdrop.Backdrop
-import com.kyant.backdrop.drawBackdrop
-import com.kyant.backdrop.effects.blur
-import com.kyant.backdrop.effects.lens
-import com.kyant.backdrop.effects.vibrancy
 
 /**
  * Универсальная Glass-кнопка с иконкой.
@@ -47,6 +46,7 @@ fun GlassIconButton(
 ) {
     val borderAlpha = if (enabled) 0.3f else 0.1f
     val borderColor = Color.White.copy(alpha = borderAlpha)
+    val glassEffects = rememberAdaptiveGlassEffects(GlassPreset.IconButton)
 
     Box(
         modifier = modifier
@@ -54,14 +54,10 @@ fun GlassIconButton(
             .clip(CircleShape)
             .then(
                 if (backdrop != null) {
-                    Modifier.drawBackdrop(
+                    Modifier.adaptiveGlassBackdrop(
                         backdrop = backdrop,
-                        shape = { CircleShape },
-                        effects = {
-                            vibrancy()
-                            blur(28f.dp.toPx())
-                            lens(16f.dp.toPx(), 48f.dp.toPx())
-                        }
+                        shape = CircleShape,
+                        effects = glassEffects,
                     )
                 } else {
                     Modifier.background(backgroundColor)

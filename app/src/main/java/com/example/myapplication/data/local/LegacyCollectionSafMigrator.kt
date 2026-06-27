@@ -29,7 +29,8 @@ class LegacyCollectionSafMigrator(
         localDataSource.getAllAnimeList()
             .mapNotNull { anime -> anime.imageFileName?.trim()?.takeIf { it.isNotEmpty() } }
             .distinct()
-            .count { fileName -> imageStorage.getImageFilePath(fileName) == null }
+            .filterNot { it.startsWith("http") || it.startsWith("collection-attachment://") }
+            .count { fileName -> !imageStorage.hasLocalImage(fileName) }
     }
 
     suspend fun needsLegacyFolderAccess(): Boolean = countMissingCollectionImages() > 0
@@ -164,6 +165,7 @@ class LegacyCollectionSafMigrator(
             val target = File(targetDir, name)
             if (target.exists()) return@forEach
             runCatching {
+                // Copy only — source files in the user-selected folder stay untouched.
                 context.contentResolver.openInputStream(entry.uri)?.use { input ->
                     target.outputStream().use { output -> input.copyTo(output) }
                 }

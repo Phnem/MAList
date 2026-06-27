@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
+import coil3.size.Size
 import com.example.myapplication.isAppInDarkTheme
 import com.example.myapplication.ui.shared.fluidClickable
 import com.example.myapplication.ui.shared.theme.SnProFamily
@@ -63,7 +64,8 @@ data class AnimeCardState(
     val genres: PersistentList<String>,
     val episodesCount: Int,
     val categoryLabel: String?,
-    val imagePath: String?
+    val imagePath: String?,
+    val mediaTypeLabel: String
 )
 
 @OptIn(ExperimentalSharedTransitionApi::class, ExperimentalLayoutApi::class)
@@ -136,11 +138,28 @@ fun SharedTransitionScope.OneUiAnimeCard(
                     AsyncImage(
                         model = ImageRequest.Builder(context)
                             .data(File(imgPath))
+                            .size(Size(280, 400))
                             .crossfade(true)
                             .build(),
                         contentDescription = state.title,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(4.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color.Black.copy(alpha = 0.6f))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = state.mediaTypeLabel,
+                        color = Color.White,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = SnProFamily
                     )
                 }
             }

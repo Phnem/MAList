@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,12 +39,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.data.models.AppTheme
-import com.example.myapplication.DropboxSyncManager
 import com.example.myapplication.sync.ExternalListSyncCoordinator
 import com.example.myapplication.ui.navigation.AppNavGraph
 import com.example.myapplication.ui.navigation.isSplashDestination
+import com.example.myapplication.sync.supabase.SupabaseAuthDeeplinkHandler
+import io.github.jan.supabase.SupabaseClient
 import com.example.myapplication.ui.settings.UpdateChangelogSheet
 import com.example.myapplication.ui.debug.FpsOverlay
+import com.example.myapplication.ui.shared.LocalAdaptiveGlassEnabled
 import com.example.myapplication.ui.shared.theme.OneUiTheme
 import com.example.myapplication.ui.settings.SettingsOverlayMotion
 import com.example.myapplication.ui.settings.SettingsViewModel
@@ -52,8 +55,8 @@ import org.koin.android.ext.android.inject
 
 class MainActivity : ComponentActivity() {
 
-    private val dropboxSyncManager: DropboxSyncManager by inject()
     private val externalListSyncCoordinator: ExternalListSyncCoordinator by inject()
+    private val supabaseClient: SupabaseClient by inject()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -73,6 +76,7 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
             window.disableStatusBarContrastEnforced()
         }
+        handleSupabaseAuthDeeplink(intent)
         handleExternalListOAuthIntent(intent)
 
         setContent {
@@ -131,6 +135,9 @@ class MainActivity : ComponentActivity() {
 
                 val overlayVisible = showStartupUpdateOverlay
 
+                CompositionLocalProvider(
+                    LocalAdaptiveGlassEnabled provides settingsState.devAdaptiveGlassScroll,
+                ) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -188,6 +195,7 @@ class MainActivity : ComponentActivity() {
                         FpsOverlay(modifier = Modifier.align(Alignment.TopStart))
                     }
                 }
+                }
             }
         }
     }
@@ -195,17 +203,29 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        handleSupabaseAuthDeeplink(intent)
         handleExternalListOAuthIntent(intent)
+    }
+
+    private fun handleSupabaseAuthDeeplink(intent: Intent?) {
+        SupabaseAuthDeeplinkHandler.handle(
+            lifecycleOwner = this,
+            supabase = supabaseClient,
+            intent = intent,
+            onConsumed = ::clearSupabaseAuthIntent,
+        )
+    }
+
+    private fun clearSupabaseAuthIntent() {
+        val current = intent ?: return
+        val uri = current.data ?: return
+        if (!SupabaseAuthDeeplinkHandler.isAuthCallback(uri)) return
+        setIntent(Intent(current).apply { data = null })
     }
 
     private fun handleExternalListOAuthIntent(intent: Intent?) {
         val uri = intent?.data ?: return
         externalListSyncCoordinator.handleOAuthRedirect(uri)
-    }
-
-    override fun onResume() {
-        super.onResume()
-        dropboxSyncManager.onOAuthResult()
     }
 }
 

@@ -1,6 +1,6 @@
-query SearchMediaPage($q: String, $page: Int, $perPage: Int) {
+query SearchMediaPage($q: String, $page: Int, $perPage: Int, $type: MediaType = ANIME) {
   Page(page: $page, perPage: $perPage) {
-    media(search: $q, type: ANIME) {
+    media(search: $q, type: $type) {
       id
       title {
         romaji

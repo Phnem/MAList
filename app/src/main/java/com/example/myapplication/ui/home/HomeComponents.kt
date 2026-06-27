@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.*
@@ -34,8 +35,227 @@ import coil3.compose.AsyncImage
 import com.example.myapplication.data.models.Anime
 import com.example.myapplication.data.models.UiStrings
 import com.example.myapplication.isAppInDarkTheme
+import com.example.myapplication.data.models.MediaType
+import com.example.myapplication.data.models.typeManga
+import com.example.myapplication.data.models.typeSeries
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import com.example.myapplication.ui.shared.components.FormatCategoryTile
+import com.example.myapplication.ui.shared.gradientHighlightBorder
+import com.example.myapplication.ui.shared.inertialCollision
+import com.example.myapplication.ui.shared.rememberInertialCollisionState
 import com.example.myapplication.ui.shared.theme.*
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
+
+// ==========================================
+// LibraryMediaTypeFilterRow — плитки фильтра коллекции в нижней зоне
+// ==========================================
+@Composable
+fun LibraryMediaTypeFilterRow(
+    strings: UiStrings,
+    selected: MediaType?,
+    onSelect: (MediaType?) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val isDark = isAppInDarkTheme()
+    val scheme = MaterialTheme.colorScheme
+    val tileShape = RoundedCornerShape(14.dp)
+    val tileBg =
+        if (isDark) scheme.surfaceContainerHigh.copy(alpha = 0.42f)
+        else scheme.surfaceVariant
+    val allLabel = if (strings.languageName == "RU") "Все" else "All"
+
+    data class FilterTile(
+        val filter: MediaType?,
+        val label: String,
+        val icon: ImageVector,
+        val accent: Color,
+    )
+
+    val tiles = listOf(
+        FilterTile(null, allLabel, Icons.Outlined.GridView, Color(0xFF5AC8FA)),
+        FilterTile(MediaType.ANIME, strings.typeAnime, Icons.Outlined.AutoAwesome, Color(0xFFFF2D55)),
+        FilterTile(MediaType.MANGA, strings.typeManga, Icons.AutoMirrored.Outlined.MenuBook, Color(0xFFBF5AF2)),
+        FilterTile(MediaType.TV_SERIES, strings.typeSeries, Icons.Outlined.Tv, Color(0xFFFFCC00)),
+    )
+
+    @Composable
+    fun FilterTileItem(tile: FilterTile, modifier: Modifier = Modifier) {
+        val isSelected = selected == tile.filter
+        FormatCategoryTile(
+            icon = tile.icon,
+            accentColor = tile.accent,
+            label = tile.label,
+            showAccentBorder = isSelected,
+            useAccentIcon = isSelected,
+            selectedCount = if (isSelected) 1 else 0,
+            isDark = isDark,
+            tileShape = tileShape,
+            tileBg = tileBg,
+            onClick = { onSelect(tile.filter) },
+            modifier = modifier,
+            alwaysAccentIcon = true,
+        )
+    }
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            FilterTileItem(tiles[0], Modifier.weight(1f))
+            FilterTileItem(tiles[1], Modifier.weight(1f))
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            FilterTileItem(tiles[2], Modifier.weight(1f))
+            FilterTileItem(tiles[3], Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+fun MediaTypeFilterOverlay(
+    visibleState: MutableTransitionState<Boolean>,
+    strings: UiStrings,
+    selected: MediaType?,
+    onSelect: (MediaType?) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val isDark = isAppInDarkTheme()
+    val panelBg = if (isDark) DarkBackground else MaterialTheme.colorScheme.surface
+    val collisionState = rememberInertialCollisionState()
+
+    LaunchedEffect(visibleState.targetState) {
+        if (visibleState.targetState) {
+            collisionState.triggerCollision(impactForce = 35f, stiffness = 200f, dampingRatio = 0.5f)
+        }
+    }
+
+    BackHandler { onDismiss() }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        AnimatedVisibility(
+            visibleState = visibleState,
+            enter = fadeIn(tween(200)),
+            exit = fadeOut(tween(150)),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.4f))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) { onDismiss() },
+            )
+        }
+
+        AnimatedVisibility(
+            visibleState = visibleState,
+            enter = slideInVertically(
+                initialOffsetY = { it },
+                animationSpec = spring(dampingRatio = 0.8f, stiffness = 400f),
+            ) + fadeIn(),
+            exit = slideOutVertically(
+                targetOffsetY = { it },
+                animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMedium),
+            ) + fadeOut(),
+            modifier = Modifier.align(Alignment.BottomCenter),
+        ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(16.dp),
+                shape = RoundedCornerShape(28.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                elevation = CardDefaults.cardElevation(
+                    defaultElevation = if (isDark) 12.dp else 0.dp,
+                ),
+            ) {
+                OverlayGlassPanel(
+                    isDark = isDark,
+                    panelBg = panelBg,
+                    cornerRadius = 28.dp,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .padding(start = 24.dp, top = 24.dp, end = 24.dp)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .inertialCollision(state = collisionState, index = 0, baseMultiplier = 2.5f),
+                        ) {
+                            Text(
+                                text = strings.contentTypeTitle,
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.padding(bottom = 20.dp),
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .inertialCollision(state = collisionState, index = 1, baseMultiplier = 2.5f),
+                        ) {
+                            LibraryMediaTypeFilterRow(
+                                strings = strings,
+                                selected = selected,
+                                onSelect = onSelect,
+                            )
+                        }
+                        Spacer(Modifier.height(20.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .inertialCollision(state = collisionState, index = 2, baseMultiplier = 2.5f)
+                                .gradientHighlightBorder(24.dp, isDark),
+                        ) {
+                            Button(
+                                onClick = onDismiss,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(52.dp),
+                                shape = RoundedCornerShape(24.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (isDark) {
+                                        OverlayThemeTokens.IconSyncBlue
+                                    } else {
+                                        MaterialTheme.colorScheme.secondaryContainer
+                                    },
+                                    contentColor = if (isDark) {
+                                        Color.White
+                                    } else {
+                                        MaterialTheme.colorScheme.onSecondaryContainer
+                                    },
+                                ),
+                                border = null,
+                            ) {
+                                Text(
+                                    text = strings.genreFilterDone,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = SnProFamily,
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(24.dp))
+                    }
+                }
+            }
+        }
+    }
+}
 
 // ==========================================
 // AnimeListActionMenu — Material 3 bottom sheet content (UDF)
@@ -292,10 +512,12 @@ fun AnimeListMenuSheet(
 }
 
 // ==========================================
-// MalistWorkspaceTopBar — заголовок (кнопки сортировки/уведомлений вынесены в HomeScreen поверх scrim)
+// VetroWorkspaceTopBar — заголовок (кнопки сортировки/уведомлений вынесены в HomeScreen поверх scrim)
 // ==========================================
 @Composable
-fun MalistWorkspaceTopBar(strings: UiStrings) {
+fun VetroWorkspaceTopBar(
+    strings: UiStrings,
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -303,15 +525,27 @@ fun MalistWorkspaceTopBar(strings: UiStrings) {
             .padding(horizontal = 24.dp)
             .padding(top = 20.dp, bottom = 8.dp)
     ) {
-        Text(
-            text = "Vetro",
-            style = MaterialTheme.typography.displaySmall.copy(
-                fontWeight = FontWeight.Black,
-                fontFamily = SnProFamily,
-                letterSpacing = (-0.5).sp
-            ),
-            color = MaterialTheme.colorScheme.onBackground
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Collection",
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.displaySmall.copy(
+                    fontWeight = FontWeight.Black,
+                    fontFamily = SnProFamily,
+                    letterSpacing = (-0.5).sp
+                ),
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 8.dp),
+            )
+            Spacer(modifier = Modifier.width(88.dp))
+        }
         Spacer(Modifier.height(2.dp))
         Text(
             text = strings.statsSubtitle,
@@ -371,7 +605,76 @@ fun EmptyStateView(
 }
 
 // ==========================================
-// CloudRestoreIndicator — восстановление из облака
+// CloudSyncPill — индикатор синхронизации из облака (верхняя пилюля)
+// ==========================================
+@Composable
+fun CloudSyncPill(
+    visible: Boolean,
+    label: String,
+    modifier: Modifier = Modifier,
+) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = slideInVertically(
+            initialOffsetY = { fullHeight -> -fullHeight },
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioMediumBouncy,
+                stiffness = Spring.StiffnessMediumLow,
+            ),
+        ) + fadeIn(animationSpec = tween(280)),
+        exit = slideOutVertically(
+            targetOffsetY = { fullHeight -> -fullHeight },
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioNoBouncy,
+                stiffness = Spring.StiffnessMedium,
+            ),
+        ) + fadeOut(animationSpec = tween(220)),
+        modifier = modifier,
+    ) {
+        val isDark = isAppInDarkTheme()
+        val pillShape = RoundedCornerShape(999.dp)
+        val surfaceColor = if (isDark) {
+            Color(0xFF1E2430).copy(alpha = 0.92f)
+        } else {
+            MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
+        }
+        val borderColor = if (isDark) {
+            BrandBlueSoft.copy(alpha = 0.35f)
+        } else {
+            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
+        }
+        Surface(
+            shape = pillShape,
+            color = surfaceColor,
+            tonalElevation = if (isDark) 0.dp else 4.dp,
+            shadowElevation = if (isDark) 0.dp else 6.dp,
+            border = BorderStroke(1.dp, borderColor),
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = if (isDark) BrandBlueSoft else BrandBlue,
+                )
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        fontFamily = SnProFamily,
+                        fontWeight = FontWeight.SemiBold,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
+    }
+}
+
+// ==========================================
+// CloudRestoreIndicator — legacy full-screen card (splash only via strings)
 // ==========================================
 @Composable
 fun CloudRestoreIndicator(

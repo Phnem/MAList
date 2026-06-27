@@ -1,3 +1,3 @@
 package com.example.myapplication.network
 
-enum class AppContentType { ANIME, MOVIE, SERIES }
+enum class AppContentType { ANIME, MOVIE, SERIES, MANGA }

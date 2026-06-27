@@ -7,6 +7,7 @@ import com.example.myapplication.network.ApiService
 import com.example.myapplication.network.ShikimoriRemoteDataSource
 import com.example.myapplication.network.TraceMoeRemoteDataSource
 import com.example.myapplication.network.VetroApiService
+import com.example.myapplication.network.remanga.RemangaRemoteDataSource
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
@@ -69,11 +70,13 @@ val coreNetworkModule = module {
     single { ShikimoriRemoteDataSource(get<HttpClient>(), get(rateBurst)) }
     single { TraceMoeRemoteDataSource(get<HttpClient>()) }
     single { AniListRemoteDataSource(get<ApolloClient>(), get(rateAnilistGraphql)) }
+    single { RemangaRemoteDataSource(get<HttpClient>()) }
     single<ApiService> {
         VetroApiService(
             httpClient = get<HttpClient>(),
             shikimori = get(),
             aniList = get(),
+            remanga = get(),
             heavyRate = get(rateHeavy),
             searchRate = get(rateSearch),
             burstRate = get(rateBurst)

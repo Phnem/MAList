@@ -13,13 +13,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
-import com.example.myapplication.DropboxSyncManager
+
 import com.example.myapplication.WelcomeScreen
 import com.example.myapplication.ui.addedit.AddEditScreen
 import com.example.myapplication.ui.addedit.AddEditViewModel
@@ -35,7 +37,8 @@ import com.example.myapplication.ui.splash.SplashViewModel
 import com.example.myapplication.ui.splash.VetroSplashScreen
 import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.utils.getStrings
-import java.util.Locale
+import com.example.myapplication.utils.getWelcomeStrings
+import com.example.myapplication.utils.systemAppLanguage
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 
@@ -49,8 +52,9 @@ fun AppNavGraph(
     val homeViewModel: HomeViewModel = koinViewModel()
     val addEditViewModel: AddEditViewModel = koinViewModel()
     val inspectViewModel: InspectViewModel = koinViewModel()
-    val dropboxSyncManager: DropboxSyncManager = koinInject()
+
     val context = LocalContext.current
+    val authRepository: com.example.myapplication.sync.supabase.AuthRepository = koinInject()
 
     LaunchedEffect(Unit) {
         homeViewModel.scheduleBackgroundWork(context)
@@ -64,13 +68,7 @@ fun AppNavGraph(
             composable<SplashRoute> {
                 val splashViewModel: SplashViewModel = koinViewModel()
                 val splashState by splashViewModel.uiState.collectAsStateWithLifecycle()
-                val splashStrings = getStrings(
-                    if (Locale.getDefault().language.equals("ru", ignoreCase = true)) {
-                        AppLanguage.RU
-                    } else {
-                        AppLanguage.EN
-                    }
-                )
+                val splashStrings = getStrings(systemAppLanguage())
                 val legacyFolderLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.OpenDocumentTree(),
                 ) { uri ->
@@ -86,6 +84,8 @@ fun AppNavGraph(
                     legacyFolderSubtitle = splashStrings.splashLegacyFolderSubtitle,
                     legacyFolderAction = splashStrings.splashLegacyFolderAction,
                     legacyFolderSkip = splashStrings.splashLegacyFolderSkip,
+                    cloudRestoreTitle = splashStrings.cloudRestoreTitle,
+                    cloudRestoreSubtitle = splashStrings.cloudRestoreSubtitle,
                     onPickLegacyFolder = { legacyFolderLauncher.launch(null) },
                     onSkipLegacyFolder = { splashViewModel.skipLegacyFolderMigration() },
                     onSplashComplete = { nextRoute ->
@@ -102,24 +102,80 @@ fun AppNavGraph(
             }
 
             composable<WelcomeRoute> {
-                val lifecycleOwner = LocalLifecycleOwner.current
-                androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
-                    val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-                        if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-                            dropboxSyncManager.onOAuthResult()
-                            if (dropboxSyncManager.hasToken()) {
-                                navController.navigateToHome()
-                            }
-                        }
+                val context = androidx.compose.ui.platform.LocalContext.current
+                val scope = androidx.compose.runtime.rememberCoroutineScope()
+                val isUserSignedIn by authRepository.isUserSignedIn.collectAsStateWithLifecycle(initialValue = false)
+                val welcomeStrings = getWelcomeStrings(systemAppLanguage())
+                
+                androidx.compose.runtime.LaunchedEffect(isUserSignedIn) {
+                    if (isUserSignedIn) {
+                        navController.navigateToHome()
                     }
-                    lifecycleOwner.lifecycle.addObserver(observer)
-                    onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
                 }
                 WelcomeScreen(
-                    onLoginClick = {
-                        dropboxSyncManager.startOAuth(context as android.app.Activity)
+                    strings = welcomeStrings,
+                    onGoogleSignInClick = {
+                        scope.launch {
+                            val result = authRepository.signInWithGoogle(context)
+                            if (result.isFailure) {
+                                val msg = result.exceptionOrNull()?.message ?: "?"
+                                android.widget.Toast.makeText(
+                                    context,
+                                    welcomeStrings.loginFailedFormat.format(msg),
+                                    android.widget.Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
                     },
-                    onGuestClick = { navController.navigateToHome() }
+                    onGithubSignInClick = {
+                        scope.launch {
+                            val result = authRepository.signInWithGithub()
+                            if (result.isFailure) {
+                                val msg = result.exceptionOrNull()?.message ?: "?"
+                                android.widget.Toast.makeText(
+                                    context,
+                                    welcomeStrings.loginFailedFormat.format(msg),
+                                    android.widget.Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                    },
+                    onForgotPasswordClick = { email ->
+                        scope.launch {
+                            val result = authRepository.resetPasswordForEmail(email)
+                            if (result.isSuccess) {
+                                android.widget.Toast.makeText(
+                                    context,
+                                    welcomeStrings.resetPasswordSuccessFormat.format(email),
+                                    android.widget.Toast.LENGTH_LONG
+                                ).show()
+                            } else {
+                                val msg = result.exceptionOrNull()?.message ?: "?"
+                                android.widget.Toast.makeText(
+                                    context,
+                                    welcomeStrings.resetPasswordErrorFormat.format(msg),
+                                    android.widget.Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                    },
+                    onEmailSignInClick = { email, password ->
+                        scope.launch {
+                            val result = authRepository.signInWithEmail(email, password)
+                            if (result.isFailure) {
+                                val msg = result.exceptionOrNull()?.message ?: "?"
+                                android.widget.Toast.makeText(
+                                    context,
+                                    welcomeStrings.loginFailedFormat.format(msg),
+                                    android.widget.Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                    },
+                    onGuestClick = { 
+                        authRepository.signInAsGuest()
+                        navController.navigateToHome() 
+                    }
                 )
             }
 
@@ -127,7 +183,6 @@ fun AppNavGraph(
                 HomeScreen(
                     navController = navController,
                     viewModel = homeViewModel,
-                    dropboxSyncManager = dropboxSyncManager,
                     sharedTransitionScope = this@SharedTransitionLayout,
                     animatedVisibilityScope = this
                 )
@@ -176,7 +231,6 @@ fun AppNavGraph(
                 SettingsScreen(
                     navController = navController,
                     viewModel = settingsViewModel,
-                    dropboxSyncManager = dropboxSyncManager,
                     sharedTransitionScope = this@SharedTransitionLayout,
                     animatedVisibilityScope = this
                 )

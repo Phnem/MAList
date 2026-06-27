@@ -70,14 +70,15 @@ class AniListRemoteDataSource(
         }
     }
 
-    suspend fun searchAnime(query: String, limit: Int = 20, language: AppLanguage = AppLanguage.EN): Result<List<ApiSearchResult>> = runCatching {
+    suspend fun searchAnime(query: String, limit: Int = 20, language: AppLanguage = AppLanguage.EN, isManga: Boolean = false): Result<List<ApiSearchResult>> = runCatching {
         withContext(Dispatchers.IO) {
             rateLimiter.acquire()
             val response = apolloClient.query(
                 SearchMediaPageQuery(
                     q = Optional.presentIfNotNull(query.takeIf { it.isNotBlank() }),
                     page = Optional.present(1),
-                    perPage = Optional.present(limit)
+                    perPage = Optional.present(limit),
+                    type = Optional.present(if (isManga) com.example.myapplication.network.anilist.type.MediaType.MANGA else com.example.myapplication.network.anilist.type.MediaType.ANIME)
                 )
             ).execute()
             response.throwIfGraphQlErrors("SearchMediaPage")
@@ -96,11 +97,11 @@ class AniListRemoteDataSource(
                     posterUrl = posterUrl,
                     episodes = media.episodes ?: 0,
                     description = desc,
-                    type = media.type?.name ?: "ANIME",
+                    type = media.type?.name ?: if (isManga) "MANGA" else "ANIME",
                     genres = media.genres?.filterNotNull() ?: emptyList(),
                     rating = media.averageScore,
                     source = "AniList",
-                    categoryType = "ANIME",
+                    categoryType = if (isManga) "MANGA" else "ANIME",
                     externalId = media.id?.toString()
                 )
             }

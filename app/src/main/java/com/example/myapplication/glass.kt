@@ -81,6 +81,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
@@ -105,6 +106,9 @@ import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.ui.home.WorkspaceSortNotificationActions
 import com.example.myapplication.ui.navigation.navigateToAddEdit
 import com.example.myapplication.ui.navigation.navigateToSettings
+import com.example.myapplication.ui.shared.GlassPreset
+import com.example.myapplication.ui.shared.adaptiveGlassBackdrop
+import com.example.myapplication.ui.shared.rememberAdaptiveGlassEffects
 import com.example.myapplication.ui.shared.components.GenreFilterPillSelection
 import com.example.myapplication.ui.shared.components.GlassIconButton
 import com.example.myapplication.ui.shared.fluidClickable
@@ -121,50 +125,11 @@ import com.example.myapplication.ui.shared.inertialCollision
 import com.example.myapplication.ui.shared.rememberInertialCollisionState
 import com.example.myapplication.utils.performHaptic
 import com.kyant.backdrop.Backdrop
-import com.kyant.backdrop.drawBackdrop
-import com.kyant.backdrop.effects.blur
-import com.kyant.backdrop.effects.lens
-import com.kyant.backdrop.effects.vibrancy
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.HazeTint
-import dev.chrisbanes.haze.hazeEffect
 
 @Composable
 fun isAppInDarkTheme(): Boolean {
     return MaterialTheme.colorScheme.background.toArgb() == DarkBackground.toArgb()
 }
-
-/**
- * «Матовое стекло» сильнее нижнего дока: выше blur, лёгкий белый tint и зерно
- * (FAB сохранения на экране добавления/редактирования).
- */
-fun matteFabGlassHazeStyle(isDark: Boolean): HazeStyle = HazeStyle(
-    tints = listOf(
-        HazeTint(
-            color = if (isDark) Color.White.copy(alpha = 0.14f)
-            else Color.White.copy(alpha = 0.42f)
-        )
-    ),
-    blurRadius = 32.dp,
-    noiseFactor = if (isDark) 0.06f else 0.095f
-)
-
-/** Безопасный Haze: на Android 12+ (API 31) — аппаратный RenderEffect; на старых — полупрозрачный фон (без размытия на CPU). */
-fun Modifier.safeHaze(state: HazeState, style: HazeStyle = panelGlassHazeStyle): Modifier {
-    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        this.hazeEffect(state = state, style = style)
-    } else {
-        this.background(Color.Black.copy(alpha = 0.6f))
-    }
-}
-
-/** Стиль haze для панелей/меню: размытие 20.dp (баланс красоты и производительности), лёгкий шум (0.1), без tint. */
-internal val panelGlassHazeStyle = HazeStyle(
-    tints = emptyList(),
-    noiseFactor = 0.1f,
-    blurRadius = 20.dp
-)
 
 // ==========================================
 // Simple glass card ("simp glass" style)
@@ -177,29 +142,24 @@ fun SimpGlassCard(
     content: @Composable BoxScope.() -> Unit
 ) {
     val isDark = isAppInDarkTheme()
+    val glassEffects = rememberAdaptiveGlassEffects(GlassPreset.Card)
     val shineColor = if (isDark) Color.White.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.6f)
     val borderStroke = if (isDark) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.8f)
 
     Box(
         modifier = modifier
             .clip(shape)
-            .drawBackdrop(
-                backdrop = backdrop,
-                shape = { shape },
-                effects = {
-                    vibrancy()
-                    blur(12f.dp.toPx())
-                    lens(8f.dp.toPx(), 40f.dp.toPx())
-                }
-            )
+            .adaptiveGlassBackdrop(backdrop = backdrop, shape = shape, effects = glassEffects)
             .border(0.5.dp, borderStroke, shape),
         contentAlignment = Alignment.Center
     ) {
         Canvas(modifier = Modifier.matchParentSize()) {
-            val rect = Rect(offset = Offset.Zero, size = size)
-            val path = Path().apply {
-                val radius = if (shape == CircleShape) size.height / 2 else 32.dp.toPx()
-                addRoundRect(RoundRect(rect, CornerRadius(radius)))
+            val outline = shape.createOutline(size, layoutDirection, this)
+            val path = Path()
+            when (outline) {
+                is Outline.Rounded -> path.addRoundRect(outline.roundRect)
+                is Outline.Generic -> path.addPath(outline.path)
+                is Outline.Rectangle -> path.addRect(outline.rect)
             }
             drawPath(
                 path,
@@ -211,7 +171,7 @@ fun SimpGlassCard(
                         shineColor.copy(alpha = 0.1f)
                     )
                 ),
-                style = Stroke(width = 2.dp.toPx())
+                style = Stroke(width = 1.dp.toPx())
             )
         }
         content()
@@ -230,9 +190,12 @@ fun GlassActionDock(
     updates: List<AnimeUpdate>,
     onOpenSort: () -> Unit,
     onOpenNotifications: () -> Unit,
+    onOpenMediaTypeFilter: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val isDark = isAppInDarkTheme()
+    val glassEffects = rememberAdaptiveGlassEffects(GlassPreset.Card)
+    val dockShape = RoundedCornerShape(32.dp)
     val topPadding by animateDpAsState(
         targetValue = if (isFloating) 16.dp else 0.dp,
         animationSpec = spring(stiffness = Spring.StiffnessLow),
@@ -269,36 +232,31 @@ fun GlassActionDock(
             .padding(top = topPadding)
             .statusBarsPadding()
     ) {
-        Box(
-            Modifier
-                .clip(RoundedCornerShape(32.dp))
-                .drawBackdrop(
-                    backdrop = backdrop,
-                    shape = { RoundedCornerShape(32.dp) },
-                    effects = {
-                        vibrancy()
-                        blur(12f.dp.toPx())
-                        lens(8f.dp.toPx(), 40f.dp.toPx())
+        Box {
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .clip(dockShape)
+                    .adaptiveGlassBackdrop(backdrop = backdrop, shape = dockShape, effects = glassEffects)
+                    .border(0.5.dp, borderColor, dockShape)
+            ) {
+                if (shineAlpha > 0f) {
+                    Canvas(modifier = Modifier.matchParentSize()) {
+                        val rect = Rect(offset = Offset.Zero, size = size)
+                        val path = Path().apply { addRoundRect(RoundRect(rect, CornerRadius(32.dp.toPx()))) }
+                        drawPath(
+                            path,
+                            brush = Brush.verticalGradient(
+                                colors = listOf(
+                                    shineColorBase.copy(alpha = shineColorBase.alpha * shineAlpha),
+                                    Color.Transparent,
+                                    Color.Transparent,
+                                    shineColorBase.copy(alpha = 0.05f * shineAlpha)
+                                )
+                            ),
+                            style = Stroke(width = 1.dp.toPx())
+                        )
                     }
-                )
-                .border(0.5.dp, borderColor, RoundedCornerShape(32.dp))
-        ) {
-            if (shineAlpha > 0f) {
-                Canvas(modifier = Modifier.matchParentSize()) {
-                    val rect = Rect(offset = Offset.Zero, size = size)
-                    val path = Path().apply { addRoundRect(RoundRect(rect, CornerRadius(32.dp.toPx()))) }
-                    drawPath(
-                        path,
-                        brush = Brush.verticalGradient(
-                            colors = listOf(
-                                shineColorBase.copy(alpha = shineColorBase.alpha * shineAlpha),
-                                Color.Transparent,
-                                Color.Transparent,
-                                shineColorBase.copy(alpha = 0.05f * shineAlpha)
-                            )
-                        ),
-                        style = Stroke(width = 1.dp.toPx())
-                    )
                 }
             }
 
@@ -308,9 +266,10 @@ fun GlassActionDock(
                 updatesCount = updates.size,
                 onOpenSort = onOpenSort,
                 onOpenNotifications = onOpenNotifications,
+                onOpenMediaTypeFilter = onOpenMediaTypeFilter,
                 dockButtonBackground = buttonBgColor,
                 useDockSizing = true,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
             )
         }
     }
@@ -331,11 +290,14 @@ fun GlassBottomNavigation(
     onShowNotifs: () -> Unit,
     onInspectClick: () -> Unit,
     onSearchClick: () -> Unit,
+    onSettingsClick: () -> Unit,
     isSearchActive: Boolean,
     modifier: Modifier = Modifier
 ) {
     val view = LocalView.current
     val isDark = isAppInDarkTheme()
+    val glassEffects = rememberAdaptiveGlassEffects(GlassPreset.CompactNav)
+    val navShape = RoundedCornerShape(32.dp)
     val currentThemeColor = MaterialTheme.colorScheme.onSurface
     val borderStroke = if (isDark) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.8f)
 
@@ -350,17 +312,9 @@ fun GlassBottomNavigation(
                 .padding(end = 48.dp)
                 .height(64.dp)
                 .wrapContentWidth()
-                .clip(RoundedCornerShape(32.dp))
-                .drawBackdrop(
-                    backdrop = backdrop,
-                    shape = { RoundedCornerShape(32.dp) },
-                    effects = {
-                        vibrancy()
-                        blur(16f.dp.toPx())
-                        lens(10f.dp.toPx(), 44f.dp.toPx())
-                    }
-                )
-                .border(0.5.dp, borderStroke, RoundedCornerShape(32.dp))
+                .clip(navShape)
+                .adaptiveGlassBackdrop(backdrop = backdrop, shape = navShape, effects = glassEffects)
+                .border(0.5.dp, borderStroke, navShape)
         ) {
             Row(
                 modifier = Modifier
@@ -482,7 +436,7 @@ fun GlassBottomNavigation(
                             .clip(CircleShape)
                             .fluidClickable {
                                 performHaptic(view, "light")
-                                nav.navigateToSettings()
+                                onSettingsClick()
                             }
                     ) {
                         with(sharedTransitionScope) {

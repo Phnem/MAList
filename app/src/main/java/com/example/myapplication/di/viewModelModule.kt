@@ -17,8 +17,9 @@ val viewModelModule = module {
             legacyStorageMigrator = get(),
             legacyCollectionSafMigrator = get(),
             migrationManager = get(),
-            dropboxSyncManager = get(),
+            authRepository = get(),
             appUpdateRepository = get(),
+            imageCompressionMigrator = get(),
         )
     }
     viewModel {
@@ -26,7 +27,6 @@ val viewModelModule = module {
             repository = get(),
             localDataSource = get(),
             notifier = get(),
-            dropboxSyncManager = get(),
             imageStorage = get(),
             settingsDataStore = get(named("settings")),
             addFromApiUseCase = get(),
@@ -50,6 +50,7 @@ val viewModelModule = module {
             settingsDataStore = get(named("settings")),
             databaseFactory = get(),
             importAnimeDbUseCase = get(),
+            repairAnimeDbUseCase = get(),
             collectionPdfGenerator = get(),
             app = androidApplication()
         )

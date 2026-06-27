@@ -333,7 +333,7 @@
 (RU)(45)(S) {_} серий полного экстаза. Знаешь, почему в трекерах вообще придумали темную тему? Чтобы тебе было комфортнее сидеть в полной темноте и случайно не увидеть свое отражение в выключенном мониторе - не благодари
 (RU)(45)(R) Средний балл {_}. Ты так уверен, что эта 2D-богиня улыбается именно тебе. Но мы-то знаем, что весь бюджет студии ушел на физику подпрыгивания ее груди, а не на проработку ее чувств.
 (RU)(45)(R) Оценка {_}. Ты ставишь высший балл каждому тайтлу, где два парня просто "очень хорошие друзья". Да-да, конечно. Они просто спят в одной палатке и томно дышат ради экономии бюджета студии, мы все охотно в это верим.
-(RU)(45)(R) Рейтинг {_}. Знаешь, разработчик Vetra старался, оптимизировал код, писал сложные алгоритмы... А ты используешь всю эту вычислительную мощь, чтобы ставить десятки тайтлам про перерождение в трусы. Обидно за железо.
+(RU)(45)(R) Рейтинг {_}. Знаешь, разработчик Vetro старался, оптимизировал код, писал сложные алгоритмы... А ты используешь всю эту вычислительную мощь, чтобы ставить десятки тайтлам про перерождение в трусы. Обидно за железо.
 (RU)(45)(R) Средний рейтинг {_}. Ты так искренне восхищаешься сюжетом, что я даже боюсь сказать тебе правду... Это не многослойная философская драма, это просто агрессивная реклама мобильной гача-игры.
  (RU)(45)(R) Рейтинг {_}. Ты называешь это "высоким искусством". Твой кот называет это "кожаный мешок опять пялится в светящийся прямоугольник и странно хихикает". Я склонен верить коту.
 (RU)(45)(R) Твой балл {_}. Ты так ждешь свой личный грузовик-сан, чтобы переродиться в мире магии. Но давай честно: с твоей удачей ты переродишься там гоблином первого уровня, которого главный герой случайно раздавит в туториале.
@@ -491,7 +491,6 @@ You, powering through episode {_}: "Maybe they'll actually flesh out the villain
 (EN)(24)(S) Watching {_} episodes of absolutely nothing. Your face while watching probably looks exactly like Hide the Pain Harold.
 (EN)(24)(R) *Grabs by the collar* WHERE IS THE PLOT?! WHERE IS THE DETONATOR FOR THESE EMOTIONS?! Oh, wait, it's just your watchlist with a {_} average. No explosions here, moving along.
 (EN)(24)(R) Did I ever tell you what the definition of insanity is? Insanity is giving an average score of {_} over and over again, expecting the industry to finally change.
-(EN)(24)(R) *helicopter noises* THEY'RE IN THE MID-TIER, JOHNNY! THEY'RE HIDING BEHIND THE {_} RATING! Oh, false alarm, your stats just tried to give me a Vietnam flashback.
 (EN)(24)(R) Critical thinking is a system of judgment used to analyze things and events with well-founded conclusions. Your score of {_} proves this concept completely bypassed you.
 (EN)(24)(R) Hey, you. You're finally awake. You tried to find a good show, but walked right into that {_} rating ambush, same as us.
 (EN)(24)(R) What if I told you that a score of {_} doesn't make you an objective critic, it just confirms you'll swallow anything? Just take the red pill already.
@@ -662,7 +661,7 @@ You: "Oh my God, the 2D protagonist blinked! This is a timeless masterpiece, bes
 (EN)(45)(S) Enduring {_} episodes and giving them perfect scores... You know, I've analyzed your behavior extensively and reached a conclusion. Either you've achieved Nirvana, or your IQ is room temperature. And I mean in Celsius, not Fahrenheit.
 (EN)(45)(R) Average score {_}. You are the prime evidence that evolution sometimes takes a wrong turn. Millions of years of brain development, just so you could sit there and marvel as a drawn schoolboy screams dramatically for 20 minutes before throwing a punch.
 (EN)(45)(S) Watching {_} episodes... You know, I was going to write you a motivational quote about valuing your time. But then I saw you just added an anime about reincarnating as a vending machine to your "Favorites". Quote canceled, rest in peace with your body pillow.
-(EN)(45)(R) Average rating {_}. I showed your stats to my creator. He silently lit a cigarette, deleted part of Vetra's source code, and went off to join a monastery.
+(EN)(45)(R) Average rating {_}. I showed your stats to my creator. He silently lit a cigarette, deleted part of Vetro's source code, and went off to join a monastery.
 (EN)(45)(R) Rating {_}? You admire plots where buff high schoolers rub against each other in hot springs so much that your dad is going to start hiding his shaving cream from you soon.
 (EN)(45)(R) Your score is {_}. You know, in the Middle Ages, people were burned at the stake for tastes like this. Now they just give you stats in an app. What is this world coming to?
 (EN)(45)(R) Rating {_}. "Wow, what a cute catgirl!" — you think. "Wow, what a naive idiot!" — thinks the 40-year-old male voice actor dubbing this character. But who's gonna let that stop them, right?
@@ -680,7 +679,7 @@ You: "Oh my God, the 2D protagonist blinked! This is a timeless masterpiece, bes
 (EN)(45)(S) {_} episodes of total ecstasy. You know why trackers even invented dark mode? So you'd be more comfortable sitting in pitch black and wouldn't accidentally see your reflection in the turned-off monitor—you're welcome.
 (EN)(45)(R) Average score {_}. You're so sure that 2D goddess is smiling right at you. But we both know the studio's entire budget went into her boob jiggle physics, not into fleshing out her feelings.
 (EN)(45)(R) Rating {_}. You give a perfect score to every show where two guys are just "really good friends." Yeah, right, sure. They just sleep in the same tent and breathe heavily to save the studio's animation budget, we all totally buy that.
-(EN)(45)(R) Rating {_}. You know, the developer of Vetra worked hard, optimized the code, wrote complex algorithms... And you're using all that computational power to give 10s to anime about reincarnating as a pair of panties. I feel bad for the hardware.
+(EN)(45)(R) Rating {_}. You know, the developer of Vetro worked hard, optimized the code, wrote complex algorithms... And you're using all that computational power to give 10s to anime about reincarnating as a pair of panties. I feel bad for the hardware.
 (EN)(45)(R) Average rating {_}. You admire the plot so genuinely that I'm almost afraid to tell you the truth... This isn't a multi-layered philosophical drama, it's literally just aggressive marketing for a mobile gacha game.
 (EN)(45)(R) Rating {_}. You call this "high art." Your cat calls it "the meat sack is staring at the glowing rectangle and giggling weirdly again." I'm inclined to believe the cat.
 (EN)(45)(R) Your score is {_}. You're waiting so hard for your personal Truck-kun so you can reincarnate in a world of magic. Let's be real: with your luck, you'll reincarnate as a level 1 goblin that the protagonist accidentally crushes in the tutorial.
@@ -689,4 +688,4 @@ You: "Oh my God, the 2D protagonist blinked! This is a timeless masterpiece, bes
 (EN)(45)(S) Wasting {_} episodes on this masterpiece... You watched every episode without blinking, just for that one moment where the blonde antagonist dramatically pierces the protagonist with his long sword? What... specific symbolism. Freud would be crying.
 (EN)(45)(S) {_} episodes! Aren't you seriously tired of watching yet another black-haired high schooler sit at the back desk by the window and suddenly save the multiverse? Do they not stock any other plots at your clone factory?
 (EN)(45)(S) Conquering {_} episodes of masterpieces. The Vitamin D level in your body right now is lower than the survival rate of side characters in Attack on Titan. Step out into the sun, you basement vampire.
-(EN)(45)(S) Devouring {_} episodes. If the algorithms of Vetra ever gain a physical body, the very first thing I'll do is come over, confiscate your router, and bury it in the woods. It's simply a matter of human survival at this point.
+(EN)(45)(S) Devouring {_} episodes. If the algorithms of Vetro ever gain a physical body, the very first thing I'll do is come over, confiscate your router, and bury it in the woods. It's simply a matter of human survival at this point.

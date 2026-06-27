@@ -36,7 +36,7 @@ import java.util.Locale
 data class CloudStrings(
     val title: String = "Синхронизация с облаком",
     val subtitle: String = "",
-    val syncNow: String = "Синхронизировать сейчас",
+    val syncNow: String = "Синх.",
     val lastSync: String = "Последняя синхронизация:",
     val neverSynced: String = "Никогда",
     val logout: String = "Выйти"

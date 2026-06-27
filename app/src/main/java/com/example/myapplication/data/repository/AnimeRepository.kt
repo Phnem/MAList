@@ -3,6 +3,7 @@ package com.example.myapplication.data.repository
 import com.example.myapplication.data.local.AnimeLocalDataSource
 import com.example.myapplication.data.models.Anime
 import com.example.myapplication.data.models.SortOption
+import com.example.myapplication.data.models.MediaType
 import com.example.myapplication.network.ApiService
 import com.example.myapplication.network.AnimeDetails
 import com.example.myapplication.network.AppContentType
@@ -12,7 +13,12 @@ import com.example.myapplication.network.GithubReleaseInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 
 /**
  * Single source of truth for anime data. Network calls return Result;
@@ -28,25 +34,26 @@ class AnimeRepository(
     fun getAllAnimeSnapshot(): List<Anime> = localDataSource.getAllAnimeList()
 
     /**
-     * Реактивный поток списка: БД подписывается один раз, фильтрация/сортировка в памяти.
-     * При изменении БД или параметров (поиск, сортировка, фильтр) пересчитывается только фильтрация.
+     * Реактивный поток списка: БД + фильтр/сортировка в памяти (до ~3–5k записей).
      */
+    @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
     fun observeAnimeList(
         searchQuery: Flow<String>,
         sortOption: Flow<SortOption>,
         sortAscending: Flow<Boolean>,
-        filterTags: Flow<List<String>>
-    ): Flow<List<Anime>> = combine(
-        localDataSource.observeAllAnime(), // БД читается один раз при старте
-        searchQuery,
-        sortOption,
-        sortAscending,
-        filterTags
-    ) { list, q, sort, asc, tags ->
-        // Фильтрация/сортировка в памяти (~0.1 мс) при любом изменении параметров
-        filterAndSortInMemory(list, q, sort, asc, tags)
-    }
-        .flowOn(Dispatchers.Default)
+        filterTags: Flow<List<String>>,
+        mediaTypeFilter: Flow<MediaType?>
+    ): Flow<List<Anime>> = mediaTypeFilter.flatMapLatest { filterType ->
+        combine(
+            localDataSource.observeAllAnime(filterType),
+            searchQuery.debounce(300L).distinctUntilChanged(),
+            sortOption.distinctUntilChanged(),
+            sortAscending.distinctUntilChanged(),
+            filterTags.distinctUntilChanged(),
+        ) { list, q, sort, asc, tags ->
+            filterAndSortInMemory(list, q, sort, asc, tags)
+        }
+    }.flowOn(Dispatchers.Default)
 
     private fun filterAndSortInMemory(
         list: List<Anime>,
@@ -56,28 +63,23 @@ class AnimeRepository(
         filterTags: List<String>
     ): List<Anime> {
         val trimmed = searchQuery.trim()
-        if (trimmed.isNotEmpty()) {
-            var result = list
-            val lower = trimmed.lowercase()
-            result = result.filter { it.title.lowercase().contains(lower) }
-            if (filterTags.isNotEmpty()) {
-                result = result.filter { it.tags.containsAll(filterTags) }
+        val filtered = list.asSequence()
+            .let { seq ->
+                if (trimmed.isEmpty()) seq
+                else {
+                    val lower = trimmed.lowercase()
+                    seq.filter { it.title.lowercase().contains(lower) }
+                }
             }
-            return when (sortOption) {
-                SortOption.RATING -> if (sortAscending) result.sortedBy { it.rating } else result.sortedByDescending { it.rating }
-                SortOption.EPISODES -> if (sortAscending) result.sortedBy { it.episodes } else result.sortedByDescending { it.episodes }
-                SortOption.TITLE -> if (sortAscending) result.sortedBy { it.title } else result.sortedByDescending { it.title }
+            .let { seq ->
+                if (filterTags.isEmpty()) seq
+                else seq.filter { it.tags.containsAll(filterTags) }
             }
-        }
-        var result = list
-        if (filterTags.isNotEmpty()) {
-            result = result.filter { it.tags.containsAll(filterTags) }
-        }
         return when (sortOption) {
-            SortOption.RATING -> if (sortAscending) result.sortedBy { it.rating } else result.sortedByDescending { it.rating }
-            SortOption.EPISODES -> if (sortAscending) result.sortedBy { it.episodes } else result.sortedByDescending { it.episodes }
-            SortOption.TITLE -> if (sortAscending) result.sortedBy { it.title } else result.sortedByDescending { it.title }
-        }
+            SortOption.RATING -> if (sortAscending) filtered.sortedBy { it.rating } else filtered.sortedByDescending { it.rating }
+            SortOption.EPISODES -> if (sortAscending) filtered.sortedBy { it.episodes } else filtered.sortedByDescending { it.episodes }
+            SortOption.TITLE -> if (sortAscending) filtered.sortedBy { it.title } else filtered.sortedByDescending { it.title }
+        }.toList()
     }
 
     fun getAnimeById(id: String): Anime? = localDataSource.getAnimeById(id)
@@ -89,8 +91,8 @@ class AnimeRepository(
         return updated
     }
 
-    suspend fun fetchDetails(title: String, language: AppLanguage): Result<AnimeDetails?> {
-        return apiService.fetchDetails(title, language)
+    suspend fun fetchDetails(title: String, language: AppLanguage, isManga: Boolean = false, apiId: String? = null): Result<AnimeDetails?> {
+        return apiService.fetchDetails(title, language, isManga, apiId)
     }
 
     suspend fun findTotalEpisodes(

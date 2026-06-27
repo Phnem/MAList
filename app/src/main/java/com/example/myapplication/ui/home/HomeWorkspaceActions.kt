@@ -2,14 +2,13 @@ package com.example.myapplication.ui.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -31,9 +30,7 @@ import com.example.myapplication.ui.shared.theme.BrandBlue
 import com.example.myapplication.ui.shared.theme.BrandRed
 
 /**
- * Stateless sort + notifications actions for workspace header and glass dock.
- *
- * @param dockButtonBackground When non-[Color.Transparent] (and useDockSizing), applies circular pill behind icons like [GlassActionDock].
+ * Sort + notifications + media-type filter actions for workspace header and glass dock.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,14 +40,15 @@ fun WorkspaceSortNotificationActions(
     updatesCount: Int,
     onOpenSort: () -> Unit,
     onOpenNotifications: () -> Unit,
+    onOpenMediaTypeFilter: () -> Unit,
     dockButtonBackground: Color,
     useDockSizing: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Row(
         modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(if (useDockSizing) 12.dp else 4.dp),
-        verticalAlignment = Alignment.CenterVertically
+        horizontalArrangement = Arrangement.spacedBy(0.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         val sortModifier = if (useDockSizing) {
             Modifier
@@ -62,7 +60,7 @@ fun WorkspaceSortNotificationActions(
         }
         IconButton(
             onClick = onOpenSort,
-            modifier = sortModifier
+            modifier = sortModifier,
         ) {
             val icon = if (filterSelectedTags.isNotEmpty()) Icons.Outlined.FilterList else Icons.AutoMirrored.Filled.Sort
             val tint = if (filterSelectedTags.isNotEmpty()) BrandBlue else MaterialTheme.colorScheme.onSurface
@@ -101,9 +99,27 @@ fun WorkspaceSortNotificationActions(
                 Icon(
                     imageVector = HeroiconsRectangleStack,
                     contentDescription = strings.cdNotifications,
-                    tint = MaterialTheme.colorScheme.onSurface
+                    tint = MaterialTheme.colorScheme.onSurface,
                 )
             }
+        }
+        val settingsModifier = if (useDockSizing) {
+            Modifier
+                .size(44.dp)
+                .clip(CircleShape)
+                .background(dockButtonBackground)
+        } else {
+            Modifier
+        }
+        IconButton(
+            onClick = onOpenMediaTypeFilter,
+            modifier = settingsModifier,
+        ) {
+            Icon(
+                imageVector = Icons.Default.MoreVert,
+                contentDescription = strings.contentTypeTitle,
+                tint = MaterialTheme.colorScheme.onSurface,
+            )
         }
     }
 }

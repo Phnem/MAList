@@ -18,7 +18,11 @@ CREATE TABLE anime (
     shikimori_id INTEGER,
     anilist_not_found_at INTEGER,
     mal_not_found_at INTEGER,
-    shikimori_not_found_at INTEGER
+    shikimori_not_found_at INTEGER,
+    isPrivate INTEGER NOT NULL DEFAULT 0,
+    encryptionIv TEXT,
+    deletedAt INTEGER,
+    mediaType TEXT NOT NULL DEFAULT 'ANIME'
 );
 
 -- Delta Sync: rows that need to be pushed to cloud
@@ -58,9 +62,40 @@ SELECT
     anime.anilist_not_found_at,
     anime.mal_not_found_at,
     anime.shikimori_not_found_at,
+    anime.mediaType,
     GROUP_CONCAT(anime_tags.tag, CHAR(31)) AS tagsConcat
 FROM anime
 LEFT JOIN anime_tags ON anime.id = anime_tags.anime_id
+GROUP BY anime.id
+ORDER BY anime.orderIndex ASC;
+
+getAnimeWithTagsConcatByType:
+SELECT
+    anime.id,
+    anime.title,
+    anime.imagePath,
+    anime.episodes,
+    anime.rating,
+    anime.status,
+    anime.isFavorite,
+    anime.updatedAt,
+    anime.orderIndex,
+    anime.dateAdded,
+    anime.categoryType,
+    anime.sync_status,
+    anime.comment,
+    anime.isAiRecommendation,
+    anime.anilist_id,
+    anime.mal_id,
+    anime.shikimori_id,
+    anime.anilist_not_found_at,
+    anime.mal_not_found_at,
+    anime.shikimori_not_found_at,
+    anime.mediaType,
+    GROUP_CONCAT(anime_tags.tag, CHAR(31)) AS tagsConcat
+FROM anime
+LEFT JOIN anime_tags ON anime.id = anime_tags.anime_id
+WHERE anime.mediaType = ?
 GROUP BY anime.id
 ORDER BY anime.orderIndex ASC;
 
@@ -82,9 +117,10 @@ INSERT INTO anime(
     id, title, imagePath, episodes, rating, status, isFavorite, updatedAt, orderIndex, dateAdded,
     categoryType, sync_status, comment, isAiRecommendation,
     anilist_id, mal_id, shikimori_id,
-    anilist_not_found_at, mal_not_found_at, shikimori_not_found_at
+    anilist_not_found_at, mal_not_found_at, shikimori_not_found_at,
+    isPrivate, encryptionIv, deletedAt, mediaType
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING_CREATE', ?, ?, ?, ?, ?, ?, ?, ?);
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING_CREATE', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 updateAnime:
 UPDATE anime
@@ -105,8 +141,46 @@ SET title = ?,
     shikimori_id = ?,
     anilist_not_found_at = ?,
     mal_not_found_at = ?,
-    shikimori_not_found_at = ?
+    shikimori_not_found_at = ?,
+    isPrivate = ?,
+    encryptionIv = ?,
+    deletedAt = ?,
+    mediaType = ?
 WHERE id = ?;
+
+updateAnimeFromSync:
+UPDATE anime
+SET title = ?,
+    imagePath = ?,
+    episodes = ?,
+    rating = ?,
+    status = ?,
+    isFavorite = ?,
+    updatedAt = ?,
+    orderIndex = ?,
+    categoryType = ?,
+    comment = ?,
+    isAiRecommendation = ?,
+    anilist_id = ?,
+    mal_id = ?,
+    shikimori_id = ?,
+    anilist_not_found_at = ?,
+    mal_not_found_at = ?,
+    shikimori_not_found_at = ?,
+    isPrivate = ?,
+    encryptionIv = ?,
+    deletedAt = ?,
+    mediaType = ?,
+    sync_status = 'SYNCED'
+WHERE id = ? AND (updatedAt < ? OR sync_status = 'SYNCED');
+
+updateAnimeKeepingDirty:
+UPDATE anime
+SET anilist_id = coalesce(?, anilist_id),
+    mal_id = coalesce(?, mal_id),
+    shikimori_id = coalesce(?, shikimori_id)
+WHERE id = ?;
+
 
 setAnilistId:
 UPDATE anime
@@ -141,14 +215,38 @@ WHERE id = ?;
 updateAnimeComment:
 UPDATE anime SET comment = ?, updatedAt = ?, sync_status = 'PENDING_UPDATE' WHERE id = ?;
 
+updateAnimeImagePath:
+UPDATE anime SET imagePath = ? WHERE id = ?;
+
 markAnimeSynced:
 UPDATE anime SET sync_status = 'SYNCED' WHERE id = ?;
+
+markPendingSync:
+UPDATE anime SET sync_status = 'PENDING_UPDATE' WHERE id = ?;
 
 markAllAnimeSynced:
 UPDATE anime SET sync_status = 'SYNCED';
 
+markAllAnimePendingUpload:
+UPDATE anime SET sync_status = 'PENDING_UPDATE' WHERE sync_status = 'SYNCED';
+
 deleteAnime:
 DELETE FROM anime WHERE id = ?;
+
+upsertFromSync:
+INSERT OR REPLACE INTO anime(
+    id, title, imagePath, episodes, rating, status, isFavorite, updatedAt, orderIndex, dateAdded,
+    categoryType, sync_status, comment, isAiRecommendation,
+    anilist_id, mal_id, shikimori_id,
+    anilist_not_found_at, mal_not_found_at, shikimori_not_found_at,
+    isPrivate, encryptionIv, deletedAt, mediaType
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SYNCED', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+keepingDirty:
+UPDATE anime
+SET isPrivate = ?, encryptionIv = ?
+WHERE id = ? AND sync_status != 'SYNCED';
 
 getAnimeTags:
 SELECT tag FROM anime_tags WHERE anime_id = ?;

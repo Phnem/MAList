@@ -8,6 +8,7 @@ import com.example.myapplication.data.repository.GenreRepository
 import com.example.myapplication.domain.inspect.InspectImageUseCase
 import com.example.myapplication.domain.search.AddFromApiUseCase
 import com.example.myapplication.domain.settings.ImportAnimeDbUseCase
+import com.example.myapplication.domain.settings.RepairAnimeDbUseCase
 import com.example.myapplication.domain.stats.ResolveStatsFooterPhraseUseCase
 import com.example.myapplication.domain.stats.StatsPhraseCatalog
 import com.example.myapplication.updates.BatchEpisodeCheckUseCase
@@ -28,6 +29,7 @@ val appModule = module {
     single { AddFromApiUseCase(get(), get(), get(), get()) }
     single { BatchEpisodeCheckUseCase(repository = get(), localDataSource = get()) }
     single { ImportAnimeDbUseCase(get()) }
+    single { RepairAnimeDbUseCase(get(), get(), get(), get()) }
     single { CollectionPdfGenerator(androidContext()) }
     single<AnimeNotifier> { AnimeNotifierImpl(context = androidContext()) }
 }

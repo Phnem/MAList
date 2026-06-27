@@ -143,7 +143,7 @@ class InspectViewModel(
             val type = runCatching { AppContentType.valueOf(prefs[KEY_CONTENT_TYPE] ?: "ANIME") }
                 .getOrElse { AppContentType.ANIME }
             contentMode.value = when (type) {
-                AppContentType.ANIME -> InspectContentMode.Anime
+                AppContentType.ANIME, AppContentType.MANGA -> InspectContentMode.Anime
                 AppContentType.MOVIE, AppContentType.SERIES -> InspectContentMode.MoviesSeries
             }
         }
