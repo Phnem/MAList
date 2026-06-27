@@ -35,6 +35,5 @@ ANILIST_CLIENT_SECRET=
 #
 # Если таблица anime пустая после синка — SQL Editor → выполни:
 #   supabase/migrations/20260625120000_align_production_schema.sql
-GOOGLE_WEB_CLIENT_ID=
 SUPABASE_URL=
 SUPABASE_ANON_KEY=

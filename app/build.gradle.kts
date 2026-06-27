@@ -88,11 +88,6 @@ android {
         )
         buildConfigField(
             "String",
-            "GOOGLE_WEB_CLIENT_ID",
-            "\"${oauthProp("GOOGLE_WEB_CLIENT_ID")}\""
-        )
-        buildConfigField(
-            "String",
             "SUPABASE_URL",
             "\"${oauthProp("SUPABASE_URL")}\""
         )
@@ -179,17 +174,13 @@ dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
 
-    // 6. Supabase + Google Identity
+    // 6. Supabase
     implementation(platform(libs.supabase.bom))
     implementation(libs.supabase.postgrest)
     implementation(libs.supabase.auth)
     implementation(libs.supabase.realtime)
     implementation(libs.supabase.storage)
     implementation(libs.supabase.functions)
-    
-    implementation(libs.googleid)
-    implementation(libs.androidx.credentials)
-    implementation(libs.androidx.credentials.play.services.auth)
 
     // 7. OkHttp, WorkManager
     implementation(libs.okhttp)
