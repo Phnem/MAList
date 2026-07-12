@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import kotlin.math.ln
+import com.example.myapplication.ui.shared.theme.MotionTokens
 
 // ==========================================
 // Inertial collision (Phase-Aware, Draw-only, Zero Jank)
@@ -134,14 +135,8 @@ fun Modifier.customOverscroll(
                     val newAmount = (overscrollAnimatable.value + available.y * resistance).coerceAtMost(100f)
                     scope.launch {
                         overscrollAnimatable.snapTo(newAmount)
-                        // Spring back
-                        overscrollAnimatable.animateTo(
-                            0f,
-                            animationSpec = spring(
-                                dampingRatio = Spring.DampingRatioMediumBouncy,
-                                stiffness = Spring.StiffnessLow
-                            )
-                        )
+                        // Возврат «резинки» — критическое затухание без отскока (§11.1).
+                        overscrollAnimatable.animateTo(0f, animationSpec = MotionTokens.overscrollReturn())
                     }
                 } else if (available.y < 0 && isAtBottom) {
                     // Overscrolling at bottom - apply resistance
@@ -149,26 +144,14 @@ fun Modifier.customOverscroll(
                     val newAmount = (overscrollAnimatable.value + available.y * resistance).coerceAtLeast(-100f)
                     scope.launch {
                         overscrollAnimatable.snapTo(newAmount)
-                        // Spring back
-                        overscrollAnimatable.animateTo(
-                            0f,
-                            animationSpec = spring(
-                                dampingRatio = Spring.DampingRatioMediumBouncy,
-                                stiffness = Spring.StiffnessLow
-                            )
-                        )
+                        // Возврат «резинки» — критическое затухание без отскока (§11.1).
+                        overscrollAnimatable.animateTo(0f, animationSpec = MotionTokens.overscrollReturn())
                     }
                 } else {
                     // Reset overscroll when scrolling normally
                     if (overscrollAnimatable.value != 0f) {
                         scope.launch {
-                            overscrollAnimatable.animateTo(
-                                0f,
-                                animationSpec = spring(
-                                    dampingRatio = Spring.DampingRatioMediumBouncy,
-                                    stiffness = Spring.StiffnessMedium
-                                )
-                            )
+                            overscrollAnimatable.animateTo(0f, animationSpec = MotionTokens.overscrollReturn())
                         }
                     }
                 }
@@ -196,12 +179,10 @@ fun Modifier.fluidClickable(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
 
+    // Нажатие кнопки/строки (§7): токен motion.press (987/0.60).
     val scale by animateFloatAsState(
         targetValue = if (isPressed) scaleDown else 1f,
-        animationSpec = spring(
-            dampingRatio = 0.6f,
-            stiffness = Spring.StiffnessMedium
-        ),
+        animationSpec = MotionTokens.press(),
         label = "fluidClickScale"
     )
 

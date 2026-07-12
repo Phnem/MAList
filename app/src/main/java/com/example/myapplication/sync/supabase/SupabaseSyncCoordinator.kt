@@ -118,6 +118,15 @@ class SupabaseSyncCoordinator(
                         "Synced ↑${push.pushedCount} ↓${pull.pulledCount}"
                     else -> null
                 }
+                // Отметка времени последней УСПЕШНОЙ синхронизации — читается панелью
+                // синхронизации (nottif.kt → "sync_prefs"/"last_sync_time"). Раньше не писалась
+                // нигде, поэтому дата/время всегда показывались как «никогда».
+                if (push.error == null && pull.error == null) {
+                    context.getSharedPreferences("sync_prefs", Context.MODE_PRIVATE)
+                        .edit()
+                        .putLong("last_sync_time", System.currentTimeMillis())
+                        .apply()
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
                 _lastSyncMessage.value = e.message

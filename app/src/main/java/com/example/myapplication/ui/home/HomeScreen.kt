@@ -105,7 +105,8 @@ fun HomeScreen(
     navController: NavController,
     viewModel: HomeViewModel,
     sharedTransitionScope: SharedTransitionScope,
-    animatedVisibilityScope: AnimatedVisibilityScope
+    animatedVisibilityScope: AnimatedVisibilityScope,
+    onOpenDetails: (String) -> Unit = {},
 ) {
     val genreRepository: GenreRepository = koinInject()
     val listSyncCoordinator: ExternalListSyncCoordinator = koinInject()
@@ -235,7 +236,7 @@ fun HomeScreen(
     // Кнопка «вверх» опускается к низу, когда док скрыт (как кнопка поиска), и поднимается вместе с доком
     val scrollToTopBottomPadding by animateDpAsState(
         targetValue = if (finalDockVisible) 160.dp else 88.dp,
-        animationSpec = spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMedium),
+        animationSpec = MotionTokens.standard(),
         label = "scrollToTopBottom"
     )
 
@@ -269,6 +270,15 @@ fun HomeScreen(
             viewModel.setGenreFilterVisible(false)
         }
     }
+
+    // «Вдавливание» контента Home под открытой bottom-sheet шторкой (iOS §2.4).
+    val anyHomeSheetOpen = showMediaTypeFilterOverlay || showSortOverlay ||
+        uiState.isGenreFilterVisible || showNotificationsOverlay || showCSheet
+    val homePushProgress by animateFloatAsState(
+        targetValue = if (anyHomeSheetOpen) 1f else 0f,
+        animationSpec = MotionTokens.sheetPresent(),
+        label = "homePush",
+    )
 
     Scaffold(
         containerColor = Color.Transparent,
@@ -393,7 +403,18 @@ fun HomeScreen(
                 }
             }
 
-            Column(modifier = Modifier.fillMaxSize().homeScrollBlur(blurAmount)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        val s = androidx.compose.ui.util.lerp(1f, 0.94f, homePushProgress)
+                        scaleX = s
+                        scaleY = s
+                        clip = true
+                        shape = SquircleShape(16.dp * homePushProgress)
+                    }
+                    .homeScrollBlur(blurAmount)
+            ) {
                 Box(modifier = Modifier.fillMaxSize().weight(1f).background(bgColor)) {
                     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
                     val apiSearchModels by viewModel.apiSearchWithStatus.collectAsStateWithLifecycle()
@@ -529,7 +550,7 @@ fun HomeScreen(
                                                         onClick = { navController.navigateToAddEdit(anime.id) },
                                                         onDetailsClick = {
                                                             performHaptic(view, "light")
-                                                            navController.navigateToDetails(anime.id)
+                                                            onOpenDetails(anime.id)
                                                         }
                                                     )
                                                 }
@@ -587,11 +608,11 @@ fun HomeScreen(
                         visible = finalDockVisible,
                         enter = slideInVertically(
                             initialOffsetY = { it },
-                            animationSpec = spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMediumLow)
+                            animationSpec = MotionTokens.sheetPresent()
                         ) + fadeIn(animationSpec = tween(250)),
                         exit = slideOutVertically(
                             targetOffsetY = { it },
-                            animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMedium)
+                            animationSpec = MotionTokens.sheetDismissForced()
                         ) + fadeOut(animationSpec = tween(200))
                     ) {
                         GlassBottomNavigation(
@@ -599,6 +620,7 @@ fun HomeScreen(
                             nav = navController,
                             sharedTransitionScope = sharedTransitionScope,
                             animatedVisibilityScope = animatedVisibilityScope,
+                            currentLanguage = currentLanguage,
                             onShowStats = {
                                 dismissCloudSyncPill()
                                 showCSheet = true
@@ -652,7 +674,7 @@ fun HomeScreen(
                             val isSelected = uiState.searchMediaTypeFilter == type
                             val scale by androidx.compose.animation.core.animateFloatAsState(
                                 targetValue = if (isSelected) 1.1f else 1.0f,
-                                animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.7f, stiffness = androidx.compose.animation.core.Spring.StiffnessLow),
+                                animationSpec = MotionTokens.menuPop(),
                                 label = "scale"
                             )
                             Box(
@@ -849,21 +871,28 @@ fun HomeScreen(
     }
 }
 
-private fun Modifier.homeScrollBlur(blur: Dp): Modifier = when {
-    blur == 0.dp -> this
-    Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> this.then(
-        Modifier.graphicsLayer {
+/**
+ * Блюр фона при открытых оверлеях. Важно: graphicsLayer-узел НЕ добавляется/не удаляется по
+ * blur==0 — иначе при закрытии меню структурная смена цепочки инвалидирует дочерний
+ * `layerBackdrop` (тот, что сэмплит док), и док заливается сплошным фоном вместо стекла до
+ * первого скролла. Держим узел стабильным и просто гасим renderEffect в null.
+ */
+private fun Modifier.homeScrollBlur(blur: Dp): Modifier =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        this.graphicsLayer {
             val px = blur.toPx()
-            renderEffect = RenderEffect.createBlurEffect(
-                px,
-                px,
-                Shader.TileMode.CLAMP
-            ).asComposeRenderEffect()
-            clip = true
+            renderEffect = if (px > 0f) {
+                RenderEffect.createBlurEffect(px, px, Shader.TileMode.CLAMP).asComposeRenderEffect()
+            } else {
+                null
+            }
+            clip = px > 0f
         }
-    )
-    else -> this.then(Modifier.blur(blur))
-}
+    } else if (blur > 0.dp) {
+        this.then(Modifier.blur(blur))
+    } else {
+        this
+    }
 
 private fun LazyListScope.apiSearchResultsSection(
     strings: UiStrings,

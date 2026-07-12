@@ -15,12 +15,12 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import com.phnem.vetro.R
 
-val SnProFamily = FontFamily(
-    Font(R.font.snpro_bold, FontWeight.Bold),
-    Font(R.font.snpro_mediumitalic, FontWeight.Normal),
-    Font(R.font.snpro_mediumitalic, FontWeight.Medium),
-    Font(R.font.snpro_lightitalic, FontWeight.Light)
-)
+// Более «строгий»/формальный шрифт (референс — системный SF/Inter-подобный сан-сериф).
+// Системный upright sans-serif вместо SN Pro: у SN Pro Normal/Medium маппились на *italic*
+// (snpro_mediumitalic), из-за чего почти весь текст читался с наклоном/неформально, а upright
+// regular в проекте не бундлился. Единый источник правды — меняется во всём приложении.
+// Чтобы вернуть SN Pro — восстановить FontFamily(Font(...)) ниже.
+val SnProFamily = FontFamily.SansSerif
 
 @Composable
 fun OneUiTheme(

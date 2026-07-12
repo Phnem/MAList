@@ -1,17 +1,14 @@
 package com.example.myapplication.ui.details
 
-import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.data.models.Anime
 import com.example.myapplication.data.repository.AnimeRepository
 import com.example.myapplication.data.repository.ImageStorageRepository
 import com.example.myapplication.network.AppLanguage
-import com.example.myapplication.ui.navigation.DetailsRoute
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.navigation.toRoute
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,13 +17,11 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class DetailsViewModel(
-    savedStateHandle: SavedStateHandle,
+    private val animeId: String,
     private val repository: AnimeRepository,
     private val settingsDataStore: DataStore<Preferences>,
     private val imageStorage: ImageStorageRepository
 ) : ViewModel() {
-
-    private val animeId: String = savedStateHandle.toRoute<DetailsRoute>().animeId
 
     private val _uiState = MutableStateFlow<DetailsUiState>(DetailsUiState.Idle)
     val uiState: StateFlow<DetailsUiState> = _uiState.asStateFlow()

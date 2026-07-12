@@ -10,7 +10,12 @@ import androidx.compose.ui.unit.sp
 internal object OverlayThemeTokens {
     val PanelWidth = 340.dp
     val PanelCornerRadius = 28.dp
-    const val ScrimAlpha = 0.45f
+    // Затемнение фона за шторками — основной источник контраста «лист vs страница»
+    // (панель elevated-цветом чуть светлее затемнённого фона, как в iOS).
+    // iOS затемняет по-разному: в тёмной теме сильно (фон почти уходит в чёрный),
+    // в светлой — деликатно (~0.2–0.35), иначе выглядит «грязно».
+    const val ScrimAlpha = 0.6f
+    fun scrimAlpha(isDark: Boolean): Float = if (isDark) 0.6f else 0.35f
     val PanelPaddingTop = 88.dp
     val PanelPaddingEnd = 12.dp
     val CardOuterPaddingTop = 10.dp

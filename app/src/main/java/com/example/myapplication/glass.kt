@@ -42,6 +42,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
@@ -117,7 +118,15 @@ import com.example.myapplication.ui.shared.theme.BrandBlue
 import com.example.myapplication.ui.shared.theme.DarkBackground
 import com.example.myapplication.ui.shared.theme.OverlayGlassPanel
 import com.example.myapplication.ui.shared.theme.OverlayThemeTokens
+import com.example.myapplication.ui.shared.theme.MotionTokens
+import com.example.myapplication.ui.shared.theme.IosDesign
+import com.example.myapplication.ui.shared.theme.iosSheetContainer
+import com.example.myapplication.ui.shared.theme.SquircleCornerShape
+import com.example.myapplication.ui.shared.theme.SquircleShape
+import com.example.myapplication.ui.shared.components.GrabberHandle
+import com.example.myapplication.ui.shared.components.rememberIosSheetSwipe
 import com.example.myapplication.ui.shared.theme.SnProFamily
+import com.example.myapplication.ui.shared.theme.iosRowHighlight
 import com.example.myapplication.ui.shared.theme.glassEdge
 import com.example.myapplication.ui.shared.theme.glassFill
 import com.example.myapplication.ui.shared.theme.softPlateShadowForLightSheet
@@ -198,7 +207,7 @@ fun GlassActionDock(
     val dockShape = RoundedCornerShape(32.dp)
     val topPadding by animateDpAsState(
         targetValue = if (isFloating) 16.dp else 0.dp,
-        animationSpec = spring(stiffness = Spring.StiffnessLow),
+        animationSpec = MotionTokens.barRevealDp,
         label = "dockPadding"
     )
     val borderStrokeBase = if (isDark) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.8f)
@@ -222,12 +231,12 @@ fun GlassActionDock(
         visible = isFloating,
         enter = slideInVertically(
             initialOffsetY = { -it },
-            animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
-        ) + fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)),
+            animationSpec = MotionTokens.barReveal()
+        ) + fadeIn(animationSpec = MotionTokens.barReveal()),
         exit = slideOutVertically(
             targetOffsetY = { -it },
-            animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
-        ) + fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)),
+            animationSpec = MotionTokens.standard()
+        ) + fadeOut(animationSpec = MotionTokens.standard()),
         modifier = modifier
             .padding(top = topPadding)
             .statusBarsPadding()
@@ -286,6 +295,7 @@ fun GlassBottomNavigation(
     nav: androidx.navigation.NavController,
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
+    currentLanguage: AppLanguage,
     onShowStats: () -> Unit,
     onShowNotifs: () -> Unit,
     onInspectClick: () -> Unit,
@@ -297,9 +307,17 @@ fun GlassBottomNavigation(
     val view = LocalView.current
     val isDark = isAppInDarkTheme()
     val glassEffects = rememberAdaptiveGlassEffects(GlassPreset.CompactNav)
-    val navShape = RoundedCornerShape(32.dp)
+    // Более «пухлая» капсула (референс — Telegram): выше и с полным пилюльным скруглением.
+    val navHeight = 74.dp
+    val navShape = RoundedCornerShape(navHeight / 2)
     val currentThemeColor = MaterialTheme.colorScheme.onSurface
     val borderStroke = if (isDark) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.8f)
+
+    val ru = currentLanguage == AppLanguage.RU
+    val labelInspect = if (ru) "Кадр" else "Frame"
+    val labelStats = if (ru) "Статистика" else "Stats"
+    val labelAdd = if (ru) "Добавить" else "Add"
+    val labelSettings = if (ru) "Настройки" else "Settings"
 
     Box(
         modifier = modifier
@@ -309,8 +327,9 @@ fun GlassBottomNavigation(
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(end = 48.dp)
-                .height(64.dp)
+                // Больше отступ справа → центрированная капсула уезжает левее, дальше от поиск-FAB.
+                .padding(end = 80.dp)
+                .height(navHeight)
                 .wrapContentWidth()
                 .clip(navShape)
                 .adaptiveGlassBackdrop(backdrop = backdrop, shape = navShape, effects = glassEffects)
@@ -319,152 +338,161 @@ fun GlassBottomNavigation(
             Row(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .padding(horizontal = 8.dp),
+                    .padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Box(modifier = Modifier.size(52.dp), contentAlignment = Alignment.Center) {
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(CircleShape)
-                            .fluidClickable {
-                                performHaptic(view, "light")
-                                onInspectClick()
-                            }
-                    ) {
-                        with(sharedTransitionScope) {
-                            Box(
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .sharedBounds(
-                                        rememberSharedContentState(key = "inspect_container"),
-                                        animatedVisibilityScope = animatedVisibilityScope,
-                                        resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds
-                                    )
-                                    .background(Color.Transparent),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    painter = painterResource(R.drawable.frame_inspect_24),
-                                    contentDescription = "Scene search",
-                                    tint = currentThemeColor.copy(alpha = 0.6f),
-                                    modifier = Modifier
-                                        .size(32.dp)
-                                        .sharedElement(
-                                            rememberSharedContentState(key = "inspect_icon"),
-                                            animatedVisibilityScope = animatedVisibilityScope
-                                        )
+                // --- Кадр (inspect) ---
+                Column(
+                    modifier = Modifier
+                        .width(52.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .fluidClickable {
+                            performHaptic(view, "light")
+                            onInspectClick()
+                        },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    with(sharedTransitionScope) {
+                        Box(
+                            modifier = Modifier
+                                .size(30.dp)
+                                .sharedBounds(
+                                    rememberSharedContentState(key = "inspect_container"),
+                                    animatedVisibilityScope = animatedVisibilityScope,
+                                    resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds
                                 )
-                            }
+                                .background(Color.Transparent),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.frame_inspect_24),
+                                contentDescription = "Scene search",
+                                tint = currentThemeColor.copy(alpha = 0.7f),
+                                modifier = Modifier
+                                    .size(26.dp)
+                                    .sharedElement(
+                                        rememberSharedContentState(key = "inspect_icon"),
+                                        animatedVisibilityScope = animatedVisibilityScope
+                                    )
+                            )
                         }
                     }
+                    DockLabel(labelInspect, currentThemeColor)
                 }
 
-                Box(modifier = Modifier.size(52.dp), contentAlignment = Alignment.Center) {
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(CircleShape)
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            ) {
-                                performHaptic(view, "light")
-                                onShowStats()
-                            }
-                    ) {
+                // --- Статистика ---
+                Column(
+                    modifier = Modifier
+                        .width(52.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
+                            performHaptic(view, "light")
+                            onShowStats()
+                        },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Box(modifier = Modifier.size(30.dp), contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = HeroiconsSquaresPlus,
                             contentDescription = "Stats",
-                            tint = currentThemeColor.copy(alpha = 0.6f),
-                            modifier = Modifier.size(32.dp)
+                            tint = currentThemeColor.copy(alpha = 0.7f),
+                            modifier = Modifier.size(26.dp)
                         )
                     }
+                    DockLabel(labelStats, currentThemeColor)
                 }
 
-                Box(modifier = Modifier.size(52.dp), contentAlignment = Alignment.Center) {
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(CircleShape)
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            ) {
-                                performHaptic(view, "success")
-                                nav.navigateToAddEdit()
-                            }
-                    ) {
-                        with(sharedTransitionScope) {
-                            Box(
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .sharedBounds(
-                                        rememberSharedContentState(key = "fab_container"),
-                                        animatedVisibilityScope = animatedVisibilityScope,
-                                        resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
-                                        clipInOverlayDuringTransition = OverlayClip(CircleShape)
-                                    )
-                                    .background(Color.Transparent),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = HeroiconsPlus,
-                                    contentDescription = "Add",
-                                    tint = currentThemeColor.copy(alpha = 0.6f),
-                                    modifier = Modifier
-                                        .size(36.dp)
-                                        .sharedElement(
-                                            rememberSharedContentState(key = "fab_icon"),
-                                            animatedVisibilityScope = animatedVisibilityScope
-                                        )
+                // --- Добавить ---
+                Column(
+                    modifier = Modifier
+                        .width(52.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
+                            performHaptic(view, "success")
+                            nav.navigateToAddEdit()
+                        },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    with(sharedTransitionScope) {
+                        Box(
+                            modifier = Modifier
+                                .size(30.dp)
+                                .sharedBounds(
+                                    rememberSharedContentState(key = "fab_container"),
+                                    animatedVisibilityScope = animatedVisibilityScope,
+                                    resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
+                                    clipInOverlayDuringTransition = OverlayClip(CircleShape)
                                 )
-                            }
+                                .background(Color.Transparent),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = HeroiconsPlus,
+                                contentDescription = "Add",
+                                tint = currentThemeColor.copy(alpha = 0.7f),
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .sharedElement(
+                                        rememberSharedContentState(key = "fab_icon"),
+                                        animatedVisibilityScope = animatedVisibilityScope
+                                    )
+                            )
                         }
                     }
+                    DockLabel(labelAdd, currentThemeColor)
                 }
 
-                Box(modifier = Modifier.size(52.dp), contentAlignment = Alignment.Center) {
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(CircleShape)
-                            .fluidClickable {
-                                performHaptic(view, "light")
-                                onSettingsClick()
-                            }
-                    ) {
-                        with(sharedTransitionScope) {
-                            Box(
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .sharedBounds(
-                                        rememberSharedContentState(key = "settings_container"),
-                                        animatedVisibilityScope = animatedVisibilityScope,
-                                        resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds
-                                    )
-                                    .background(Color.Transparent),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Settings,
-                                    contentDescription = "Settings",
-                                    tint = currentThemeColor.copy(alpha = 0.6f),
-                                    modifier = Modifier
-                                        .size(32.dp)
-                                        .sharedElement(
-                                            rememberSharedContentState(key = "settings_icon"),
-                                            animatedVisibilityScope = animatedVisibilityScope
-                                        )
+                // --- Настройки ---
+                Column(
+                    modifier = Modifier
+                        .width(52.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .fluidClickable {
+                            performHaptic(view, "light")
+                            onSettingsClick()
+                        },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    with(sharedTransitionScope) {
+                        Box(
+                            modifier = Modifier
+                                .size(30.dp)
+                                .sharedBounds(
+                                    rememberSharedContentState(key = "settings_container"),
+                                    animatedVisibilityScope = animatedVisibilityScope,
+                                    // ScaleToBounds: контент меряется один раз и масштабируется
+                                    // при переходе (draw-time), без пер-кадрового relayout всего
+                                    // списка настроек из 48dp-иконки — снимает провал FPS (§ perf).
+                                    resizeMode = SharedTransitionScope.ResizeMode.scaleToBounds()
                                 )
-                            }
+                                .background(Color.Transparent),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Settings,
+                                contentDescription = "Settings",
+                                tint = currentThemeColor.copy(alpha = 0.7f),
+                                modifier = Modifier
+                                    .size(26.dp)
+                                    .sharedElement(
+                                        rememberSharedContentState(key = "settings_icon"),
+                                        animatedVisibilityScope = animatedVisibilityScope
+                                    )
+                            )
                         }
                     }
+                    DockLabel(labelSettings, currentThemeColor)
                 }
             }
         }
@@ -486,6 +514,20 @@ fun GlassBottomNavigation(
             tint = if (isSearchActive) BrandBlue else currentThemeColor
         )
     }
+}
+
+/** Подпись под иконкой дока (референс — Telegram). Компактная, приглушённая. */
+@Composable
+private fun DockLabel(text: String, color: Color) {
+    Text(
+        text = text,
+        fontFamily = SnProFamily,
+        fontWeight = FontWeight.Medium,
+        fontSize = 9.5.sp,
+        color = color.copy(alpha = 0.75f),
+        maxLines = 1,
+        modifier = Modifier.padding(top = 3.dp),
+    )
 }
 
 // ==========================================
@@ -687,9 +729,19 @@ fun SortFilterOverlay(
         mutableStateOf<SortGridSelection>(SortGridSelection.Sort(sortOption, sortAscending))
     }
 
-    val updateSelection: (SortGridSelection) -> Unit = {
-        performHaptic(view, "light")
-        draftSelection = it
+    val swipe = rememberIosSheetSwipe { onDismiss() }
+    val accentRating = Color(0xFFFFD60A)
+    val accentEpisodes = Color(0xFF3E82F7)
+    val accentTitle = Color(0xFF5E5CE6)
+    val accentGenres = Color(0xFFFF6FB1)
+    fun sortAccent(o: SortOption) = when (o) {
+        SortOption.RATING -> accentRating
+        SortOption.EPISODES -> accentEpisodes
+        SortOption.TITLE -> accentTitle
+    }
+    val applyAccent = when (val d = draftSelection) {
+        SortGridSelection.Genres -> accentGenres
+        is SortGridSelection.Sort -> sortAccent(d.option)
     }
 
     BackHandler { onDismiss() }
@@ -697,13 +749,13 @@ fun SortFilterOverlay(
     Box(modifier = Modifier.fillMaxSize()) {
         AnimatedVisibility(
             visibleState = visibleState,
-            enter = fadeIn(animationSpec = tween(300)),
-            exit = fadeOut(animationSpec = tween(300))
+            enter = fadeIn(animationSpec = tween(MotionTokens.ScrimFadeMillis)),
+            exit = fadeOut(animationSpec = tween(MotionTokens.ScrimFadeMillis))
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = OverlayThemeTokens.ScrimAlpha))
+                    .background(Color.Black.copy(alpha = OverlayThemeTokens.scrimAlpha(isDark)))
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
@@ -713,204 +765,210 @@ fun SortFilterOverlay(
 
         AnimatedVisibility(
             visibleState = visibleState,
-            enter = scaleIn(
-                transformOrigin = TransformOrigin(1f, 0f),
-                animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+            enter = slideInVertically(
+                initialOffsetY = { it },
+                animationSpec = MotionTokens.sheetPresent()
             ) + fadeIn(),
-            exit = scaleOut(
-                transformOrigin = TransformOrigin(1f, 0f),
-                animationSpec = spring(dampingRatio = 0.9f, stiffness = Spring.StiffnessMedium)
+            exit = slideOutVertically(
+                targetOffsetY = { it },
+                animationSpec = MotionTokens.sheetDismissForced()
             ) + fadeOut(),
-            modifier = Modifier.align(Alignment.TopEnd)
+            modifier = Modifier.align(Alignment.BottomCenter)
         ) {
             Column(
                 modifier = Modifier
-                    .statusBarsPadding()
-                    .padding(top = OverlayThemeTokens.PanelPaddingTop, end = OverlayThemeTokens.PanelPaddingEnd)
-                    .width(OverlayThemeTokens.PanelWidth)
-                    .wrapContentHeight()
+                    .then(swipe.panelModifier)
+                    .fillMaxWidth()
+                    .iosSheetContainer(
+                        SquircleCornerShape(IosDesign.SheetCorner, IosDesign.SheetCorner, 0.dp, 0.dp),
+                        isDark,
+                        IosDesign.sheetSurface(isDark),
+                    )
+                    .navigationBarsPadding()
+                    .padding(bottom = 12.dp)
             ) {
-                Card(
-                    shape = RoundedCornerShape(OverlayThemeTokens.PanelCornerRadius),
-                    colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-                    elevation = CardDefaults.cardElevation(
-                        defaultElevation = if (isDark) OverlayThemeTokens.CardElevation else 0.dp
-                    ),
-                    modifier = Modifier
-                        .padding(
-                            top = OverlayThemeTokens.CardOuterPaddingTop,
-                            end = OverlayThemeTokens.CardOuterPaddingEnd
-                        )
-                        .pointerInput(Unit) {
-                            detectTapGestures { /* поглощаем тап, без семантики clickable */ }
+                GrabberHandle(isDark, modifier = swipe.handleModifier)
+                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    Text(
+                        text = strings.sortSheetTitle,
+                        fontFamily = SnProFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 24.sp,
+                        letterSpacing = (-0.3).sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = strings.sortSheetSubtitle,
+                        fontFamily = SnProFamily,
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        modifier = Modifier.padding(top = 2.dp, bottom = 14.dp)
+                    )
+
+                    val curSort = draftSelection as? SortGridSelection.Sort
+                    fun toggleSort(o: SortOption) {
+                        performHaptic(view, "light")
+                        val cur = draftSelection
+                        draftSelection = if (cur is SortGridSelection.Sort && cur.option == o) {
+                            SortGridSelection.Sort(o, !cur.isAscending)
+                        } else {
+                            SortGridSelection.Sort(o, isAscending = false)
                         }
-                ) {
-                    OverlayGlassPanel(
+                    }
+                    fun orderLabel(asc: Boolean) =
+                        if (asc) strings.sortOrderAscending else strings.sortOrderDescending
+
+                    SortOptionRow(
+                        icon = SortOption.RATING.getIcon(),
+                        accent = accentRating,
+                        title = strings.ratingHigh,
+                        subtitle = if (curSort?.option == SortOption.RATING) orderLabel(curSort.isAscending) else strings.sortSubtitleRating,
+                        selected = curSort?.option == SortOption.RATING,
                         isDark = isDark,
-                        panelBg = panelBg,
-                        cornerRadius = OverlayThemeTokens.PanelCornerRadius,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                    Column(
+                        onClick = { toggleSort(SortOption.RATING) }
+                    )
+                    SortOptionRow(
+                        icon = SortOption.EPISODES.getIcon(),
+                        accent = accentEpisodes,
+                        title = strings.sortTileEpisodesTitle,
+                        subtitle = if (curSort?.option == SortOption.EPISODES) orderLabel(curSort.isAscending) else strings.sortSubtitleEpisodes,
+                        selected = curSort?.option == SortOption.EPISODES,
+                        isDark = isDark,
+                        onClick = { toggleSort(SortOption.EPISODES) }
+                    )
+                    SortOptionRow(
+                        icon = SortOption.TITLE.getIcon(),
+                        accent = accentTitle,
+                        title = strings.titleAZ,
+                        subtitle = if (curSort?.option == SortOption.TITLE) orderLabel(curSort.isAscending) else strings.sortSubtitleTitle,
+                        selected = curSort?.option == SortOption.TITLE,
+                        isDark = isDark,
+                        onClick = { toggleSort(SortOption.TITLE) }
+                    )
+                    SortOptionRow(
+                        icon = Icons.Outlined.FilterList,
+                        accent = accentGenres,
+                        title = strings.filterByGenre,
+                        subtitle = strings.sortSubtitleGenres,
+                        selected = draftSelection == SortGridSelection.Genres,
+                        isDark = isDark,
+                        onClick = {
+                            performHaptic(view, "light")
+                            draftSelection = SortGridSelection.Genres
+                        }
+                    )
+
+                    Spacer(Modifier.height(6.dp))
+                    Box(
                         modifier = Modifier
-                            .padding(
-                                start = OverlayThemeTokens.PanelInnerPaddingStart,
-                                top = OverlayThemeTokens.PanelInnerPaddingTop,
-                                end = OverlayThemeTokens.PanelInnerPaddingEnd
-                            )
-                            .verticalScroll(rememberScrollState())
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.Top
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = strings.sortSheetTitle,
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = onCard,
-                                    fontSize = 22.sp,
-                                    letterSpacing = (-0.2).sp
-                                )
-                                Spacer(Modifier.height(4.dp))
-                                Text(
-                                    text = strings.sortSheetSubtitle,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = muted
-                                )
-                            }
-                            IconButton(
-                                onClick = {
-                                    performHaptic(view, "light")
-                                    onDismiss()
-                                },
-                                modifier = Modifier.size(32.dp)
+                            .fillMaxWidth()
+                            .height(54.dp)
+                            .clip(SquircleShape(27.dp))
+                            .background(applyAccent)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = strings.nottifCloseCd,
-                                    tint = muted,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
-
-                        Spacer(Modifier.height(18.dp))
-
-                        val activeFiltersCount = filterSelectedTags.size
-
-                        Column(verticalArrangement = Arrangement.spacedBy(OverlayThemeTokens.GridSpacing)) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(IntrinsicSize.Max),
-                                horizontalArrangement = Arrangement.spacedBy(OverlayThemeTokens.GridSpacing)
-                            ) {
-                                SortSortTile(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight(),
-                                    option = SortOption.RATING,
-                                    title = strings.ratingHigh,
-                                    subtitle = strings.sortSubtitleRating,
-                                    icon = SortOption.RATING.getIcon(),
-                                    accentColor = SortOption.RATING.getAccentColor(),
-                                    selection = draftSelection,
-                                    strings = strings,
-                                    isDark = isDark,
-                                    rim = rim,
-                                    cardBg = cardBg,
-                                    muted = muted,
-                                    onSelect = updateSelection
-                                )
-                                SortSortTile(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight(),
-                                    option = SortOption.EPISODES,
-                                    title = strings.sortTileEpisodesTitle,
-                                    subtitle = strings.sortSubtitleEpisodes,
-                                    icon = SortOption.EPISODES.getIcon(),
-                                    accentColor = SortOption.EPISODES.getAccentColor(),
-                                    selection = draftSelection,
-                                    strings = strings,
-                                    isDark = isDark,
-                                    rim = rim,
-                                    cardBg = cardBg,
-                                    muted = muted,
-                                    onSelect = updateSelection
-                                )
-                            }
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(IntrinsicSize.Max),
-                                horizontalArrangement = Arrangement.spacedBy(OverlayThemeTokens.GridSpacing)
-                            ) {
-                                SortSortTile(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight(),
-                                    option = SortOption.TITLE,
-                                    title = strings.titleAZ,
-                                    subtitle = strings.sortSubtitleTitle,
-                                    icon = SortOption.TITLE.getIcon(),
-                                    accentColor = SortOption.TITLE.getAccentColor(),
-                                    selection = draftSelection,
-                                    strings = strings,
-                                    isDark = isDark,
-                                    rim = rim,
-                                    cardBg = cardBg,
-                                    muted = muted,
-                                    onSelect = updateSelection
-                                )
-                                GenreSortTile(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight(),
-                                    title = strings.filterByGenre,
-                                    subtitle = strings.sortSubtitleGenres,
-                                    icon = Icons.Outlined.FilterList,
-                                    selection = draftSelection,
-                                    isDark = isDark,
-                                    rim = rim,
-                                    cardBg = cardBg,
-                                    muted = muted,
-                                    badgeCount = activeFiltersCount,
-                                    onSelect = updateSelection
-                                )
-                            }
-                        }
-
-                        Spacer(Modifier.height(16.dp))
-
-                        SortApplyButton(
-                            isDark = isDark,
-                            label = strings.sortApply,
-                            onClick = {
                                 when (val d = draftSelection) {
-                                    SortGridSelection.Genres -> {
-                                        onApplyOpenGenreFilter()
-                                        onDismiss()
-                                    }
+                                    SortGridSelection.Genres -> { onApplyOpenGenreFilter(); onDismiss() }
                                     is SortGridSelection.Sort -> {
-                                        if (d.option == sortOption && d.isAscending == sortAscending) {
-                                            onDismiss()
-                                        } else {
-                                            onApplySort(d.option, d.isAscending)
-                                            onDismiss()
-                                        }
+                                        if (d.option == sortOption && d.isAscending == sortAscending) onDismiss()
+                                        else { onApplySort(d.option, d.isAscending); onDismiss() }
                                     }
                                 }
-                            }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = strings.sortApply,
+                            color = if (applyAccent == accentRating) Color.Black.copy(alpha = 0.85f) else Color.White,
+                            fontFamily = SnProFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp
                         )
-                        Spacer(Modifier.height(OverlayThemeTokens.PanelInnerPaddingBottom))
                     }
-                    } // OverlayGlassPanel
+                    Spacer(Modifier.height(4.dp))
                 }
             }
+        }
+    }
+}
+
+/** Карточка-опция сортировки (iOS «Set Status» стиль): icon-well + заголовок/подпись + радио. */
+@Composable
+private fun SortOptionRow(
+    icon: ImageVector,
+    accent: Color,
+    title: String,
+    subtitle: String,
+    selected: Boolean,
+    isDark: Boolean,
+    onClick: () -> Unit
+) {
+    val shape = SquircleShape(18.dp)
+    val cardBg = if (selected) accent.copy(alpha = if (isDark) 0.20f else 0.13f) else IosDesign.elevatedCard(isDark)
+    val wellBg = if (isDark) Color.Black.copy(alpha = 0.28f) else Color.White.copy(alpha = 0.75f)
+    val titleColor = if (selected) accent else MaterialTheme.colorScheme.onSurface
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 10.dp)
+            .clip(shape)
+            .background(cardBg)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = iosRowHighlight(isDark, shape),
+                onClick = onClick
+            )
+            .defaultMinSize(minHeight = 64.dp)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(SquircleShape(12.dp))
+                .background(wellBg),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (selected) accent else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+        Spacer(Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                fontFamily = SnProFamily,
+                fontWeight = FontWeight.Bold,
+                fontSize = 17.sp,
+                color = titleColor,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = subtitle,
+                fontFamily = SnProFamily,
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                maxLines = 1
+            )
+        }
+        Spacer(Modifier.width(10.dp))
+        Box(
+            modifier = Modifier
+                .size(24.dp)
+                .clip(CircleShape)
+                .then(
+                    if (selected) Modifier.background(accent)
+                    else Modifier.border(2.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.22f), CircleShape)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            if (selected) Box(Modifier.size(8.dp).clip(CircleShape).background(Color.White))
         }
     }
 }
@@ -1250,6 +1308,7 @@ fun GenreFilterOverlay(
 ) {
     val isDark = isAppInDarkTheme()
     val panelBg = if (isDark) DarkBackground else MaterialTheme.colorScheme.surface
+    val swipe = rememberIosSheetSwipe(onDismiss)
 
     val collisionState = rememberInertialCollisionState()
     LaunchedEffect(visibleState.targetState) {
@@ -1269,7 +1328,7 @@ fun GenreFilterOverlay(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.4f))
+                    .background(Color.Black.copy(alpha = OverlayThemeTokens.scrimAlpha(isDark)))
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
@@ -1279,36 +1338,32 @@ fun GenreFilterOverlay(
         
         AnimatedVisibility(
             visibleState = visibleState,
+            // Bottom sheet «фильтр по жанрам» (§7): появление sheetPresent, дисмисс — forced-затухание.
             enter = slideInVertically(
                 initialOffsetY = { it },
-                animationSpec = spring(dampingRatio = 0.8f, stiffness = 400f)
+                animationSpec = MotionTokens.sheetPresent()
             ) + fadeIn(),
             exit = slideOutVertically(
                 targetOffsetY = { it },
-                animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMedium)
+                animationSpec = MotionTokens.sheetDismissForced()
             ) + fadeOut(),
             modifier = Modifier.align(Alignment.BottomCenter)
         ) {
-            Card(
+            Column(
                 modifier = Modifier
+                    .then(swipe.panelModifier)
                     .fillMaxWidth()
+                    .iosSheetContainer(
+                        SquircleCornerShape(IosDesign.SheetCorner, IosDesign.SheetCorner, 0.dp, 0.dp),
+                        isDark,
+                        IosDesign.sheetSurface(isDark),
+                    )
                     .navigationBarsPadding()
-                    .padding(16.dp),
-                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 28.dp, bottomEnd = 28.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-                elevation = CardDefaults.cardElevation(
-                    defaultElevation = if (isDark) 12.dp else 0.dp
-                )
             ) {
-                OverlayGlassPanel(
-                    isDark = isDark,
-                    panelBg = panelBg,
-                    cornerRadius = 28.dp,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                GrabberHandle(isDark, modifier = swipe.handleModifier)
                 Column(
                     modifier = Modifier
-                        .padding(start = 24.dp, top = 24.dp, end = 24.dp)
+                        .padding(start = 20.dp, top = 2.dp, end = 20.dp)
                         .verticalScroll(rememberScrollState())
                 ) {
                     Box(
@@ -1318,13 +1373,14 @@ fun GenreFilterOverlay(
                     ) {
                         Text(
                             text = strings.filterByGenre,
-                            style = MaterialTheme.typography.titleLarge,
+                            fontFamily = SnProFamily,
                             fontWeight = FontWeight.Bold,
+                            fontSize = 24.sp,
                             color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.padding(bottom = 20.dp)
                         )
                     }
-                    
+
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1338,45 +1394,32 @@ fun GenreFilterOverlay(
                             onTagToggle = onTagToggle
                         )
                     }
-                    
+
                     Spacer(Modifier.height(20.dp))
-                    
+
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .height(52.dp)
                             .inertialCollision(state = collisionState, index = 2, baseMultiplier = 2.5f)
-                            .gradientHighlightBorder(24.dp, isDark)
+                            .clip(SquircleShape(26.dp))
+                            .background(BrandBlue)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { onDismiss() },
+                        contentAlignment = Alignment.Center
                     ) {
-                        Button(
-                            onClick = onDismiss,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(52.dp),
-                            shape = RoundedCornerShape(24.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isDark) {
-                                    OverlayThemeTokens.IconSyncBlue
-                                } else {
-                                    MaterialTheme.colorScheme.secondaryContainer
-                                },
-                                contentColor = if (isDark) {
-                                    Color.White
-                                } else {
-                                    MaterialTheme.colorScheme.onSecondaryContainer
-                                }
-                            ),
-                            border = null
-                        ) {
-                            Text(
-                                text = strings.genreFilterDone,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = SnProFamily
-                            )
-                        }
+                        Text(
+                            text = strings.genreFilterDone,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = SnProFamily,
+                            fontSize = 17.sp
+                        )
                     }
                     Spacer(Modifier.height(24.dp))
                 }
-                } // OverlayGlassPanel
             }
         }
     }

@@ -9,10 +9,18 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleOut
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import com.example.myapplication.ui.details.DetailsSheetContent
+import com.example.myapplication.ui.shared.components.IosSheetScaffold
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -25,7 +33,6 @@ import androidx.navigation.toRoute
 import com.example.myapplication.WelcomeScreen
 import com.example.myapplication.ui.addedit.AddEditScreen
 import com.example.myapplication.ui.addedit.AddEditViewModel
-import com.example.myapplication.ui.details.DetailsScreen
 import com.example.myapplication.ui.home.HomeScreen
 import com.example.myapplication.ui.home.HomeViewModel
 import com.example.myapplication.ui.inspect.InspectScreen
@@ -60,7 +67,30 @@ fun AppNavGraph(
         homeViewModel.scheduleBackgroundWork(context)
     }
 
+    // Детали открываются как iOS bottom sheet поверх всего навстека (фон «вдавливается»),
+    // а не как отдельный экран навигации.
+    var detailsAnimeId by rememberSaveable { mutableStateOf<String?>(null) }
+
+    // Жест/кнопка «назад» при открытой шторке деталей должны закрывать шторку с фирменной
+    // анимацией scaffold'а, а не проваливаться в Activity (иначе — выход из приложения).
+    androidx.activity.compose.BackHandler(enabled = detailsAnimeId != null) {
+        detailsAnimeId = null
+    }
+
     SharedTransitionLayout {
+      IosSheetScaffold(
+        sheetVisible = detailsAnimeId != null,
+        onDismiss = { detailsAnimeId = null },
+        // Панель по высоте контента (medium-детент ~60%), а не фикс. 92% — шапка сразу над
+        // блоком постера, без пустого поля сверху.
+        sheetHeightFraction = null,
+        sheetContainerColor = androidx.compose.ui.graphics.Color.Transparent,
+        sheetContent = {
+            detailsAnimeId?.let { id ->
+                DetailsSheetContent(animeId = id, onDismiss = { detailsAnimeId = null })
+            }
+        },
+        content = {
         NavHost(
             navController = navController,
             startDestination = startDestination
@@ -184,35 +214,8 @@ fun AppNavGraph(
                     navController = navController,
                     viewModel = homeViewModel,
                     sharedTransitionScope = this@SharedTransitionLayout,
-                    animatedVisibilityScope = this
-                )
-            }
-
-            composable<DetailsRoute>(
-                enterTransition = {
-                    slideIntoContainer(
-                        towards = AnimatedContentTransitionScope.SlideDirection.Up,
-                        animationSpec = tween(350)
-                    ) + fadeIn(tween(300))
-                },
-                exitTransition = {
-                    fadeOut(tween(200))
-                },
-                popEnterTransition = {
-                    fadeIn(tween(200))
-                },
-                popExitTransition = {
-                    scaleOut(
-                        targetScale = 0.90f,
-                        animationSpec = tween(350)
-                    ) + fadeOut(tween(300))
-                }
-            ) { backStackEntry ->
-                val route = backStackEntry.toRoute<DetailsRoute>()
-                DetailsScreen(
-                    animeId = route.animeId,
-                    navController = navController,
-                    onBackClick = { navController.popBackStack() }
+                    animatedVisibilityScope = this,
+                    onOpenDetails = { detailsAnimeId = it },
                 )
             }
 
@@ -246,5 +249,7 @@ fun AppNavGraph(
             }
 
         }
+        },
+      )
     }
 }

@@ -15,6 +15,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -26,6 +27,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -69,6 +71,12 @@ import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.isAppInDarkTheme
 import com.example.myapplication.ui.shared.inertialCollision
 import com.example.myapplication.ui.shared.rememberInertialCollisionState
+import com.example.myapplication.ui.shared.components.GrabberHandle
+import com.example.myapplication.ui.shared.components.rememberIosSheetSwipe
+import com.example.myapplication.ui.shared.theme.IosDesign
+import com.example.myapplication.ui.shared.theme.SquircleCornerShape
+import com.example.myapplication.ui.shared.theme.iosSheetContainer
+import com.example.myapplication.ui.shared.theme.MotionTokens
 import com.example.myapplication.ui.shared.theme.DarkBackground
 import com.example.myapplication.ui.shared.theme.OverlayGlassPanel
 import com.example.myapplication.ui.shared.theme.OverlayThemeTokens
@@ -123,6 +131,7 @@ fun StatsOverlay(
 
     val panelBg = if (isDark) DarkBackground else MaterialTheme.colorScheme.surface
     val panelCorner = 28.dp
+    val swipe = rememberIosSheetSwipe { triggerDismiss() }
 
     Box(
         modifier = Modifier
@@ -138,7 +147,7 @@ fun StatsOverlay(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.4f))
+                    .background(Color.Black.copy(alpha = OverlayThemeTokens.scrimAlpha(isDark)))
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
@@ -150,42 +159,42 @@ fun StatsOverlay(
             visible = visible,
             enter = slideInVertically(
                 initialOffsetY = { it },
-                animationSpec = spring(dampingRatio = 0.8f, stiffness = 400f)
+                animationSpec = MotionTokens.sheetPresent()
             ) + fadeIn(),
             exit = slideOutVertically(
                 targetOffsetY = { it },
-                animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMedium)
+                animationSpec = MotionTokens.sheetDismissForced()
             ) + fadeOut()
         ) {
-            Card(
-                modifier = Modifier
-                    .padding(16.dp)
-                    .navigationBarsPadding()
-                    .fillMaxWidth(),
-                shape = RoundedCornerShape(panelCorner),
-                colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-                elevation = CardDefaults.cardElevation(
-                    defaultElevation = if (isDark) 12.dp else 0.dp
-                )
-            ) {
-                OverlayGlassPanel(
-                    isDark = isDark,
-                    panelBg = panelBg,
-                    cornerRadius = panelCorner,
-                    modifier = Modifier.fillMaxWidth()
+            BoxWithConstraints {
+                // Панель по высоте контента (когда жанров нет — короткая, без пустоты снизу),
+                // но не выше 92% экрана; StatsContent внутри скроллится, если контент высокий.
+                val maxSheetHeight = maxHeight * 0.92f
+                Column(
+                    modifier = Modifier
+                        .then(swipe.panelModifier)
+                        .fillMaxWidth()
+                        .heightIn(max = maxSheetHeight)
+                        .iosSheetContainer(
+                            SquircleCornerShape(IosDesign.SheetCorner, IosDesign.SheetCorner, 0.dp, 0.dp),
+                            isDark,
+                            IosDesign.sheetSurface(isDark),
+                        )
+                        .navigationBarsPadding(),
                 ) {
+                    GrabberHandle(isDark, modifier = swipe.handleModifier)
                     StatsContent(
-                        animeList = animeList,
-                        strings = strings,
-                        appLanguage = appLanguage,
-                        isDark = isDark,
-                        totalAnime = totalAnime,
-                        ratingFormatted = ratingFormatted,
-                        totalEpisodes = totalEpisodes,
-                        favorites = favorites,
-                        footerPhrase = footerPhrase,
-                        collisionState = collisionState,
-                        onDismiss = ::triggerDismiss
+                    animeList = animeList,
+                    strings = strings,
+                    appLanguage = appLanguage,
+                    isDark = isDark,
+                    totalAnime = totalAnime,
+                    ratingFormatted = ratingFormatted,
+                    totalEpisodes = totalEpisodes,
+                    favorites = favorites,
+                    footerPhrase = footerPhrase,
+                    collisionState = collisionState,
+                    onDismiss = ::triggerDismiss
                     )
                 }
             }

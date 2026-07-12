@@ -623,13 +623,9 @@ fun ContactSheet(
     Column(
         modifier = sharedModifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp)
+            .padding(horizontal = 16.dp)
             .clip(RoundedCornerShape(28.dp))
-            .background(
-                MaterialTheme.colorScheme.surfaceContainerLow.copy(
-                    alpha = if (sheetInDark) 0.75f else 0.95f,
-                ),
-            )
+            .background(if (sheetInDark) OverlayThemeTokens.TileBackgroundDark else Color(0xFFFFFFFF))
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {

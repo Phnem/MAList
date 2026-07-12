@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.phnem.vetro.R
 import com.example.myapplication.isAppInDarkTheme
+import com.example.myapplication.ui.shared.theme.MotionTokens
 import com.example.myapplication.ui.shared.theme.BrandBlue
 import com.example.myapplication.ui.shared.theme.DarkSurface
 import com.example.myapplication.ui.shared.theme.LightSurface
@@ -201,7 +202,7 @@ fun VetroSplashScreen(
 
 private fun splashCardEnter() = slideInVertically(
     initialOffsetY = { it },
-    animationSpec = spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow),
+    animationSpec = MotionTokens.sheetPresent(),
 ) + fadeIn(tween(400))
 
 private fun splashCardExit() = slideOutVertically(targetOffsetY = { it }) + fadeOut(tween(300))

@@ -64,9 +64,9 @@ val viewModelModule = module {
             geminiApiKeyRepository = get()
         )
     }
-    viewModel {
+    viewModel { (animeId: String) ->
         DetailsViewModel(
-            savedStateHandle = get(),
+            animeId = animeId,
             repository = get(),
             settingsDataStore = get(named("settings")),
             imageStorage = get()

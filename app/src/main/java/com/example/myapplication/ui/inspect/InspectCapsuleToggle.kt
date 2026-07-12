@@ -2,6 +2,7 @@ package com.example.myapplication.ui.inspect
 
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
+import com.example.myapplication.ui.shared.theme.MotionTokens
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -65,7 +66,7 @@ fun InspectCapsuleChipRow(
         val innerShape = RoundedCornerShape(pillCornerRadius)
         val pillOffset by animateDpAsState(
             targetValue = segmentWidth * selectedIndex,
-            animationSpec = tween(300, easing = FastOutSlowInEasing),
+            animationSpec = MotionTokens.standardDp,
             label = "inspect_pill_offset"
         )
 

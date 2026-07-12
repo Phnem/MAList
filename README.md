@@ -147,7 +147,7 @@ This feature is still under active development.
 To safely support multiple media types:
 
 - Separate SQLDelight databases
-- Anime collections remain isolated
+- Anime collections remain isolated 
 - Zero migration risk
 - Safer upgrades
 

@@ -83,6 +83,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.layout.navigationBarsPadding
+import com.example.myapplication.ui.shared.components.GrabberHandle
+import com.example.myapplication.ui.shared.components.rememberIosSheetSwipe
+import com.example.myapplication.ui.shared.theme.IosDesign
+import com.example.myapplication.ui.shared.theme.iosSheetContainer
+import com.example.myapplication.ui.shared.theme.SquircleCornerShape
+import com.example.myapplication.ui.shared.theme.MotionTokens
 import com.example.myapplication.ui.shared.theme.DarkBackground
 import com.example.myapplication.ui.shared.theme.OverlayGlassPanel
 import com.example.myapplication.ui.shared.theme.OverlayThemeTokens
@@ -228,6 +237,7 @@ fun NotificationSyncOverlay(
     }
 
     BackHandler { onDismiss() }
+    val swipe = rememberIosSheetSwipe { onDismiss() }
 
     Box(modifier = Modifier.fillMaxSize()) {
         AnimatedVisibility(
@@ -238,7 +248,7 @@ fun NotificationSyncOverlay(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = OverlayThemeTokens.ScrimAlpha))
+                    .background(Color.Black.copy(alpha = OverlayThemeTokens.scrimAlpha(isDark)))
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
@@ -248,68 +258,56 @@ fun NotificationSyncOverlay(
 
         AnimatedVisibility(
             visibleState = visibleState,
-            enter = scaleIn(
-                transformOrigin = TransformOrigin(1f, 0f),
-                animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+            enter = slideInVertically(
+                initialOffsetY = { it },
+                animationSpec = MotionTokens.sheetPresent()
             ) + fadeIn(),
-            exit = scaleOut(
-                transformOrigin = TransformOrigin(1f, 0f),
-                animationSpec = spring(dampingRatio = 0.9f, stiffness = Spring.StiffnessMedium)
+            exit = slideOutVertically(
+                targetOffsetY = { it },
+                animationSpec = MotionTokens.sheetDismissForced()
             ) + fadeOut(),
-            modifier = Modifier.align(Alignment.TopEnd)
+            modifier = Modifier.align(Alignment.BottomCenter)
         ) {
             Column(
                 modifier = Modifier
-                    .statusBarsPadding()
-                    .padding(top = OverlayThemeTokens.PanelPaddingTop, end = OverlayThemeTokens.PanelPaddingEnd)
-                    .width(OverlayThemeTokens.PanelWidth)
-                    .wrapContentHeight()
+                    .then(swipe.panelModifier)
+                    .fillMaxWidth()
+                    .iosSheetContainer(
+                        SquircleCornerShape(IosDesign.SheetCorner, IosDesign.SheetCorner, 0.dp, 0.dp),
+                        isDark,
+                        IosDesign.sheetSurface(isDark),
+                    )
+                    .navigationBarsPadding()
+                    .padding(bottom = 12.dp)
             ) {
-                // Небольшой внешний отступ, чтобы скругление Card не обрезало круглую кнопку закрытия
-                Card(
-                    shape = RoundedCornerShape(OverlayThemeTokens.PanelCornerRadius),
-                    colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-                    elevation = CardDefaults.cardElevation(
-                        defaultElevation = if (isDark) OverlayThemeTokens.CardElevation else 0.dp
-                    ),
-                    modifier = Modifier
-                        .padding(
-                            top = OverlayThemeTokens.CardOuterPaddingTop,
-                            end = OverlayThemeTokens.CardOuterPaddingEnd
-                        )
-                        .pointerInput(Unit) {
-                            detectTapGestures { /* поглощаем тап, без семантики clickable */ }
-                        }
-                ) {
-                    OverlayGlassPanel(
-                        isDark = isDark,
-                        panelBg = panelBg,
-                        cornerRadius = OverlayThemeTokens.PanelCornerRadius,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
+                GrabberHandle(isDark, modifier = swipe.handleModifier)
                     Column(
                         modifier = Modifier
-                            .padding(
-                                start = OverlayThemeTokens.PanelInnerPaddingStart,
-                                top = OverlayThemeTokens.PanelInnerPaddingTop,
-                                end = OverlayThemeTokens.PanelInnerPaddingEnd
-                            )
+                            .padding(horizontal = 16.dp)
                             .verticalScroll(rememberScrollState())
                     ) {
-                        // —— Header —— //
-                        NottifPanelHeader(
-                            title = strings.nottifPanelTitle,
-                            subtitle = strings.nottifPanelSubtitle,
-                            closeCd = strings.nottifCloseCd,
-                            onCard = onCard,
-                            muted = muted,
-                            onClose = {
-                                performHaptic(view, "light")
-                                onDismiss()
+                        // —— Header (Close button only) —— //
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            IconButton(
+                                onClick = {
+                                    performHaptic(view, "light")
+                                    onDismiss()
+                                },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = strings.nottifCloseCd,
+                                    tint = muted,
+                                    modifier = Modifier.size(20.dp)
+                                )
                             }
-                        )
+                        }
 
-                        Spacer(Modifier.height(18.dp))
+                        Spacer(Modifier.height(8.dp))
 
                         val badgeText = when (syncMode) {
                             SyncMode.AUTO -> strings.nottifBadgeAutomated
@@ -323,18 +321,16 @@ fun NotificationSyncOverlay(
                         NottifSyncServiceGrid(
                             isDark = isDark,
                             strings = strings,
-                            cardBg = cardBg,
-                            darkTileBase = darkTileBase,
-                            onCard = onCard,
-                            muted = muted,
+                            ru = currentLanguage == AppLanguage.RU,
                             badgeText = badgeText,
                             timeStr = timeStr,
+                            datePart = datePart,
+                            statusWord = statusWord,
                             detailLine = detailLine,
                             syncingCloud = syncingCloud,
                             isCheckingUpdates = isCheckingUpdates,
                             hasToken = hasToken,
                             syncState = syncState,
-                            accent = lastSyncAccent,
                             onSyncNow = {
                                 performHaptic(view, "light")
                                 scope.launch { syncCoordinator.syncNow() }
@@ -393,10 +389,8 @@ fun NotificationSyncOverlay(
                                 Spacer(Modifier.height(10.dp))
                             }
                         }
-                        Spacer(Modifier.height(OverlayThemeTokens.PanelInnerPaddingBottom))
+                        Spacer(Modifier.height(12.dp))
                     }
-                    }
-                }
             }
         }
 

@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.example.myapplication.isAppInDarkTheme
+import com.example.myapplication.ui.shared.theme.MotionTokens
 import com.example.myapplication.utils.getAddEditCommentStrings
 import com.example.myapplication.utils.getStrings
 import com.example.myapplication.utils.performHaptic
@@ -136,7 +137,7 @@ fun AddEditScreen(
         ) {
             val fabAlpha by animateFloatAsState(
                 targetValue = if (uiState.isValid && !uiState.isLoading) 1f else 0.5f,
-                animationSpec = spring(dampingRatio = 0.7f),
+                animationSpec = MotionTokens.standard(),
                 label = "fabAlpha"
             )
             val fabIconTint =

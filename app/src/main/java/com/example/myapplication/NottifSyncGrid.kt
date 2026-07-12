@@ -1,29 +1,25 @@
 package com.example.myapplication
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.ExitToApp
-import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,452 +27,325 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import androidx.annotation.DrawableRes
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapplication.data.models.UiStrings
 import com.example.myapplication.sync.ExternalListService
-import com.example.myapplication.ui.shared.theme.OverlayThemeTokens
-import com.example.myapplication.ui.shared.theme.glassEdge
-import com.example.myapplication.ui.shared.theme.glassFill
-import com.example.myapplication.ui.shared.theme.softPlateShadowForLightSheet
-import java.util.Locale
+import com.example.myapplication.ui.shared.theme.IosDesign
+import com.example.myapplication.ui.shared.theme.SnProFamily
+import com.example.myapplication.ui.shared.theme.SquircleShape
+import com.example.myapplication.ui.shared.theme.iosRowHighlight
+import com.phnem.vetro.R
+
+private val ConnectedGreen = Color(0xFF32D74B)
+private val LogoutRed = Color(0xFFFF453A)
 
 /**
- * Строка 1: две квадратные плитки 2×2 (синхронизация облака, аккаунт).
- * Строка 2: три квадратные плитки сервисов.
+ * Лист «Синхронизация» — композиция по вертикальному ритму на ЕДИНОЙ поверхности:
+ *
+ *   hero (аватар → имя → статус подключения)   — фокус
+ *        ↓ воздух
+ *   группа инфо-строк (последняя синхр / результат / режим)
+ *        ↓ воздух
+ *   строка выхода (красный текст, без плашки)
+ *        ↓ большой воздух
+ *   секция «Внешние сервисы» (заголовок + счётчик) → список
+ *
+ * Глубина — за счёт двух уровней материала: тёмная база панели (groupedBackground) + светлые
+ * группы (rowBackground), а не цветных блоков и теней. Каждый ниже уровень — визуально легче.
  */
 @Composable
 internal fun NottifSyncServiceGrid(
     isDark: Boolean,
     strings: UiStrings,
-    cardBg: Color,
-    darkTileBase: Color,
-    onCard: Color,
-    muted: Color,
+    ru: Boolean,
     badgeText: String,
     timeStr: String,
+    datePart: String,
+    statusWord: String,
     detailLine: String,
     syncingCloud: Boolean,
     isCheckingUpdates: Boolean,
     hasToken: Boolean,
     syncState: SyncState,
-    accent: Color,
     onSyncNow: () -> Unit,
     onCheckUpdates: () -> Unit,
     onLogoutClick: () -> Unit,
-    onServiceClick: (ExternalListService) -> Unit
+    onServiceClick: (ExternalListService) -> Unit,
 ) {
-    val spacing = OverlayThemeTokens.GridSpacing
-    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-        val w = maxWidth
-        val tileSide = (w - spacing) / 2
-        val serviceW = (w - spacing * 2) / 3
-        Column(verticalArrangement = Arrangement.spacedBy(spacing)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(spacing),
-                verticalAlignment = Alignment.Top
-            ) {
-                NottifSquareCloudSyncTile(
-                    modifier = Modifier.size(tileSide),
-                    isDark = isDark,
-                    strings = strings,
-                    badgeText = badgeText,
-                    timeStr = timeStr,
-                    detailLine = detailLine,
-                    syncingCloud = syncingCloud,
-                    isCheckingUpdates = isCheckingUpdates,
-                    hasToken = hasToken,
-                    syncState = syncState,
-                    cardBg = cardBg,
-                    darkTileBase = darkTileBase,
-                    onCard = onCard,
-                    muted = muted,
-                    accent = accent,
-                    onSyncNow = onSyncNow,
-                    onCheckUpdates = onCheckUpdates
-                )
-                NottifSquareAccountTile(
-                    modifier = Modifier.size(tileSide),
-                    isDark = isDark,
-                    strings = strings,
-                    cardBg = cardBg,
-                    onCard = onCard,
-                    muted = muted,
-                    hasToken = hasToken,
-                    onLogoutClick = onLogoutClick
-                )
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(spacing),
-                verticalAlignment = Alignment.Top
-            ) {
-                NottifServiceStubTile(
-                    modifier = Modifier.size(serviceW),
-                    isDark = isDark,
-                    label = strings.nottifServiceShikimori,
-                    accent = Color(0xFF34C759),
-                    cardBg = cardBg,
-                    darkTileBase = darkTileBase,
-                    onCard = onCard,
-                    muted = muted,
-                    onClick = { onServiceClick(ExternalListService.SHIKIMORI) }
-                )
-                NottifServiceStubTile(
-                    modifier = Modifier.size(serviceW),
-                    isDark = isDark,
-                    label = strings.nottifServiceMal,
-                    accent = Color(0xFF2E51A2),
-                    cardBg = cardBg,
-                    darkTileBase = darkTileBase,
-                    onCard = onCard,
-                    muted = muted,
-                    onClick = { onServiceClick(ExternalListService.MYANIMELIST) }
-                )
-                NottifServiceStubTile(
-                    modifier = Modifier.size(serviceW),
-                    isDark = isDark,
-                    label = strings.nottifServiceAnilist,
-                    accent = OverlayThemeTokens.AccentNeonPurple,
-                    cardBg = cardBg,
-                    darkTileBase = darkTileBase,
-                    onCard = onCard,
-                    muted = muted,
-                    onClick = { onServiceClick(ExternalListService.ANILIST) }
-                )
-            }
-        }
-    }
-}
+    val connected = hasToken && syncState != SyncState.AUTH_REQUIRED &&
+        syncState != SyncState.ERROR && syncState != SyncState.CONFLICT
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    val muted = onSurface.copy(alpha = 0.5f)
+    val statusColor = if (connected) ConnectedGreen else muted
+    val statusText = if (connected) strings.nottifStatusConnected else strings.nottifStatusDisconnected
 
-@Composable
-private fun NottifSquareCloudSyncTile(
-    modifier: Modifier,
-    isDark: Boolean,
-    strings: UiStrings,
-    badgeText: String,
-    timeStr: String,
-    detailLine: String,
-    syncingCloud: Boolean,
-    isCheckingUpdates: Boolean,
-    hasToken: Boolean,
-    syncState: SyncState,
-    cardBg: Color,
-    darkTileBase: Color,
-    onCard: Color,
-    muted: Color,
-    accent: Color,
-    onSyncNow: () -> Unit,
-    onCheckUpdates: () -> Unit
-) {
-    val tileShape = RoundedCornerShape(OverlayThemeTokens.TileCornerRadius)
-    val tileBg = if (isDark) darkTileBase else cardBg
-    val accentRim = accent.copy(alpha = if (isDark) 0.45f else 0.6f)
-    val accentGlow = accent.copy(
-        alpha = if (isDark) 0.18f else OverlayThemeTokens.TileGlowAlphaLight
-    )
-    val connected = hasToken && syncState != SyncState.AUTH_REQUIRED
+    Column(modifier = Modifier.fillMaxWidth()) {
 
-    Box(modifier = modifier) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .then(
-                    if (isDark) Modifier else Modifier.softPlateShadowForLightSheet(
-                        isDark = false,
-                        shape = tileShape,
-                        elevation = OverlayThemeTokens.SortOverlayGridLightShadowElevation,
-                    )
-                )
-                .clip(tileShape)
-                .background(tileBg)
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(accentGlow, Color.Transparent),
-                        center = Offset(0f, 0f),
-                        radius = 280f
-                    )
-                )
-                .glassFill(isDark)
-                .glassEdge(OverlayThemeTokens.TileCornerRadius, isDark)
-                .border(1.dp, accentRim, tileShape)
-                .clickable(
-                    enabled = !syncingCloud,
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = onSyncNow
-                )
-                .padding(horizontal = 10.dp, vertical = 8.dp)
+        // ——— HERO ———
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(Brush.linearGradient(listOf(Color(0xFF7C6BFF), Color(0xFFFF6FB1)))),
+                contentAlignment = Alignment.Center,
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(RoundedCornerShape(OverlayThemeTokens.IconBoxCorner))
-                            .background(nottifOverlayIconBoxBg(isDark)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CloudSync,
-                            contentDescription = null,
-                            tint = accent,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        text = timeStr,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = onCard,
-                        fontSize = 20.sp,
-                        lineHeight = 22.sp,
-                        maxLines = 1
-                    )
-                    Text(
-                        text = detailLine,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = muted,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        lineHeight = 14.sp,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                }
-                Text(
-                    text = badgeText,
-                    style = OverlayThemeTokens.MetricLabel.copy(fontWeight = FontWeight.SemiBold),
-                    color = accent,
-                    maxLines = 1
-                )
+                Icon(Icons.Filled.Person, null, tint = Color.White, modifier = Modifier.size(24.dp))
             }
-            Spacer(Modifier.weight(1f))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                val statusText = if (
-                    connected && syncState != SyncState.ERROR && syncState != SyncState.CONFLICT
-                ) {
-                    strings.nottifStatusConnected
-                } else {
-                    strings.nottifStatusDisconnected
-                }
-                NottifStatusPill(
-                    text = statusText,
-                    accent = accent,
-                    isDark = isDark,
-                    state = syncState,
-                    isCheckingUpdates = isCheckingUpdates,
-                    modifier = Modifier.clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onCheckUpdates
-                    ),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun NottifSquareAccountTile(
-    modifier: Modifier,
-    isDark: Boolean,
-    strings: UiStrings,
-    cardBg: Color,
-    onCard: Color,
-    muted: Color,
-    hasToken: Boolean,
-    onLogoutClick: () -> Unit
-) {
-    val tileShape = RoundedCornerShape(OverlayThemeTokens.TileCornerRadius)
-    val tileBg = if (isDark) {
-        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-    } else cardBg
-    val accent = if (isDark) OverlayThemeTokens.IconSyncBlue else MaterialTheme.colorScheme.primary
-    val accentRim = accent.copy(alpha = if (isDark) 0.4f else 0.55f)
-    val accentGlow = accent.copy(
-        alpha = if (isDark) 0.18f else OverlayThemeTokens.TileGlowAlphaLight
-    )
-
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .then(
-                if (isDark) Modifier else Modifier.softPlateShadowForLightSheet(
-                    isDark = false,
-                    shape = tileShape,
-                    elevation = OverlayThemeTokens.SortOverlayGridLightShadowElevation,
-                )
-            )
-            .clip(tileShape)
-            .background(tileBg)
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(accentGlow, Color.Transparent),
-                    center = Offset(0f, 0f),
-                    radius = 280f
-                )
-            )
-            .glassFill(isDark)
-            .glassEdge(OverlayThemeTokens.TileCornerRadius, isDark)
-            .border(1.dp, accentRim, tileShape)
-            .padding(horizontal = 10.dp, vertical = 8.dp)
-    ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(RoundedCornerShape(OverlayThemeTokens.IconBoxCorner))
-                        .background(nottifOverlayIconBoxBg(isDark)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = null,
-                        tint = accent,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = strings.nottifSectionAccount.uppercase(Locale.getDefault()),
-                    style = OverlayThemeTokens.MetricLabel,
-                    color = muted,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.width(12.dp))
             Text(
                 text = strings.nottifAccountTitle,
-                style = MaterialTheme.typography.titleMedium,
+                fontFamily = SnProFamily,
                 fontWeight = FontWeight.Bold,
-                color = onCard,
-                fontSize = 20.sp,
-                lineHeight = 24.sp,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = if (hasToken) strings.nottifAccountSignedIn else strings.nottifAccountGuest,
-                style = MaterialTheme.typography.labelSmall,
-                color = muted,
-                maxLines = 3,
+                fontSize = 18.sp,
+                letterSpacing = (-0.3).sp,
+                color = onSurface,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                lineHeight = 14.sp
             )
             Spacer(Modifier.weight(1f))
+            // Статус подключения — приоритет №2, компактная строка с точкой (не плашка).
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        enabled = !syncingCloud,
+                        onClick = onSyncNow,
+                    )
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(
-                    onClick = onLogoutClick,
-                    modifier = Modifier.size(36.dp)
+                Box(Modifier.size(6.dp).clip(CircleShape).background(statusColor))
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = statusText,
+                    fontFamily = SnProFamily,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 13.sp,
+                    color = statusColor,
+                )
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // ——— Инфо-группа (одна вложенная группа статистики) ———
+        NottifGroup(isDark) {
+            NottifInfoRow(
+                label = if (ru) "Последняя синхронизация" else "Last sync",
+                value = datePart.ifBlank { timeStr },
+            )
+            NottifRowDivider(isDark)
+            NottifInfoRow(
+                label = if (ru) "Результат" else "Result",
+                value = statusWord,
+                valueColor = if (connected) ConnectedGreen else null,
+            )
+            NottifRowDivider(isDark)
+            NottifInfoRow(
+                label = if (ru) "Режим" else "Mode",
+                value = badgeText,
+            )
+        }
+
+        if (hasToken) {
+            Spacer(Modifier.height(16.dp))
+            // ——— Выход: строка-карточка с красным текстом, без цветной плашки ———
+            NottifGroup(isDark) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = iosRowHighlight(isDark, SquircleShape(0.dp)),
+                            onClick = onLogoutClick,
+                        )
+                        .defaultMinSize(minHeight = 44.dp)
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Rounded.ExitToApp,
-                        contentDescription = strings.nottifLogoutConfirmTitle,
-                        tint = OverlayThemeTokens.AccentNeonRed,
-                        modifier = Modifier.size(22.dp)
+                    Icon(Icons.AutoMirrored.Rounded.ExitToApp, null, tint = LogoutRed, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = if (ru) "Выйти из аккаунта" else "Sign out",
+                        fontFamily = SnProFamily,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 15.sp,
+                        color = LogoutRed,
                     )
                 }
             }
         }
+
+        Spacer(Modifier.height(24.dp))
+
+        // ——— Секция «Внешние сервисы» ———
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            Text(
+                text = (if (ru) "Внешние сервисы" else "External services").uppercase(),
+                fontFamily = SnProFamily,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 12.sp,
+                letterSpacing = 0.6.sp,
+                color = muted,
+            )
+            Text(
+                text = if (ru) "3 доступно" else "3 available",
+                fontFamily = SnProFamily,
+                fontSize = 12.sp,
+                color = onSurface.copy(alpha = 0.4f),
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+        NottifGroup(isDark) {
+            NottifServiceRow(strings.nottifServiceShikimori, R.drawable.ic_shikimori, Color(0xFF2AA3C4), isDark, ru) { onServiceClick(ExternalListService.SHIKIMORI) }
+            NottifRowDivider(isDark, inset = 58.dp)
+            NottifServiceRow(strings.nottifServiceMal, R.drawable.ic_myanimelist, Color(0xFF2E51A2), isDark, ru) { onServiceClick(ExternalListService.MYANIMELIST) }
+            NottifRowDivider(isDark, inset = 58.dp)
+            NottifServiceRow(strings.nottifServiceAnilist, R.drawable.ic_anilist, Color(0xFF3577FF), isDark, ru) { onServiceClick(ExternalListService.ANILIST) }
+        }
+
+        Spacer(Modifier.height(4.dp))
+    }
+}
+
+/** Светлая группа (уровень материала выше базы панели). */
+@Composable
+private fun NottifGroup(isDark: Boolean, content: @Composable () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(SquircleShape(18.dp))
+            .background(IosDesign.rowBackground(isDark)),
+    ) { content() }
 }
 
 @Composable
-private fun NottifServiceStubTile(
-    modifier: Modifier,
-    isDark: Boolean,
-    label: String,
-    accent: Color,
-    cardBg: Color,
-    darkTileBase: Color,
-    onCard: Color,
-    muted: Color,
-    onClick: () -> Unit
-) {
-    val tileShape = RoundedCornerShape(OverlayThemeTokens.TileCornerRadius)
-    val tileBg = if (isDark) darkTileBase else cardBg
-    val accentRim = accent.copy(alpha = if (isDark) 0.4f else 0.55f)
-    val accentGlow = accent.copy(
-        alpha = if (isDark) 0.16f else OverlayThemeTokens.TileGlowAlphaLight
-    )
+private fun NottifInfoRow(label: String, value: String, valueColor: Color? = null) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = 36.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            fontFamily = SnProFamily,
+            fontSize = 14.sp,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Spacer(Modifier.width(12.dp))
+        Text(
+            text = value,
+            fontFamily = SnProFamily,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 14.sp,
+            color = valueColor ?: MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
 
-    Column(
-        modifier = modifier
-            .then(
-                if (isDark) Modifier else Modifier.softPlateShadowForLightSheet(
-                    isDark = false,
-                    shape = tileShape,
-                    elevation = OverlayThemeTokens.SortOverlayGridLightShadowElevation,
-                )
-            )
-            .clip(tileShape)
-            .background(tileBg)
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(accentGlow, Color.Transparent),
-                    center = Offset(0f, 0f),
-                    radius = 220f
-                )
-            )
-            .glassFill(isDark)
-            .glassEdge(OverlayThemeTokens.TileCornerRadius, isDark)
-            .border(1.dp, accentRim, tileShape)
+@Composable
+private fun NottifRowDivider(isDark: Boolean, inset: Dp = 16.dp) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = inset)
+            .height(IosDesign.SeparatorThickness)
+            .background(IosDesign.separator(isDark)),
+    )
+}
+
+@Composable
+private fun NottifServiceRow(
+    name: String,
+    @DrawableRes iconRes: Int,
+    accent: Color,
+    isDark: Boolean,
+    ru: Boolean,
+    onClick: () -> Unit,
+) {
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick
+                indication = iosRowHighlight(isDark, SquircleShape(0.dp)),
+                onClick = onClick,
             )
-            .padding(horizontal = 8.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
+            .defaultMinSize(minHeight = 44.dp)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             modifier = Modifier
-                .size(28.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(accent.copy(alpha = 0.25f)),
-            contentAlignment = Alignment.Center
+                .size(32.dp)
+                .clip(CircleShape)
+                .background(accent),
+            contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = (label.firstOrNull()?.uppercaseChar() ?: '·').toString(),
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                color = accent
+            Icon(
+                painter = painterResource(id = iconRes),
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(20.dp)
             )
         }
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = onCard,
-            maxLines = 3,
-            overflow = TextOverflow.Ellipsis,
-            lineHeight = 16.sp
+        Spacer(Modifier.width(12.dp))
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = name,
+                fontFamily = SnProFamily,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 15.sp,
+                color = onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = if (ru) "Не подключено" else "Not connected",
+                fontFamily = SnProFamily,
+                fontSize = 13.sp,
+                color = onSurface.copy(alpha = 0.5f),
+                maxLines = 1,
+            )
+        }
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = IosDesign.chevron(isDark),
+            modifier = Modifier.size(20.dp),
         )
     }
 }

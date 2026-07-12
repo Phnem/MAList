@@ -41,6 +41,13 @@ import com.example.myapplication.data.models.typeSeries
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import com.example.myapplication.ui.shared.components.FormatCategoryTile
+import com.example.myapplication.ui.shared.components.GrabberHandle
+import com.example.myapplication.ui.shared.components.rememberIosSheetSwipe
+import com.example.myapplication.ui.shared.components.IosRow
+import com.example.myapplication.ui.shared.components.IosRowDivider
+import com.example.myapplication.ui.shared.components.IosSelectionOption
+import com.example.myapplication.ui.shared.components.IosSelectionSheet
+import androidx.compose.material.icons.filled.Check
 import com.example.myapplication.ui.shared.gradientHighlightBorder
 import com.example.myapplication.ui.shared.inertialCollision
 import com.example.myapplication.ui.shared.rememberInertialCollisionState
@@ -129,16 +136,18 @@ fun MediaTypeFilterOverlay(
     onDismiss: () -> Unit,
 ) {
     val isDark = isAppInDarkTheme()
-    val panelBg = if (isDark) DarkBackground else MaterialTheme.colorScheme.surface
-    val collisionState = rememberInertialCollisionState()
-
-    LaunchedEffect(visibleState.targetState) {
-        if (visibleState.targetState) {
-            collisionState.triggerCollision(impactForce = 35f, stiffness = 200f, dampingRatio = 0.5f)
-        }
-    }
-
     BackHandler { onDismiss() }
+    val swipe = rememberIosSheetSwipe(onDismiss)
+
+    val ru = strings.languageName == "RU"
+    data class TypeOption(val filter: MediaType?, val label: String, val icon: ImageVector, val accent: Color, val subtitle: String)
+    val allLabel = if (ru) "Все" else "All"
+    val options = listOf(
+        TypeOption(null, allLabel, Icons.Outlined.GridView, Color(0xFF5AC8FA), if (ru) "Вся коллекция" else "Whole collection"),
+        TypeOption(MediaType.ANIME, strings.typeAnime, Icons.Outlined.AutoAwesome, Color(0xFFFF2D55), if (ru) "Только аниме" else "Anime only"),
+        TypeOption(MediaType.MANGA, strings.typeManga, Icons.AutoMirrored.Outlined.MenuBook, Color(0xFFBF5AF2), if (ru) "Только манга" else "Manga only"),
+        TypeOption(MediaType.TV_SERIES, strings.typeSeries, Icons.Outlined.Tv, Color(0xFFFFCC00), if (ru) "Только сериалы" else "Series only"),
+    )
 
     Box(modifier = Modifier.fillMaxSize()) {
         AnimatedVisibility(
@@ -161,97 +170,36 @@ fun MediaTypeFilterOverlay(
             visibleState = visibleState,
             enter = slideInVertically(
                 initialOffsetY = { it },
-                animationSpec = spring(dampingRatio = 0.8f, stiffness = 400f),
+                animationSpec = MotionTokens.sheetPresent(),
             ) + fadeIn(),
             exit = slideOutVertically(
                 targetOffsetY = { it },
-                animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMedium),
+                animationSpec = MotionTokens.sheetDismissForced(),
             ) + fadeOut(),
             modifier = Modifier.align(Alignment.BottomCenter),
         ) {
-            Card(
+            Column(
                 modifier = Modifier
+                    .then(swipe.panelModifier)
                     .fillMaxWidth()
+                    .iosSheetContainer(
+                        SquircleCornerShape(IosDesign.SheetCorner, IosDesign.SheetCorner, 0.dp, 0.dp),
+                        isDark,
+                        IosDesign.sheetSurface(isDark),
+                    )
                     .navigationBarsPadding()
-                    .padding(16.dp),
-                shape = RoundedCornerShape(28.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-                elevation = CardDefaults.cardElevation(
-                    defaultElevation = if (isDark) 12.dp else 0.dp,
-                ),
+                    .padding(bottom = 12.dp),
             ) {
-                OverlayGlassPanel(
+                GrabberHandle(isDark, modifier = swipe.handleModifier)
+                IosSelectionSheet(
+                    title = strings.contentTypeTitle,
+                    options = options.map { IosSelectionOption(it.label, it.icon, it.accent, it.subtitle) },
+                    selectedIndex = options.indexOfFirst { it.filter == selected }.coerceAtLeast(0),
                     isDark = isDark,
-                    panelBg = panelBg,
-                    cornerRadius = 28.dp,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .padding(start = 24.dp, top = 24.dp, end = 24.dp)
-                            .verticalScroll(rememberScrollState()),
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .inertialCollision(state = collisionState, index = 0, baseMultiplier = 2.5f),
-                        ) {
-                            Text(
-                                text = strings.contentTypeTitle,
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.padding(bottom = 20.dp),
-                            )
-                        }
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .inertialCollision(state = collisionState, index = 1, baseMultiplier = 2.5f),
-                        ) {
-                            LibraryMediaTypeFilterRow(
-                                strings = strings,
-                                selected = selected,
-                                onSelect = onSelect,
-                            )
-                        }
-                        Spacer(Modifier.height(20.dp))
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .inertialCollision(state = collisionState, index = 2, baseMultiplier = 2.5f)
-                                .gradientHighlightBorder(24.dp, isDark),
-                        ) {
-                            Button(
-                                onClick = onDismiss,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(52.dp),
-                                shape = RoundedCornerShape(24.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (isDark) {
-                                        OverlayThemeTokens.IconSyncBlue
-                                    } else {
-                                        MaterialTheme.colorScheme.secondaryContainer
-                                    },
-                                    contentColor = if (isDark) {
-                                        Color.White
-                                    } else {
-                                        MaterialTheme.colorScheme.onSecondaryContainer
-                                    },
-                                ),
-                                border = null,
-                            ) {
-                                Text(
-                                    text = strings.genreFilterDone,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = SnProFamily,
-                                )
-                            }
-                        }
-                        Spacer(Modifier.height(24.dp))
-                    }
-                }
+                    doneLabel = strings.genreFilterDone,
+                    onSelect = { i -> onSelect(options[i].filter) },
+                    onDone = onDismiss,
+                )
             }
         }
     }
@@ -461,11 +409,11 @@ fun AnimeListMenuSheet(
             visible = visible,
             enter = slideInVertically(
                 initialOffsetY = { it },
-                animationSpec = spring(dampingRatio = 0.75f, stiffness = 400f)
+                animationSpec = MotionTokens.sheetPresent()
             ) + fadeIn(),
             exit = slideOutVertically(
                 targetOffsetY = { it },
-                animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMedium)
+                animationSpec = MotionTokens.sheetDismissForced()
             ) + fadeOut()
         ) {
             Card(
@@ -615,19 +563,14 @@ fun CloudSyncPill(
 ) {
     AnimatedVisibility(
         visible = visible,
+        // Плавающая пилюля синка сверху (§11.4 barReveal-паттерн).
         enter = slideInVertically(
             initialOffsetY = { fullHeight -> -fullHeight },
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioMediumBouncy,
-                stiffness = Spring.StiffnessMediumLow,
-            ),
+            animationSpec = MotionTokens.barReveal(),
         ) + fadeIn(animationSpec = tween(280)),
         exit = slideOutVertically(
             targetOffsetY = { fullHeight -> -fullHeight },
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioNoBouncy,
-                stiffness = Spring.StiffnessMedium,
-            ),
+            animationSpec = MotionTokens.standard(),
         ) + fadeOut(animationSpec = tween(220)),
         modifier = modifier,
     ) {
