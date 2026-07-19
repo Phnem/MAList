@@ -1,425 +1,253 @@
-<h1 align="center">Vetro Collection 🎬📚</h1>
+# Vetro Collection 🎬📚
 
-<p align="center">
-  <a href="https://t.me/Vetro_chat">
-    <img src="https://img.shields.io/badge/Telegram-Join%20Community-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram">
-  </a>
-</p>
+[![Vetro Collection](https://github.com/Phnem/Vetro/raw/main/images/hero.png)](https://github.com/Phnem/Vetro/blob/main/images/hero.png)
 
-<p align="center">
-  <a href="images/multiBG.png">
-    <img src="images/multiSM.png" width="900" alt="Vetro Collection preview">
-  </a>
-</p>
+**Offline-first media collection manager built on The Depth of Light design language.**
+Anime · Manga · Manhwa · Movies · TV Shows · Anything structured
 
-<p align="center">
-  <b>Offline-first universal media collection manager built on The Depth of Light design language.</b><br>
-  Experimental multi-media architecture introducing Anime, Manga, TV Shows and future media types under one unified collection.
-</p>
+Kotlin · Compose · Ktor · Koin · Supabase · SQLDelight
 
-<p align="center">
-  Kotlin · Compose · SQLDelight · Ktor · Koin · Supabase · Apollo · kyant0 Blur
-</p>
+**Latest release: v3.3.2-Beta** · Latest stable: v3.3.1-Stable
+See [Releases](https://github.com/Phnem/Vetro/releases) for the full changelog history.
 
 ---
 
-<h2 align="center">✨ What is Vetro Collection?</h2>
+## ✨ What is Vetro?
 
-Vetro Collection is a modern <b>offline-first media collection manager</b> focused on performance, privacy and long-term scalability.
+Vetro (in-app: **Vetro Collection**, following a full project rebrand) is a powerful yet minimal **local-first media manager**.
 
-Originally created as an anime tracker, the project is now evolving into a universal collection platform capable of managing multiple media types while preserving a clean, reactive architecture.
+Originally built as an anime tracker, it's evolving into a universal media collection manager — anime, manga, manhwa, movies, and TV shows, all presented as one unified library.
 
-Current supported media:
-
-- 🎬 Anime
-- 📖 Manga *(Experimental)*
-- 📺 TV Shows
-
-Future-ready architecture allows additional media categories without major migrations.
-
----
-
-<h2 align="center">🚀 Join the Community</h2>
-
-<p align="center">
-  <a href="https://t.me/Vetro_chat">
-    <img src="https://img.shields.io/badge/Telegram-Vetro%20Community-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram">
-  </a>
-</p>
-
-Get beta announcements, development updates, screenshots and release previews.
+- The Depth of Light design language
+- Experimental multi-media support: manga & manhwa (v3.2.8+)
+- Native cloud authentication (Supabase) & optional sync
+- Strict unidirectional data flow (UDF / MVI)
+- Clean, domain-driven architecture
+- Reactive, multi-database data layer (Flow + SQLDelight)
+- Advanced search (API + image recognition)
 
 ---
 
-<h2 align="center">📸 Screenshots</h2>
+## 📸 Screenshots
 
-<p align="center">
-  <a href="images/dkBG.png"><img src="images/dkSM.png" width="220" alt="Dark theme"></a>
-  <a href="images/ltBG.png"><img src="images/ltSM.png" width="220" alt="Light theme"></a>
-</p>
+[![Screenshot 1](https://github.com/Phnem/Vetro/raw/main/images/1.png)](https://github.com/Phnem/Vetro/blob/main/images/1.png) [![Screenshot 2](https://github.com/Phnem/Vetro/raw/main/images/2.png)](https://github.com/Phnem/Vetro/blob/main/images/2.png) [![Screenshot 3](https://github.com/Phnem/Vetro/raw/main/images/3.png)](https://github.com/Phnem/Vetro/blob/main/images/3.png) [![Screenshot 4](https://github.com/Phnem/Vetro/raw/main/images/4.png)](https://github.com/Phnem/Vetro/blob/main/images/4.png) [![Screenshot 5](https://github.com/Phnem/Vetro/raw/main/images/5.png)](https://github.com/Phnem/Vetro/blob/main/images/5.png)
 
-<p align="center">
-  <i>Click any image to view full resolution</i>
-</p>
+*Click any image to view full resolution*
 
 ---
 
-<h2>🧠 Core Philosophy</h2>
+## 🧠 Core Philosophy
 
-- Offline-first
-- No mandatory accounts
+- 100% usable offline
+- No forced accounts
 - Your data belongs to you
-- Cloud is optional
-- Reactive UI everywhere
-- Deterministic state management
-- Modern Android architecture
-- Privacy by default
+- Cloud = extension, not requirement
+- Instant UI response (no artificial delays)
+- Deterministic state & predictable behavior
 
 ---
 
-<h2>✨ Features</h2>
+## ✨ Features
 
-<h3>📚 Universal Media Collections</h3>
+### 📋 Content Management
 
-- Anime
-- TV Shows
-- **Manga (Experimental)**
+- Custom lists (anime, manga, manhwa, movies, shows, etc.)
+- Precise 0.0–10.0 rating system
 - Favorites
-- Ratings
-- Notes & comments
-- Reactive collection updates
+- Comments & notes
+- Fully reactive updates
 
-<h3>🔍 Advanced Search</h3>
+### 📚 Manga & Manhwa (Experimental)
 
-- Instant SQL search
-- API search
-- Image recognition
-- Metadata auto-fill
-- Smart debounce
-- Media source filters
+Vetro is no longer limited to anime and TV.
 
-<h4>🧠 Image Recognition</h4>
+- Track manga, manhwa, and other printed media alongside your existing collection
+- Stored in an independent SQLDelight database, fully isolated from existing anime libraries — no migration risk, no corruption of existing data
+- Presented as one seamless collection via reactive Kotlin Flow merging; you never need to know which database a title actually lives in
+- Legacy entries without a media type are automatically detected and tagged as Anime for backward compatibility
 
-- Screenshot recognition
-- trace.moe integration
-- AI movie recognition
-- One-click import
+⚠️ Still experimental — synchronization and metadata handling for printed media are under active development.
 
-<h3>📦 Collection Management</h3>
+### 🔍 Advanced Search
 
-- Unified collection
-- Custom sorting
-- Smart filtering
-- Media badges
-- Quick media switcher
-- Import / Export
+- Redesigned Search interface in The Depth of Light style
+- Quick media-type filter capsules (Anime / Manga / TV Shows) above the search field
+- 250–300ms debounce to avoid unnecessary queries while typing
+- Real-time in-memory search
+- API search (anime + manga + movies) with automatic metadata fetch (cover, description, rating)
+- Media-type badges on every card
+- Quick media-type filter dropdown in the top navigation
 
-<h3>👉 Gestures</h3>
+#### 🧠 Image-based search
+
+- Identify content from a screenshot
+- Anime → trace.moe
+- Movies → AI recognition
+
+Workflow: upload a frame → detect title → add directly to library → metadata auto-fills → genres remain manually editable.
+
+### 👉 Gestures
 
 - Swipe to delete
 - Swipe to favorite
 - Haptic feedback
 
-<p align="center">
-  <img src="swipe.png" width="350" style="border-radius:16px;" alt="Swipe gestures">
-</p>
+[![Swipe gestures](https://github.com/Phnem/Vetro/raw/main/swipe.png)](https://github.com/Phnem/Vetro/blob/main/swipe.png)
+
+### 💡 Recommendations
+
+A dedicated Recommendations section surfaces new anime, manga, and shows to discover based on your existing collection.
+
+### 🎭 Digital Sarcasm System
+
+- Context-aware sarcasm engine with 600+ dynamic phrases in Statistics
+- Reacts to your taste — judges it, or supports your optimism
 
 ---
 
-<h2>🆕 New in v3.2.8 Beta</h2>
+## 🔐 Authentication & Accounts
 
-<h3>📖 Experimental Manga Support</h3>
+- Native authentication via the Supabase SDK
+- Sign in with **Google** or **GitHub** (OAuth)
+- Optional **Email + Password** login with a permanent password
+- Dedicated account settings screen to view auth status and manage your linked cloud account
 
-This release marks the beginning of Vetro Collection's evolution into a universal media manager.
-
-Added experimental support for:
-
-- Manga
-- Manhwa
-- Other printed media
-
-This feature is still under active development.
+No embedded API keys ship with the app — bring your own key for AI-powered features like image recognition, keeping usage transparent and abuse-resistant.
 
 ---
 
-<h3>🗄 Independent Database Architecture</h3>
+## ⭐ Rating System
 
-To safely support multiple media types:
-
-- Separate SQLDelight databases
-- Anime collections remain isolated 
-- Zero migration risk
-- Safer upgrades
-
-Internally multiple databases are merged into one reactive collection using Kotlin Flow.
-
-Users simply see one library.
+- Precise **0.0–10.0** scoring, replacing the old 1–5 scale, for finer control and better compatibility with external services
+- Redesigned rating controls in the Add / Edit screens for faster, more intuitive scoring
 
 ---
 
-<h3>⚙️ Database Improvements</h3>
-
-- SQL filtering moved into database
-- SQL sorting optimization
-- Flow combine() pipeline
-- distinctUntilChanged()
-- Lower CPU usage
-- Faster rendering
-- Better scrolling performance
-
----
-
-<h3>🔐 Supabase Authentication</h3>
-
-Added Supabase cloud authentication with optional sync.
-
-Supported providers:
-
-- Google *(OAuth via Custom Tabs)*
-- GitHub
-- Email + Password
-- Guest mode
-
-Also added:
-
-- Account management screen
-- Authentication status
-- Linked account management
-- Cloud restore with sync status indicator
-
-Removed:
-
-- Magic Link authentication
-- Dropbox sync *(replaced by Supabase + R2)*
-
----
-
-<h3>🌐 Better Content Pipeline</h3>
+## 🔄 Sync & Integrations
 
 Primary providers:
-
-- AniList
 - Shikimori
+- AniList
 
-Automatic fallback:
+Fallback provider:
+- Jikan API (automatic fallback improves reliability when a primary provider is unavailable)
 
-- Jikan API
+- Redesigned connection screens for AniList, MyAnimeList, and Shikimori
+- Import / Export / Sync workflows to move libraries in and out of Vetro
+- Dynamic sync status badge that updates in real time
+- Unified genre database shared consistently between anime and manga
 
-Provides significantly higher reliability when external services become unavailable.
-
----
-
-<h3>🎨 Search Redesign</h3>
-
-Completely redesigned search interface.
-
-New features:
-
-- Search capsules
-- Anime / Manga / TV filters
-- Media badges
-- 250–300 ms debounce
-- Faster SQL queries
+⚠️ **Known issue:** genre synchronization is currently incomplete. Developer Settings → **Repair Database** restores missing genres, covers, and metadata as a temporary workaround; a full synchronization fix is planned for a future release.
 
 ---
 
-<h3>⚡ Adaptive Blur Rendering</h3>
+## 🎨 UI & UX
 
-Introduced intelligent blur optimization.
-
-While scrolling quickly:
-
-- expensive blur is disabled
-
-When scrolling stops:
-
-- blur smoothly returns
-
-Result:
-
-- dramatically smoother scrolling
-- fewer frame drops
-- lower GPU load
+- Complete animation overhaul across the app: smoother transitions, more natural motion, refined timing and interaction feedback
+- All overlays — bottom sheets, dialogs, context menus, pop-ups — rebuilt in The Depth of Light style
+- Details Bottom Sheet trimmed from ~80% to ~60% of screen height, with the header moved directly above the artwork
+- Unified bottom sheet corner radius (32dp → 36dp) across the app
+- Completely redesigned Settings screen with clearer grouping, hierarchy, and navigation
+- Completely redesigned bottom navigation dock
+- New primary typeface for improved readability
+- New color palette with refined accents, consistent across light and dark themes
+- Tile-based genre system, unified across Add / Edit / Sorting
 
 ---
 
-<h3>🔄 Synchronization</h3>
+## 🛠 Developer Tools
 
-Improved:
-
-- Sync workflow
-- Status tracking
-- Dynamic sync badge
-- Cover image restore after reinstall
-
-Developer recovery utility added:
-
-Developer Settings → Repair Database
-
-Repairs:
-
-- Genres
-- Covers
-- Metadata
-- Synchronization artifacts
+- **Repair Database**: recovers missing genres, cover images, metadata, and sync artifacts after an interrupted sync or incomplete import
+- Developer option to toggle adaptive blur rendering
+- Database Import
+- PDF export (shareable, readable tables)
 
 ---
 
-<h3>⬆️ Smart Update System</h3>
+## 🔄 Update System
 
-Separate update channels:
-
-- GitHub *(optional, off by default in Developer Settings)*
-- F-Droid
-
-GitHub releases include:
-
-- Built-in changelog
-- Native updater
-- Smart installation flow
-
-F-Droid builds use the store update flow instead of GitHub API checks.
+- Separate update modes for F-Droid and GitHub distributions
+- GitHub update checks are disabled by default on F-Droid installs and redirect to the official project website instead
+- When enabled, Vetro fetches release notes directly from GitHub and runs the built-in updater
 
 ---
 
-<h3>🌍 Localization</h3>
+## 🏗 Architecture
 
-- Massive English/Russian cleanup
-- Removed remaining hardcoded strings
-- Unified translations
-- Better language consistency
-- Welcome screen follows system locale
-
----
-
-<h3>🎨 UI Improvements</h3>
-
-- Redesigned search
-- New media badges
-- New filter dropdown
-- Better navigation
-- Improved animations
-- Updated Depth of Light components
-
----
-
-<h2>🧪 Previous 3.2.x Highlights</h2>
-
-- Depth of Light visual language
-- New kyant0 blur renderer
-- Redesigned light theme
-- Adaptive launcher icons
-- Scoped Storage migration
-- Built-in updater
-- AniList integration
-- Shikimori integration
-- PDF export
-- Visual Search
-- Digital Sarcasm System (600+ contextual phrases)
-- Developer Settings
-- Numeric notification badges
-
----
-
-<h2>🏗 Architecture</h2>
-
-<h3>Clean Architecture</h3>
+### Clean Architecture
 
 - UI / Domain / Data separation
-- UseCases
-- DTO layer
-- Domain-driven structure
+- UseCases for business logic (`SaveAnimeUseCase`, `UpdateCommentUseCase`, `GetAnimeForEditUseCase`, …)
+- DTO layer (`SaveAnimeParams`)
+- No Android dependencies in ViewModels
 
-<h3>State Management</h3>
+### Multi-Database Data Layer
 
-- Strict UDF
-- Immutable UI State
-- Channel SideEffects
-- Reactive Compose architecture
+- SQLDelight + Flow, fully reactive, single source of truth
+- Independent database for printed media (manga/manhwa), isolated from the anime database to eliminate migration risk
+- Multiple databases merged into one reactive UI list via Kotlin Flow `combine()`
+- Sorting and filtering moved entirely into SQL; `distinctUntilChanged()` after queries avoids redundant state updates
 
-<h3>Reactive Data Layer</h3>
+### State Management
 
-- SQLDelight
-- Kotlin Flow
-- Multi-database merge
-- Single UI source of truth
+- Strict UDF (Unidirectional Data Flow)
+- Immutable UI state
+- SideEffects via Channel
+- No callback anti-patterns
 
-<h3>Dependency Injection</h3>
+### Dependency Injection
 
-- Koin 4.x
-- Fully modular graph
+- Koin 4.x, fully modular graph, no legacy singletons
 
-<h3>Networking</h3>
+### Networking
 
-- Ktor
+- Ktor (CIO)
 - Apollo GraphQL
-- Supabase SDK
+- Structured error handling
 
 ---
 
-<h2>⚡ Performance</h2>
+## ⚡ Performance
 
-Major optimizations include:
+- **Adaptive blur rendering**: expensive blur and lens effects pause during fast scrolling and smoothly return once it stops, virtually eliminating micro-stutters
+- SQLDelight query and startup optimizations, fewer unnecessary recompositions
+- Optimized Coil image loading: smarter thumbnail limits, lower memory use, better handling of legacy high-resolution posters
+- Removed Paging3 → no pagination lag
+- GPU improvements, XML removal (no runtime parsing)
 
-- SQL-side filtering
-- SQL-side sorting
-- Adaptive blur rendering
-- Reduced recompositions
-- Optimized Coil loading
-- Better CPU utilization
-- Faster startup
-- Lower memory usage
-- Improved LazyColumn rendering
-- Faster synchronization checks
-
-Result:
-
-- Instant search
-- Smooth scrolling
-- Stable rendering
-- Better battery efficiency
+Result: smoother scrolling, faster collection rendering, instant search, stable rendering.
 
 ---
 
-<h2>☁️ Sync & Integrations</h2>
+## ☁️ Cloud Sync (Optional)
 
-Supported services:
+Dropbox-based sync:
 
-- Supabase Cloud
-- AniList
-- Shikimori
+- File hashing (DropboxContentHasher)
+- Simple and reliable restore
+- No complex delta sync
 
-Capabilities:
-
-- Cloud backup
-- Restore
-- Collection import
-- Cross-device synchronization
-- External library migration
+Local-first architecture remains unchanged — cloud sync is always optional, never required.
 
 ---
 
-<h2>🔐 Privacy</h2>
+## 🌍 Localization
 
-- Offline-first
+- Bilingual (English / Russian) throughout the app
+- Ongoing cleanup of hardcoded strings and translation consistency fixes with every release
+
+---
+
+## 🔐 Storage & Privacy
+
+- 100% local by default
 - No analytics
 - No tracking
-- No hidden background requests
-- Cloud remains optional
-- F-Droid-friendly build *(no proprietary Google Sign-In SDK)*
+- No hidden network activity
 
 ---
 
-<p align="center">
-  <a href="https://t.me/Vetro_chat">
-    <img src="https://img.shields.io/badge/Telegram-Join%20Community-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram">
-  </a>
-</p>
+## 📄 License
 
----
-
-<h2>📄 License</h2>
-
-Licensed under the <b>MIT License</b>.
-
-See the <a href="LICENSE">LICENSE</a> file for details.
+This project is licensed under the **MIT License**.
+See the [LICENSE](https://github.com/Phnem/Vetro/blob/main/LICENSE) file for details.

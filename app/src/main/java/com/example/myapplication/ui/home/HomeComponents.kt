@@ -81,10 +81,10 @@ fun LibraryMediaTypeFilterRow(
     )
 
     val tiles = listOf(
-        FilterTile(null, allLabel, Icons.Outlined.GridView, Color(0xFF5AC8FA)),
-        FilterTile(MediaType.ANIME, strings.typeAnime, Icons.Outlined.AutoAwesome, Color(0xFFFF2D55)),
-        FilterTile(MediaType.MANGA, strings.typeManga, Icons.AutoMirrored.Outlined.MenuBook, Color(0xFFBF5AF2)),
-        FilterTile(MediaType.TV_SERIES, strings.typeSeries, Icons.Outlined.Tv, Color(0xFFFFCC00)),
+        FilterTile(null, allLabel, Icons.Outlined.GridView, Color(0xFFA7A7A7)),
+        FilterTile(MediaType.ANIME, strings.typeAnime, Icons.Outlined.AutoAwesome, Color(0xFFE85002)),
+        FilterTile(MediaType.MANGA, strings.typeManga, Icons.AutoMirrored.Outlined.MenuBook, Color(0xFFD9C3AB)),
+        FilterTile(MediaType.TV_SERIES, strings.typeSeries, Icons.Outlined.Tv, Color(0xFFFFB067)),
     )
 
     @Composable
@@ -143,10 +143,10 @@ fun MediaTypeFilterOverlay(
     data class TypeOption(val filter: MediaType?, val label: String, val icon: ImageVector, val accent: Color, val subtitle: String)
     val allLabel = if (ru) "Все" else "All"
     val options = listOf(
-        TypeOption(null, allLabel, Icons.Outlined.GridView, Color(0xFF5AC8FA), if (ru) "Вся коллекция" else "Whole collection"),
-        TypeOption(MediaType.ANIME, strings.typeAnime, Icons.Outlined.AutoAwesome, Color(0xFFFF2D55), if (ru) "Только аниме" else "Anime only"),
-        TypeOption(MediaType.MANGA, strings.typeManga, Icons.AutoMirrored.Outlined.MenuBook, Color(0xFFBF5AF2), if (ru) "Только манга" else "Manga only"),
-        TypeOption(MediaType.TV_SERIES, strings.typeSeries, Icons.Outlined.Tv, Color(0xFFFFCC00), if (ru) "Только сериалы" else "Series only"),
+        TypeOption(null, allLabel, Icons.Outlined.GridView, Color(0xFFA7A7A7), if (ru) "Вся коллекция" else "Whole collection"),
+        TypeOption(MediaType.ANIME, strings.typeAnime, Icons.Outlined.AutoAwesome, Color(0xFFE85002), if (ru) "Только аниме" else "Anime only"),
+        TypeOption(MediaType.MANGA, strings.typeManga, Icons.AutoMirrored.Outlined.MenuBook, Color(0xFFD9C3AB), if (ru) "Только манга" else "Manga only"),
+        TypeOption(MediaType.TV_SERIES, strings.typeSeries, Icons.Outlined.Tv, Color(0xFFFFB067), if (ru) "Только сериалы" else "Series only"),
     )
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -577,7 +577,7 @@ fun CloudSyncPill(
         val isDark = isAppInDarkTheme()
         val pillShape = RoundedCornerShape(999.dp)
         val surfaceColor = if (isDark) {
-            Color(0xFF1E2430).copy(alpha = 0.92f)
+            Color(0xFF262626).copy(alpha = 0.92f)
         } else {
             MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
         }

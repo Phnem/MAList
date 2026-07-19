@@ -59,11 +59,43 @@ class ShikimoriRemoteDataSource(
         if (episodes > 0) episodes to "Shikimori" else null
     }
 
+    /** Похожие тайтлы по id — источник related-кандидатов для рекомендаций. */
+    suspend fun getSimilarAnime(id: Int, language: AppLanguage = AppLanguage.EN): Result<List<ApiSearchResult>> = runCatching {
+        burstRate.acquire()
+        val response = client.get("https://shikimori.one/api/animes/$id/similar")
+            .body<List<ShikimoriSearchItemDto>>()
+        response.map { it.toApiSearchResult(language) }
+    }
+
     suspend fun getAnimeById(id: Int, language: AppLanguage = AppLanguage.EN): Result<ApiSearchResult?> = runCatching {
         burstRate.acquire()
         val full = client.get("https://shikimori.one/api/animes/$id").body<ShikimoriSearchItemDto>()
         full.toApiSearchResult(language)
     }
+
+    /** Явное русское название по Shikimori id (обратное обогащение, Stage 10). */
+    suspend fun enrichRussianById(id: Int): Result<EnrichedTitles?> = runCatching {
+        burstRate.acquire()
+        val full = client.get("https://shikimori.one/api/animes/$id").body<ShikimoriSearchItemDto>()
+        full.toEnrichedTitles()
+    }
+
+    /** Явные русские названия по поиску (для сопоставления, когда shikimori_id нет). */
+    suspend fun enrichRussianBySearch(query: String, limit: Int = 8): Result<List<EnrichedTitles>> = runCatching {
+        if (query.isBlank()) return@runCatching emptyList()
+        val response = client.get("https://shikimori.one/api/animes") {
+            parameter("search", query.trim())
+            parameter("limit", limit)
+        }.body<List<ShikimoriSearchItemDto>>()
+        response.map { it.toEnrichedTitles() }
+    }
+
+    private fun ShikimoriSearchItemDto.toEnrichedTitles(): EnrichedTitles = EnrichedTitles(
+        shikimoriId = id,
+        malId = malId,
+        romaji = name?.takeIf { it.isNotBlank() },
+        russian = russian?.takeIf { it.isNotBlank() },
+    )
 
     private fun ShikimoriSearchItemDto.toApiSearchResult(language: AppLanguage): ApiSearchResult {
         val desc = description
@@ -88,7 +120,8 @@ class ShikimoriRemoteDataSource(
             rating = score?.toFloatOrNull()?.toInt(),
             source = "Shikimori",
             categoryType = "ANIME",
-            externalId = id.toString()
+            externalId = id.toString(),
+            malId = malId,
         )
     }
 

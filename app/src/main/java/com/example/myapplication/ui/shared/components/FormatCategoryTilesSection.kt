@@ -94,9 +94,9 @@ fun FormatCategoryTilesWithGenres(
     )
 
     val categories = listOf(
-        GenreCategoryData("Anime", strings.genreAnime, animeGenres, Color(0xFFFF2D55)),
-        GenreCategoryData("Movies", strings.genreMovies, movieGenres, Color(0xFF5AC8FA)),
-        GenreCategoryData("Series", strings.genreSeries, seriesGenres, Color(0xFFFFCC00))
+        GenreCategoryData("Anime", strings.genreAnime, animeGenres, Color(0xFFE85002)),
+        GenreCategoryData("Movies", strings.genreMovies, movieGenres, Color(0xFF8A8A8E)),
+        GenreCategoryData("Series", strings.genreSeries, seriesGenres, Color(0xFFD9C3AB))
     )
 
     val isDark = isAppInDarkTheme()

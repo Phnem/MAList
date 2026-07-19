@@ -123,7 +123,8 @@ class CollectionPdfGenerator(
         for (animeOrNull in rowsToDraw) {
             val titleText = animeOrNull?.title ?: emptyMessage
             val epText = animeOrNull?.let { it.episodes.toString() } ?: ""
-            val ratingText = animeOrNull?.let { it.rating.toString() } ?: ""
+            val ratingText = animeOrNull?.rating?.takeIf { it > 0f }
+                ?.let { com.example.myapplication.data.models.RatingScale.format(it) } ?: ""
 
             val titleLayout = StaticLayout.Builder.obtain(titleText, 0, titleText.length, bodyPaint, colTitleW.toInt())
                 .setAlignment(Layout.Alignment.ALIGN_NORMAL)

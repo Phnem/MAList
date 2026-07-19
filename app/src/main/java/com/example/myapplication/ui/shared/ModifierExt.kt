@@ -107,6 +107,9 @@ fun Modifier.inertialCollision(
  */
 fun Modifier.customOverscroll(
     listState: LazyListState,
+    // Позволяет отключить верхнюю «резинку» (напр. пока идёт pull-to-refresh, чтобы список
+    // не пружинил под кастомным индикатором). Нижняя резинка не затрагивается.
+    topEnabled: () -> Boolean = { true },
     onOverscrollChange: (Float) -> Unit
 ): Modifier = composed {
     val scope = rememberCoroutineScope()
@@ -129,7 +132,7 @@ fun Modifier.customOverscroll(
                 val isAtBottom = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index == 
                                 listState.layoutInfo.totalItemsCount - 1
                 
-                if (available.y > 0 && isAtTop) {
+                if (available.y > 0 && isAtTop && topEnabled()) {
                     // Overscrolling at top - apply resistance
                     val resistance = 0.3f
                     val newAmount = (overscrollAnimatable.value + available.y * resistance).coerceAtMost(100f)

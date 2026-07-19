@@ -1,0 +1,4 @@
+-- Английские названия (автообогащение через API/AI) + отметка последней попытки.
+-- Колонки добавляются в конец таблицы (ALTER ADD COLUMN), порядок совпадает с CREATE TABLE в .sq.
+ALTER TABLE anime ADD COLUMN title_en TEXT;
+ALTER TABLE anime ADD COLUMN title_en_checked_at INTEGER;

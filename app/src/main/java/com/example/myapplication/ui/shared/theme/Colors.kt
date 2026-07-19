@@ -3,54 +3,77 @@ package com.example.myapplication.ui.shared.theme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 
-val BrandBlue = Color(0xFF007AFF)
-val BrandBlueSoft = Color(0xFF5AC8FA)
-val BrandRed = Color(0xFFC62828)
+// ============================================================
+// Брендовая палитра Vetro: чёрный/белый + оттенки серого + фирменный оранжевый.
+// Источник — брендовый color palette sheet:
+//   Branding orange #E85002, Primary #000000, White #F9F9F9,
+//   Gray #646464, Light Gray #A7A7A7, Dark Gray #333333,
+//   Gradient: #000000 → #C10801 → #F16001 → #D9C3AB.
+// Все смысловые роли (акценты, метрики, рейтинги) выражаются через эти тона.
+// ============================================================
 
-/** Акценты плиток настроек */
-/** Язык — яркий голубой акцент для слайдера */
-val SettingsAccentLangDarkBlue = Color(0xFF29B6F6)
-/** Тема — зелёный акцент слайдера */
-val SettingsAccentThemeDarkGreen = Color(0xFF34C85A)
-val SettingsAccentCloudLightBlue = Color(0xFF81D4FA)
-/** Контент — приглушённый оранжевый (не неон как #FF9500) */
-val SettingsAccentContentOrange = Color(0xFFE65100)
-val SettingsAccentContactLightGreen = Color(0xFF81C784)
+/** Фирменный оранжевый — главный акцент приложения (#E85002). */
+val BrandOrange = Color(0xFFE85002)
+/** Яркий оранжевый из брендового градиента (#F16001) — второй, «светящийся» акцент. */
+val BrandOrangeBright = Color(0xFFF16001)
+/** Глубокий красный из брендового градиента (#C10801) — destructive / ошибки / низкие оценки. */
+val BrandDeepRed = Color(0xFFC10801)
+/** Тёплый песочный из хвоста градиента (#D9C3AB) — мягкий тёплый акцент. */
+val BrandTan = Color(0xFFD9C3AB)
+
+// Легаси-алиасы: имена сохранены, значения перенесены на бренд-палитру,
+// чтобы не трогать все точки использования.
+val BrandBlue = BrandOrange
+val BrandBlueSoft = BrandOrangeBright
+val BrandRed = BrandDeepRed
+
+/** Акценты плиток настроек — оттенки одной тёплой монохромной гаммы. */
+/** Язык — фирменный оранжевый для слайдера */
+val SettingsAccentLangDarkBlue = BrandOrange
+/** Тема — яркий оранжевый акцент слайдера */
+val SettingsAccentThemeDarkGreen = BrandOrangeBright
+val SettingsAccentCloudLightBlue = BrandTan
+/** Контент — приглушённая обожжённая глина */
+val SettingsAccentContentOrange = Color(0xFFB0562A)
+val SettingsAccentContactLightGreen = Color(0xFFA7A7A7)
 /** Акцент плитки доната (кофейный / тёплый) */
-val SettingsAccentDonationCoffee = Color(0xFF8D6E63)
+val SettingsAccentDonationCoffee = Color(0xFF8C6E5D)
 
-// M3 Accent — серо-фиолетовый (mauve), как у FilledTonalButton / secondaryContainer
-val AccentMauveDark = Color(0xFF4A4458)
-val AccentOnMauveDark = Color(0xFFE8DEF8)
-val AccentMauveLight = Color(0xFFE8DEF8)
-val AccentOnMauveLight = Color(0xFF1D192B)
+// M3 Accent — тёплый тонально-оранжевый контейнер (заменил mauve),
+// как у FilledTonalButton / secondaryContainer
+val AccentMauveDark = Color(0xFF4A2B18)
+val AccentOnMauveDark = Color(0xFFFFD9C4)
+val AccentMauveLight = Color(0xFFFFDCC7)
+val AccentOnMauveLight = Color(0xFF3A1800)
 
-// Updated Rating Colors
-val RateColor1 = Color(0xFFFF3B30) // Red
-val RateColor2 = Color(0xFFFF6D00) // Red-Orange
-val RateColor3 = Color(0xFFFF9800) // Orange
-val RateColor4 = Color(0xFFFFD600) // Yellow
-val RateColor5 = Color(0xFF34C759) // Green
+// Рейтинг: от глухого серого (плохо) через глубокий красный к яркому оранжевому
+// и песочному — луминансная лестница вдоль брендового градиента.
+val RateColor1 = Color(0xFF646464) // Gray — слабо
+val RateColor2 = Color(0xFFC10801) // Deep red
+val RateColor3 = Color(0xFFE85002) // Branding orange
+val RateColor4 = Color(0xFFFF8A3D) // Light orange
+val RateColor5 = Color(0xFFD9C3AB) // Tan — вершина градиента
 
 val RateColorEmpty = Color(0xFFE0E0E0)
-val EpisodesColor = Color(0xFF2196F3)
-val TimeColor = Color(0xFF9C27B0)
-val RatingColor = Color(0xFFFFC400)
-val RankColor = Color(0xFF43A047)
+val EpisodesColor = BrandOrangeBright
+val TimeColor = Color(0xFFA7A7A7)
+val RatingColor = BrandOrange
+val RankColor = BrandTan
 
-val DarkBackground = Color(0xFF0D1117)
-val DarkSurface = Color(0xFF2D333B)
-val DarkSurfaceVariant = Color(0xFF30363D)
-val DarkTextPrimary = Color(0xFFF2F2F7)
-val DarkTextSecondary = Color(0xFF9898A0)
+/** Тёмная тема: чистый чёрный базовый фон + нейтральные серые ступени. */
+val DarkBackground = Color(0xFF000000)
+val DarkSurface = Color(0xFF262626)
+val DarkSurfaceVariant = Color(0xFF333333)
+val DarkTextPrimary = Color(0xFFF9F9F9)
+val DarkTextSecondary = Color(0xFFA7A7A7)
 val DarkBorder = Color(0xFFFFFFFF).copy(alpha = 0.08f)
 /** Нейтральная «чистая» светлая палитра (без тёплого крема). */
-val LightBackground = Color(0xFFF7F7F8)
+val LightBackground = Color(0xFFF9F9F9)
 val LightSurface = Color(0xFFFFFFFF)
-val LightSurfaceVariant = Color(0xFFF0F0F3)
-val LightTextPrimary = Color(0xFF1C1C1E)
-val LightTextSecondary = Color(0xFF636366)
-val LightBorder = Color(0xFFE0E0E6)
+val LightSurfaceVariant = Color(0xFFF0F0F0)
+val LightTextPrimary = Color(0xFF1A1A1A)
+val LightTextSecondary = Color(0xFF646464)
+val LightBorder = Color(0xFFE2E2E2)
 
 /** Пастельная подложка иконки + tint с достаточным контрастом на светлой теме. */
 data class IconWellColors(
@@ -86,13 +109,12 @@ fun settingsIconWellColors(isDark: Boolean, accent: Color): IconWellColors =
         iconWellColorsLight(accent)
     }
 
-fun getRatingColor(rating: Int): Color {
-    return when (rating) {
-        1 -> RateColor1
-        2 -> RateColor2
-        3 -> RateColor3
-        4 -> RateColor4
-        5 -> RateColor5
-        else -> Color.Gray
-    }
+/** Цвет по 10-балльному рейтингу: пять ступеней вдоль брендового градиента. */
+fun getRatingColor(rating: Float): Color = when {
+    rating <= 0f -> Color.Gray
+    rating <= 2f -> RateColor1
+    rating <= 4f -> RateColor2
+    rating <= 6f -> RateColor3
+    rating <= 8f -> RateColor4
+    else -> RateColor5
 }

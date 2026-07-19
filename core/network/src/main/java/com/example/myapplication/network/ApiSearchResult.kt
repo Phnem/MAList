@@ -15,5 +15,7 @@ data class ApiSearchResult(
     val rating: Int?,
     val source: String,
     val categoryType: String,
-    val externalId: String?
+    val externalId: String?,
+    /** MAL id, если источник отдал его дополнительно к [externalId] (напр. Shikimori detail → myanimelist_id). */
+    val malId: Int? = null,
 )

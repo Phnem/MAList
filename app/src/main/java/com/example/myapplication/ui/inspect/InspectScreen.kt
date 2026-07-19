@@ -1,9 +1,5 @@
 package com.example.myapplication.ui.inspect
 
-import android.content.ClipboardManager
-import android.content.Context
-import android.content.Intent
-import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -16,7 +12,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -30,20 +25,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -56,20 +45,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavController
 import coil3.compose.AsyncImage
 import com.phnem.vetro.R
 import com.example.myapplication.domain.inspect.InspectContentMode
 import com.example.myapplication.ui.home.ApiSearchResultCard
+import com.example.myapplication.ui.navigation.navigateToSettings
 import com.example.myapplication.ui.shared.theme.InspectVisualSearchTheme
+import com.example.myapplication.utils.getAiConnectStrings
 import com.example.myapplication.utils.getStrings
 import com.example.myapplication.utils.performHaptic
 import kotlin.math.abs
@@ -90,11 +77,10 @@ fun InspectScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val selectedUri by viewModel.selectedImageUri.collectAsStateWithLifecycle()
     val addingId by viewModel.addingFromApiId.collectAsStateWithLifecycle()
-    val geminiKeyState by viewModel.geminiKeyUiState.collectAsStateWithLifecycle()
-    val lifecycleOwner = LocalLifecycleOwner.current
-    val windowInfo = LocalWindowInfo.current
-    val requiresGeminiSetup =
-        contentMode == InspectContentMode.MoviesSeries && !geminiKeyState.hasValidSavedKey
+    val hasVisionProvider by viewModel.hasVisionProvider.collectAsStateWithLifecycle()
+    val aiConnectStrings = getAiConnectStrings(lang)
+    val requiresAiSetup =
+        contentMode == InspectContentMode.MoviesSeries && !hasVisionProvider
     val onSelectMode: (Int) -> Unit = { index ->
         performHaptic(view, "light")
         when (index) {
@@ -118,27 +104,6 @@ fun InspectScreen(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
         uri?.let { viewModel.analyzeImage(context, it) }
-    }
-
-    DisposableEffect(lifecycleOwner, windowInfo.isWindowFocused, contentMode) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (
-                event == Lifecycle.Event.ON_RESUME &&
-                contentMode == InspectContentMode.MoviesSeries &&
-                windowInfo.isWindowFocused
-            ) {
-                val clipboardText = runCatching {
-                    val manager = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                    manager?.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString()
-                }.getOrNull()
-                viewModel.tryImportGeminiKeyFromClipboard(
-                    isWindowFocused = windowInfo.isWindowFocused,
-                    clipboardText = clipboardText
-                )
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     with(sharedTransitionScope) {
@@ -228,71 +193,19 @@ fun InspectScreen(
                                 .padding(horizontal = 16.dp)
                         )
                         Spacer(modifier = Modifier.height(16.dp))
-                        if (requiresGeminiSetup) {
-                            AnimatedContent(
-                                targetState = geminiKeyState.onboardingStep,
-                                transitionSpec = {
-                                    val initialIndex = initialState.ordinal
-                                    val targetIndex = targetState.ordinal
-                                    if (targetIndex > initialIndex) {
-                                        (slideInHorizontally { fullWidth -> fullWidth } + fadeIn())
-                                            .togetherWith(slideOutHorizontally { fullWidth -> -fullWidth } + fadeOut())
-                                    } else {
-                                        (slideInHorizontally { fullWidth -> -fullWidth } + fadeIn())
-                                            .togetherWith(slideOutHorizontally { fullWidth -> fullWidth } + fadeOut())
-                                    }
+                        if (requiresAiSetup) {
+                            AiConnectPromptCard(
+                                title = aiConnectStrings.tileTitle,
+                                body = strings.inspectGeminiRequiredMovies,
+                                buttonLabel = aiConnectStrings.connectButton,
+                                onOpenAiConnect = {
+                                    performHaptic(view, "light")
+                                    navController.navigateToSettings()
                                 },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp),
-                                label = "GeminiOnboardingStep"
-                            ) { step ->
-                                when (step) {
-                                    MoviesTvOnboardingStep.Instruction -> GeminiInstructionCard(
-                                        strings = strings,
-                                        onOpenAiStudio = {
-                                            context.startActivity(
-                                                Intent(
-                                                    Intent.ACTION_VIEW,
-                                                    Uri.parse("https://aistudio.google.com/app/apikey")
-                                                )
-                                            )
-                                        },
-                                        onNext = {
-                                            performHaptic(view, "light")
-                                            viewModel.openGeminiKeyInputStep()
-                                        },
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-
-                                    MoviesTvOnboardingStep.KeyInput -> GeminiKeySetupCard(
-                                        input = geminiKeyState.input,
-                                        status = geminiKeyState.status,
-                                        statusDetail = geminiKeyState.statusDetail,
-                                        onInputChanged = viewModel::onGeminiKeyInputChanged,
-                                        onBack = {
-                                            performHaptic(view, "light")
-                                            viewModel.returnToGeminiInstruction()
-                                        },
-                                        onCheckAndSaveKey = {
-                                            performHaptic(view, "light")
-                                            viewModel.checkAndSaveGeminiKey()
-                                        },
-                                        strings = strings,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-
-                                    MoviesTvOnboardingStep.CheckError -> GeminiCheckErrorCard(
-                                        strings = strings,
-                                        details = geminiKeyState.statusDetail,
-                                        onNext = {
-                                            performHaptic(view, "light")
-                                            viewModel.returnToGeminiInstruction()
-                                        },
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                }
-                            }
+                                    .padding(horizontal = 16.dp)
+                            )
                         } else {
                             Box(
                                 modifier = Modifier
@@ -387,7 +300,7 @@ fun InspectScreen(
                                 .weight(1f)
                                 .fillMaxWidth()
                         ) {
-                            if (!requiresGeminiSetup) {
+                            if (!requiresAiSetup) {
                                 Text(
                                     text = strings.inspectPoweredByFooter,
                                     style = MaterialTheme.typography.labelSmall,
@@ -481,10 +394,11 @@ fun InspectScreen(
 }
 
 @Composable
-private fun GeminiInstructionCard(
-    strings: com.example.myapplication.data.models.UiStrings,
-    onOpenAiStudio: () -> Unit,
-    onNext: () -> Unit,
+private fun AiConnectPromptCard(
+    title: String,
+    body: String,
+    buttonLabel: String,
+    onOpenAiConnect: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val shape = RoundedCornerShape(16.dp)
@@ -494,185 +408,23 @@ private fun GeminiInstructionCard(
             .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f), shape)
             .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.38f))
             .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(
-            text = strings.inspectGeminiInstructionTitle,
+            text = title,
             style = MaterialTheme.typography.titleMedium,
             color = Color.White
         )
         Text(
-            text = strings.inspectGeminiInstructionBody,
+            text = body,
             style = MaterialTheme.typography.bodyMedium,
             color = Color.White.copy(alpha = 0.9f)
         )
-        Text(
-            "1. ${strings.inspectGeminiInstructionStepOpen}",
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color.White
-        )
-        Text(
-            "2. ${strings.inspectGeminiInstructionStepCreate}",
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color.White
-        )
-        Text(
-            "3. ${strings.inspectGeminiInstructionStepCopy}",
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color.White
-        )
-
-        TextButton(
-            onClick = onOpenAiStudio,
-            shape = RoundedCornerShape(50),
-            colors = ButtonDefaults.textButtonColors(
-                containerColor = Color.White,
-                contentColor = MaterialTheme.colorScheme.primary
-            )
-        ) {
-            Text(strings.inspectGeminiGetKeyOneClick)
-        }
         Button(
-            onClick = onNext,
+            onClick = onOpenAiConnect,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(strings.inspectGeminiNextStep)
-        }
-    }
-}
-
-@Composable
-private fun GeminiKeySetupCard(
-    input: String,
-    status: GeminiKeyStatus?,
-    statusDetail: String?,
-    onInputChanged: (String) -> Unit,
-    onBack: () -> Unit,
-    onCheckAndSaveKey: () -> Unit,
-    strings: com.example.myapplication.data.models.UiStrings,
-    modifier: Modifier = Modifier
-) {
-    val shape = RoundedCornerShape(16.dp)
-    Column(
-        modifier = modifier
-            .clip(shape)
-            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f), shape)
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.38f))
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            IconButton(
-                onClick = onBack,
-                modifier = Modifier.size(28.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = strings.inspectBack,
-                    tint = Color.White
-                )
-            }
-            Text(
-                text = strings.inspectGeminiKeyTitle,
-                style = MaterialTheme.typography.titleSmall,
-                color = Color.White
-            )
-        }
-        OutlinedTextField(
-            value = input,
-            onValueChange = onInputChanged,
-            singleLine = true,
-            shape = RoundedCornerShape(28.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(62.dp),
-            placeholder = {
-                Text(
-                    text = strings.inspectGeminiKeyInputPlaceholder,
-                    color = Color.White.copy(alpha = 0.6f)
-                )
-            },
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White,
-                focusedBorderColor = Color.White,
-                unfocusedBorderColor = Color.White.copy(alpha = 0.6f),
-                focusedLabelColor = Color.White,
-                unfocusedLabelColor = Color.White.copy(alpha = 0.8f),
-                cursorColor = Color.White
-            )
-        )
-        Text(
-            text = strings.inspectGeminiTenSecondsHint,
-            style = MaterialTheme.typography.labelMedium,
-            color = Color.White.copy(alpha = 0.85f)
-        )
-        Button(
-            onClick = onCheckAndSaveKey,
-            modifier = Modifier.align(Alignment.End)
-        ) {
-            Text(strings.inspectGeminiCheckAndSave)
-        }
-
-        val statusMessage = when (status) {
-            GeminiKeyStatus.InvalidFormat -> strings.inspectGeminiInvalidFormat
-            GeminiKeyStatus.Saved -> strings.inspectGeminiSaved
-            GeminiKeyStatus.CheckFailed -> statusDetail ?: strings.inspectGeminiSaveError
-            GeminiKeyStatus.Checking -> strings.inspectGeminiCheckingKey
-            GeminiKeyStatus.InsertedFromClipboard -> strings.inspectGeminiKeyFoundInserted
-            null -> null
-        }
-        if (statusMessage != null) {
-            Text(
-                text = statusMessage,
-                color = if (status == GeminiKeyStatus.InvalidFormat || status == GeminiKeyStatus.CheckFailed) {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    MaterialTheme.colorScheme.primary
-                },
-                style = MaterialTheme.typography.labelLarge
-            )
-        }
-    }
-}
-
-@Composable
-private fun GeminiCheckErrorCard(
-    strings: com.example.myapplication.data.models.UiStrings,
-    details: String?,
-    onNext: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val shape = RoundedCornerShape(16.dp)
-    Column(
-        modifier = modifier
-            .clip(shape)
-            .border(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.55f), shape)
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.38f))
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Text(
-            text = strings.inspectGeminiCheckErrorTitle,
-            style = MaterialTheme.typography.titleMedium,
-            color = Color.White
-        )
-        if (!details.isNullOrBlank()) {
-            Text(
-                text = details,
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.9f)
-            )
-        }
-        Button(
-            onClick = onNext,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(strings.inspectGeminiBackToInstruction)
+            Text(buttonLabel)
         }
     }
 }

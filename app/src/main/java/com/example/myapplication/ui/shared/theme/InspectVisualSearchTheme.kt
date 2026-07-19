@@ -5,23 +5,23 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-private val InspectVisualSearchPrimary = Color(0xFF3B99FF)
+private val InspectVisualSearchPrimary = Color(0xFFF16001)
 
 fun inspectVisualSearchDarkColorScheme() = darkColorScheme(
     primary = InspectVisualSearchPrimary,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFF1E3A55),
+    primaryContainer = Color(0xFF4A2B18),
     onPrimaryContainer = Color.White,
-    secondary = Color(0xFF98989E),
+    secondary = Color(0xFFA7A7A7),
     onSecondary = Color.White,
-    background = Color(0xFF050508),
+    background = Color(0xFF050505),
     onBackground = Color.White,
-    surface = Color(0xFF151820),
+    surface = Color(0xFF151515),
     onSurface = Color.White,
-    surfaceVariant = Color(0xFF252A33),
-    onSurfaceVariant = Color(0xFFC4C4CC),
+    surfaceVariant = Color(0xFF282828),
+    onSurfaceVariant = Color(0xFFC6C6C6),
     outline = Color.White.copy(alpha = 0.28f),
-    error = Color(0xFFFF8A80),
+    error = Color(0xFFFF6B5E),
     onError = Color(0xFF1A0000)
 )
 

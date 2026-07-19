@@ -50,6 +50,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -84,6 +85,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -125,7 +127,10 @@ import com.example.myapplication.ui.shared.theme.SquircleShape
 import com.example.myapplication.utils.DevRepairDbStrings
 import com.example.myapplication.utils.GithubUpdateStrings
 import com.example.myapplication.utils.formatApkSizeLabel
+import com.example.myapplication.utils.getAiConnectStrings
 import com.example.myapplication.utils.getDevRepairDbStrings
+import com.example.myapplication.utils.getTitleDubbingStrings
+import com.example.myapplication.utils.TitleDubbingStrings
 import com.example.myapplication.utils.getGithubUpdateStrings
 import com.example.myapplication.utils.getStrings
 import com.example.myapplication.utils.performHaptic
@@ -167,9 +172,12 @@ fun SettingsScreen(
 
     val strings = getStrings(uiState.language)
     val devRepairStrings = getDevRepairDbStrings(uiState.language)
+    val titleDubbingStrings = getTitleDubbingStrings(uiState.language)
     val githubUpdateStrings = getGithubUpdateStrings(uiState.language)
+    val aiConnectStrings = getAiConnectStrings(uiState.language)
 
     var showCloudSheet by remember { mutableStateOf(false) }
+    var showAiConnectSheet by remember { mutableStateOf(false) }
     var showContactSheet by remember { mutableStateOf(false) }
     var showUpdateChangelogSheet by remember { mutableStateOf(false) }
     var showFdroidUpdateDialog by remember { mutableStateOf(false) }
@@ -187,16 +195,18 @@ fun SettingsScreen(
     ) { viewModel.onReturnedFromInstallSettings(context) }
 
     BackHandler(
-        enabled = showCloudSheet || showContactSheet || showUpdateChangelogSheet || activePicker != null ||
-            uiState.showRepairDbLogDialog || showFdroidUpdateDialog || showGithubUpdatesEnableDialog,
+        enabled = showCloudSheet || showAiConnectSheet || showContactSheet || showUpdateChangelogSheet || activePicker != null ||
+            uiState.showRepairDbLogDialog || uiState.showTitleDubbingNoAiDialog || showFdroidUpdateDialog || showGithubUpdatesEnableDialog,
     ) {
         when {
             showGithubUpdatesEnableDialog -> showGithubUpdatesEnableDialog = false
             showFdroidUpdateDialog -> showFdroidUpdateDialog = false
+            uiState.showTitleDubbingNoAiDialog -> viewModel.dismissTitleDubbingNoAiDialog()
             uiState.showRepairDbLogDialog -> viewModel.discardRepairDbLog()
             activePicker != null -> activePicker = null
             else -> {
                 showCloudSheet = false
+                showAiConnectSheet = false
                 showContactSheet = false
                 showUpdateChangelogSheet = false
             }
@@ -205,7 +215,7 @@ fun SettingsScreen(
 
     // Мягкий блюр фона под модальными листами (§10, но без ударной физики — тут sheet).
     val blurRadius by animateDpAsState(
-        targetValue = if (showCloudSheet || showContactSheet || showUpdateChangelogSheet) 16.dp else 0.dp,
+        targetValue = if (showCloudSheet || showAiConnectSheet || showContactSheet || showUpdateChangelogSheet) 16.dp else 0.dp,
         animationSpec = tween(300),
         label = "backgroundBlur"
     )
@@ -220,12 +230,28 @@ fun SettingsScreen(
         Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
         viewModel.clearRepairDbMessage()
     }
+    LaunchedEffect(uiState.titleDubbingMessage) {
+        val msg = uiState.titleDubbingMessage ?: return@LaunchedEffect
+        Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+        viewModel.clearTitleDubbingMessage()
+    }
 
     if (uiState.showRepairDbLogDialog) {
         RepairDbLogDialog(
             devRepairStrings = devRepairStrings,
             onCreateLog = { performHaptic(view, "light"); viewModel.exportRepairDbLog(context) },
             onDismiss = { performHaptic(view, "light"); viewModel.discardRepairDbLog() },
+        )
+    }
+    if (uiState.showTitleDubbingNoAiDialog) {
+        TitleDubbingNoAiDialog(
+            strings = titleDubbingStrings,
+            onConnect = {
+                performHaptic(view, "light")
+                viewModel.dismissTitleDubbingNoAiDialog()
+                showAiConnectSheet = true
+            },
+            onDismiss = { performHaptic(view, "light"); viewModel.dismissTitleDubbingNoAiDialog() },
         )
     }
     if (showFdroidUpdateDialog) {
@@ -253,9 +279,10 @@ fun SettingsScreen(
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
     IosSheetScaffold(
-        sheetVisible = showCloudSheet || showContactSheet || showUpdateChangelogSheet || activePicker != null,
+        sheetVisible = showCloudSheet || showAiConnectSheet || showContactSheet || showUpdateChangelogSheet || activePicker != null,
         onDismiss = {
             showCloudSheet = false
+            showAiConnectSheet = false
             showContactSheet = false
             showUpdateChangelogSheet = false
             activePicker = null
@@ -265,6 +292,13 @@ fun SettingsScreen(
         showGrabber = true,
         content = {
       Box(modifier = Modifier.fillMaxSize()) {
+        // Единый backdrop: список настроек пишет в него свой контент через layerBackdrop,
+        // а плавающие стеклянные элементы (шапка, Share-FAB) сэмплируют его → настоящее
+        // жидкое стекло с преломлением контента под ними (как бегунок рейтинга сэмплирует трек).
+        val backdrop = rememberLayerBackdrop {
+            drawRect(bg)
+            drawContent()
+        }
         with(sharedTransitionScope) {
             Box(
                 modifier = Modifier
@@ -282,10 +316,6 @@ fun SettingsScreen(
                     .clip(SquircleShape(IosDesign.RadiusLg))
                     .background(bg)
             ) {
-                val backdrop = rememberLayerBackdrop {
-                    drawRect(bg)
-                    drawContent()
-                }
                 val listState = rememberLazyListState()
 
                 LazyColumn(
@@ -360,6 +390,17 @@ fun SettingsScreen(
                                         iconWell = false,
                                         showChevron = true,
                                         onClick = { performHaptic(view, "light"); showCloudSheet = true },
+                                    )
+                                },
+                                {
+                                    IosRow(
+                                        title = aiConnectStrings.tileTitle,
+                                        subtitle = aiConnectStrings.tileSubtitle,
+                                        isDark = isDark,
+                                        iconRes = R.drawable.ic_ai_sparkle,
+                                        iconWell = false,
+                                        showChevron = true,
+                                        onClick = { performHaptic(view, "light"); showAiConnectSheet = true },
                                     )
                                 },
                                 {
@@ -459,6 +500,7 @@ fun SettingsScreen(
                                 strings = strings,
                                 githubUpdateStrings = githubUpdateStrings,
                                 devRepairStrings = devRepairStrings,
+                                titleDubbingStrings = titleDubbingStrings,
                                 uiState = uiState,
                                 isDark = isDark,
                                 onMirrorDbToggle = { performHaptic(view, "light"); viewModel.setDevMirrorDb(it) },
@@ -474,6 +516,7 @@ fun SettingsScreen(
                                 onExportPdf = { performHaptic(view, "light"); viewModel.exportCollectionPdf(context) },
                                 onImportDb = { performHaptic(view, "light"); importDbPicker.launch("*/*") },
                                 onRepairDb = { performHaptic(view, "light"); viewModel.repairDatabase() },
+                                onTitleDubbing = { performHaptic(view, "light"); viewModel.runTitleDubbing() },
                             )
                         }
                     }
@@ -517,22 +560,31 @@ fun SettingsScreen(
                         .align(Alignment.BottomEnd)
                         .padding(bottom = 24.dp, end = 24.dp)
                 ) {
-                    val backdrop = rememberLayerBackdrop { drawRect(bg); drawContent() }
+                    // Тот же рецепт жидкого стекла, что у бегунка рейтинга: сэмплируем
+                    // общий backdrop списка, слабый blur + крупная линза преломляют контент
+                    // под кнопкой, сверху — стеклянный блик и светлая окантовка.
                     Box(
                         modifier = Modifier
                             .size(58.dp)
+                            .clip(CircleShape)
                             .drawBackdrop(
                                 backdrop = backdrop,
                                 shape = { CircleShape },
                                 effects = {
                                     vibrancy()
-                                    blur(32f.dp.toPx())
-                                    lens(8f.dp.toPx(), 48f.dp.toPx())
+                                    blur(2f.dp.toPx())
+                                    lens(16f.dp.toPx(), 44f.dp.toPx())
                                 },
-                                onDrawSurface = { drawRect(Color.White.copy(alpha = 0.1f)) }
                             )
-                            .clip(CircleShape)
-                            .border(0.5.dp, Color.White.copy(alpha = 0.3f), CircleShape)
+                            .background(
+                                Brush.verticalGradient(
+                                    0f to Color.White.copy(alpha = 0.22f),
+                                    0.5f to Color.Transparent,
+                                    1f to Color.Black.copy(alpha = 0.10f),
+                                ),
+                                CircleShape,
+                            )
+                            .border(1.dp, Color.White.copy(alpha = 0.45f), CircleShape)
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null,
@@ -620,6 +672,9 @@ fun SettingsScreen(
                     showCloudSheet -> CloudSettingsSheet(
                         onDismiss = { showCloudSheet = false },
                         onLogout = { showCloudSheet = false; navController.navigateToWelcome() },
+                    )
+                    showAiConnectSheet -> AiConnectSheet(
+                        onDismiss = { showAiConnectSheet = false },
                     )
                     showContactSheet -> ContactSheet(
                         onDismiss = { showContactSheet = false },
@@ -710,6 +765,7 @@ private fun DeveloperGroups(
     strings: UiStrings,
     githubUpdateStrings: GithubUpdateStrings,
     devRepairStrings: DevRepairDbStrings,
+    titleDubbingStrings: TitleDubbingStrings,
     uiState: SettingsUiState,
     isDark: Boolean,
     onMirrorDbToggle: (Boolean) -> Unit,
@@ -721,6 +777,7 @@ private fun DeveloperGroups(
     onExportPdf: () -> Unit,
     onImportDb: () -> Unit,
     onRepairDb: () -> Unit,
+    onTitleDubbing: () -> Unit,
 ) {
     val devIcon = Color(0xFF8E8E93)
     Column(verticalArrangement = Arrangement.spacedBy(30.dp)) {
@@ -811,6 +868,21 @@ private fun DeveloperGroups(
                         isDark = isDark, onClick = onRepairDb,
                     )
                 },
+                {
+                    val dubSubtitle = if (uiState.isTitleDubbing && uiState.titleDubbingTotal > 0) {
+                        titleDubbingStrings.runningTemplate.format(
+                            uiState.titleDubbingProcessed,
+                            uiState.titleDubbingTotal,
+                        )
+                    } else {
+                        titleDubbingStrings.subtitle
+                    }
+                    DevActionRow(
+                        title = titleDubbingStrings.title, subtitle = dubSubtitle,
+                        icon = Icons.Filled.Translate, iconBg = devIcon, isLoading = uiState.isTitleDubbing,
+                        isDark = isDark, onClick = onTitleDubbing,
+                    )
+                },
             ),
         )
     }
@@ -838,6 +910,44 @@ private fun DevActionRow(
         } else null,
         onClick = if (isLoading) null else onClick,
     )
+}
+
+@Composable
+private fun TitleDubbingNoAiDialog(
+    strings: TitleDubbingStrings,
+    onConnect: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val isDark = isAppInDarkTheme()
+    val accent = if (isDark) BrandBlueSoft else BrandRed
+    val surface = IosDesign.rowBackground(isDark)
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    val muted = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+    val shape = SquircleShape(IosDesign.RadiusMd)
+
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        IosDialogAnimatedContent {
+            Surface(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 40.dp),
+                shape = shape,
+                color = surface,
+                tonalElevation = 0.dp,
+                shadowElevation = if (isDark) 0.dp else 8.dp,
+            ) {
+                DialogBody(
+                    title = strings.noAiTitle,
+                    body = strings.noAiMessage,
+                    cancel = strings.noAiCancel,
+                    confirm = strings.noAiConnect,
+                    accent = accent,
+                    onSurface = onSurface,
+                    muted = muted,
+                    onDismiss = onDismiss,
+                    onConfirm = onConnect,
+                )
+            }
+        }
+    }
 }
 
 @Composable

@@ -17,13 +17,13 @@
                 android:startY="200"
                 android:type="linear">
                 <item
-                    android:color="#FF9B59D0"
+                    android:color="#FFC10801"
                     android:offset="0" />
                 <item
-                    android:color="#FF3B4FC7"
+                    android:color="#FFE85002"
                     android:offset="0.5" />
                 <item
-                    android:color="#FF3EC5F7"
+                    android:color="#FFFFB067"
                     android:offset="1" />
             </gradient>
         </aapt:attr>

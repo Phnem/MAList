@@ -44,7 +44,9 @@ class ImportAnimeDbUseCase(
                             ?: UUID.randomUUID().toString()
 
                         val episodes = cursor.safeInt("episodes")
-                        val rating = cursor.safeInt("rating")
+                        // Импортируемая БД может быть старой (звёзды 1..5) или новой (×10):
+                        // storedToDisplay различает по диапазону.
+                        val rating = com.example.myapplication.data.models.RatingScale.fromImportedStored(cursor.safeInt("rating"))
                         val dateAdded = cursor.safeLong("dateAdded").takeIf { it > 0L } ?: now
                         val isFavorite = cursor.safeInt("isFavorite") == 1
                         val imagePath = cursor.safeNullableString("imagePath")

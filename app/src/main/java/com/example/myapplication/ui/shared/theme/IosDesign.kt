@@ -46,20 +46,22 @@ object IosDesign {
      * Единая палитра акцентов icon-well по СМЫСЛОВЫМ категориям (не случайные цвета).
      * Один цвет = одна категория во всём приложении. Saturation ~60–75%, спокойные тона.
      */
+    // Монохромно-оранжевая брендовая гамма: категории различаются оттенком/светлотой
+    // внутри одной тёплой палитры (#E85002 + серые), белая пиктограмма остаётся читаемой.
     object Category {
-        val Account = Color(0xFF007AFF)      // синий
-        val Cloud = Color(0xFF34AADC)        // голубой (синхронизация/облако)
-        val Language = Color(0xFFAF52DE)     // фиолетовый
-        val Appearance = Color(0xFFFF9500)   // оранжевый (внешний вид)
-        val Media = Color(0xFF5856D6)        // индиго (тип контента/медиа)
-        val Notifications = Color(0xFFFF3B30) // красный
-        val Security = Color(0xFFFF3B30)     // красный
-        val Network = Color(0xFF34C759)      // зелёный
-        val Ai = Color(0xFFAF52DE)           // фиолетовый
-        val Storage = Color(0xFF8E8E93)      // серый
-        val Update = Color(0xFF30B0C7)       // teal
-        val Support = Color(0xFF34C759)      // зелёный (связь/поддержка)
-        val Donate = Color(0xFFFF2D55)       // розовый
+        val Account = Color(0xFFE85002)      // фирменный оранжевый
+        val Cloud = Color(0xFF646464)        // серый (синхронизация/облако)
+        val Language = Color(0xFFB0562A)     // обожжённая глина
+        val Appearance = Color(0xFFF16001)   // яркий оранжевый (внешний вид)
+        val Media = Color(0xFF333333)        // тёмно-серый (тип контента/медиа)
+        val Notifications = Color(0xFFC10801) // глубокий красный
+        val Security = Color(0xFFC10801)     // глубокий красный
+        val Network = Color(0xFFA98963)      // тёмный песочный
+        val Ai = Color(0xFF8A8A8E)           // средне-серый
+        val Storage = Color(0xFF77716C)      // тёплый серый
+        val Update = Color(0xFFD08A4A)       // янтарный
+        val Support = Color(0xFFB08968)      // светлая глина (связь/поддержка)
+        val Donate = Color(0xFFD93A2B)       // алый (осветлённый #C10801)
     }
 
     fun squircleMd() = SquircleShape(RadiusMd)
@@ -73,30 +75,30 @@ object IosDesign {
     /** Scrim по умолчанию (§3.2): чёрный, alpha 0.30–0.45; для алертов — 0.4 (§10). */
     fun scrim(alpha: Float = 0.4f): Color = Color.Black.copy(alpha = alpha)
 
-    // ---- Палитра сгруппированного списка. Используем фирменную палитру приложения
-    // (тёмно-синий фон + чуть более светлый синий для карточек), а не чистый чёрный/серый. ----
-    /** Фон экрана за списком: тёмно-синий [DarkBackground] (#0D1117) / светлый [LightBackground]. */
+    // ---- Палитра сгруппированного списка. Фирменная монохромная гамма:
+    // чёрный базовый фон + нейтрально-серые ступени для карточек. ----
+    /** Фон экрана за списком: чёрный [DarkBackground] (#000000) / светлый [LightBackground]. */
     fun groupedBackground(isDark: Boolean): Color =
         if (isDark) DarkBackground else LightBackground
 
-    /** Фон карточки/строки: чуть более светлый синий [OverlayThemeTokens.TileBackgroundDark] / белый. */
+    /** Фон карточки/строки: серая ступень [OverlayThemeTokens.TileBackgroundDark] / белый. */
     fun rowBackground(isDark: Boolean): Color =
         if (isDark) OverlayThemeTokens.TileBackgroundDark else LightSurface
 
     /**
      * Поверхность bottom sheet — iOS elevated-палитра (HIG Dark Mode / WWDC19 §Semantic colors):
      * системная шторка в тёмной теме рисуется НЕ base-фоном, а elevated-цветом на ступень светлее
-     * (у Apple: base #000 → sheet #1C1C1E → группы #2C2C2E). Перенос на синюю гамму Vetro:
-     * base #0D1117 → sheet #12161F → группы/строки #161B26 ([rowBackground]) — иерархия
+     * (у Apple: base #000 → sheet #1C1C1E → группы #2C2C2E). Перенос на монохромную гамму Vetro:
+     * base #000000 → sheet #111111 → группы/строки #171717 ([rowBackground]) — иерархия
      * «затемнённый фон < панель < карточки» сохраняется автоматически на всех шторках.
      * Light: iOS grouped-sheet = #F2F2F7-фон с белыми группами → наш [LightBackground].
      */
     fun sheetSurface(isDark: Boolean): Color =
-        if (isDark) Color(0xFF12161F) else LightBackground
+        if (isDark) Color(0xFF111111) else LightBackground
 
     /** Заливка вложенной карточки-опции поверх [rowBackground] (ещё на тон светлее). */
     fun elevatedCard(isDark: Boolean): Color =
-        if (isDark) DarkSurfaceVariant else Color(0xFFF0F0F4)
+        if (isDark) DarkSurfaceVariant else Color(0xFFF0F0F0)
 
     /**
      * Разделитель. Android-поправка (§3.3): 1dp сплошная линия с alpha ~0.15–0.2 вместо

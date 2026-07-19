@@ -6,6 +6,7 @@ import com.example.myapplication.data.local.AnimeDatabase
 import com.example.myapplication.data.models.Anime
 import com.example.myapplication.data.models.AnimeUpdate
 import com.example.myapplication.data.models.MediaType
+import com.example.myapplication.data.models.RatingScale
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
@@ -35,8 +36,10 @@ class AnimeLocalDataSource(
                         Anime(
                             id = row.id,
                             title = row.title,
+                            titleEn = row.title_en,
+                            titleRu = row.title_ru,
                             episodes = row.episodes.toInt(),
-                            rating = row.rating.toInt(),
+                            rating = RatingScale.storedToDisplay(row.rating),
                             imageFileName = row.imagePath,
                             orderIndex = row.orderIndex.toInt(),
                             dateAdded = row.dateAdded,
@@ -62,8 +65,10 @@ class AnimeLocalDataSource(
                         Anime(
                             id = row.id,
                             title = row.title,
+                            titleEn = row.title_en,
+                            titleRu = row.title_ru,
                             episodes = row.episodes.toInt(),
-                            rating = row.rating.toInt(),
+                            rating = RatingScale.storedToDisplay(row.rating),
                             imageFileName = row.imagePath,
                             orderIndex = row.orderIndex.toInt(),
                             dateAdded = row.dateAdded,
@@ -102,6 +107,8 @@ class AnimeLocalDataSource(
                 mapRowToAnime(
                     id = row.id,
                     title = row.title,
+                    titleEn = row.title_en,
+                    titleRu = row.title_ru,
                     imagePath = row.imagePath,
                     episodes = row.episodes,
                     rating = row.rating,
@@ -128,6 +135,8 @@ class AnimeLocalDataSource(
                 mapRowToAnime(
                     id = row.id,
                     title = row.title,
+                    titleEn = row.title_en,
+                    titleRu = row.title_ru,
                     imagePath = row.imagePath,
                     episodes = row.episodes,
                     rating = row.rating,
@@ -154,6 +163,8 @@ class AnimeLocalDataSource(
     private fun mapRowToAnime(
         id: String,
         title: String,
+        titleEn: String? = null,
+        titleRu: String? = null,
         imagePath: String?,
         episodes: Long,
         rating: Long,
@@ -172,8 +183,10 @@ class AnimeLocalDataSource(
     ): Anime = Anime(
         id = id,
         title = title,
+        titleEn = titleEn,
+        titleRu = titleRu,
         episodes = episodes.toInt(),
-        rating = rating.toInt(),
+        rating = RatingScale.storedToDisplay(rating),
         imageFileName = imagePath,
         orderIndex = orderIndex.toInt(),
         dateAdded = dateAdded,
@@ -197,7 +210,7 @@ class AnimeLocalDataSource(
                 title = anime.title,
                 imagePath = anime.imageFileName,
                 episodes = anime.episodes.toLong(),
-                rating = anime.rating.toLong(),
+                rating = RatingScale.displayToStored(anime.rating).toLong(),
                 status = "watching",
                 isFavorite = if (anime.isFavorite) 1L else 0L,
                 updatedAt = System.currentTimeMillis(),
@@ -215,7 +228,9 @@ class AnimeLocalDataSource(
                 isPrivate = 0L,
                 encryptionIv = null,
                 deletedAt = null,
-                mediaType = anime.mediaType.name
+                mediaType = anime.mediaType.name,
+                title_en = anime.titleEn,
+                title_ru = anime.titleRu
             )
 
             // Insert tags
@@ -235,7 +250,7 @@ class AnimeLocalDataSource(
                 title = anime.title,
                 imagePath = anime.imageFileName,
                 episodes = anime.episodes.toLong(),
-                rating = anime.rating.toLong(),
+                rating = RatingScale.displayToStored(anime.rating).toLong(),
                 status = "watching",
                 isFavorite = if (anime.isFavorite) 1L else 0L,
                 updatedAt = System.currentTimeMillis(),
@@ -284,7 +299,7 @@ class AnimeLocalDataSource(
                     title = anime.title,
                     imagePath = anime.imageFileName,
                     episodes = anime.episodes.toLong(),
-                    rating = anime.rating.toLong(),
+                    rating = RatingScale.displayToStored(anime.rating).toLong(),
                     status = "watching",
                     isFavorite = if (anime.isFavorite) 1L else 0L,
                     updatedAt = System.currentTimeMillis(),
@@ -302,7 +317,9 @@ class AnimeLocalDataSource(
                     isPrivate = 0L,
                     encryptionIv = null,
                     deletedAt = null,
-                    mediaType = anime.mediaType.name
+                    mediaType = anime.mediaType.name,
+                    title_en = anime.titleEn,
+                    title_ru = anime.titleRu
                 )
                 anime.tags.forEach { tag ->
                     db().animeQueries.insertAnimeTag(
@@ -402,6 +419,125 @@ class AnimeLocalDataSource(
     suspend fun setShikimoriId(animeId: String, shikimoriId: Int) {
         db().animeQueries.setShikimoriId(
             shikimori_id = shikimoriId.toLong(),
+            updatedAt = System.currentTimeMillis(),
+            id = animeId
+        )
+        mirrorCoordinator.requestExportIfEnabled()
+    }
+
+    /** Строки без EN-названия и без отметки попытки — кандидаты для обогащения (Stage 7/8). */
+    fun getAnimeNeedingTitleEn(limit: Int): List<Anime> {
+        return db().animeQueries.selectNeedingTitleEn(limit.toLong())
+            .executeAsList()
+            .map { row ->
+                mapRowToAnime(
+                    id = row.id,
+                    title = row.title,
+                    titleEn = row.title_en,
+                    titleRu = row.title_ru,
+                    imagePath = row.imagePath,
+                    episodes = row.episodes,
+                    rating = row.rating,
+                    orderIndex = row.orderIndex,
+                    dateAdded = row.dateAdded,
+                    isFavorite = row.isFavorite,
+                    categoryType = row.categoryType,
+                    comment = row.comment,
+                    anilistId = row.anilist_id,
+                    malId = row.mal_id,
+                    shikimoriId = row.shikimori_id,
+                    anilistNotFoundAt = row.anilist_not_found_at,
+                    shikimoriNotFoundAt = row.shikimori_not_found_at,
+                    mediaType = row.mediaType
+                )
+            }
+    }
+
+    /** Сколько записей ещё ждут EN-названия (для прогресса дубляжа). */
+    fun countAnimeNeedingTitleEn(): Int {
+        return db().animeQueries.countNeedingTitleEn().executeAsOne().toInt()
+    }
+
+    /** Сброс отметок «проверено» у ненайденных — полный перескан дубляжа (dev-кнопка, Stage 9). */
+    suspend fun resetTitleEnChecks() {
+        db().animeQueries.resetTitleEnChecks(
+            updatedAt = System.currentTimeMillis()
+        )
+        mirrorCoordinator.requestExportIfEnabled()
+    }
+
+    /** Записи без RU-названия и без отметки попытки — кандидаты обратного обогащения (Stage 10). */
+    fun getAnimeNeedingTitleRu(limit: Int): List<Anime> {
+        return db().animeQueries.selectNeedingTitleRu(limit.toLong())
+            .executeAsList()
+            .map { row ->
+                mapRowToAnime(
+                    id = row.id,
+                    title = row.title,
+                    titleEn = row.title_en,
+                    titleRu = row.title_ru,
+                    imagePath = row.imagePath,
+                    episodes = row.episodes,
+                    rating = row.rating,
+                    orderIndex = row.orderIndex,
+                    dateAdded = row.dateAdded,
+                    isFavorite = row.isFavorite,
+                    categoryType = row.categoryType,
+                    comment = row.comment,
+                    anilistId = row.anilist_id,
+                    malId = row.mal_id,
+                    shikimoriId = row.shikimori_id,
+                    anilistNotFoundAt = row.anilist_not_found_at,
+                    shikimoriNotFoundAt = row.shikimori_not_found_at,
+                    mediaType = row.mediaType
+                )
+            }
+    }
+
+    /** Сколько записей ещё ждут RU-названия. */
+    fun countAnimeNeedingTitleRu(): Int {
+        return db().animeQueries.countNeedingTitleRu().executeAsOne().toInt()
+    }
+
+    suspend fun resetTitleRuChecks() {
+        db().animeQueries.resetTitleRuChecks(
+            updatedAt = System.currentTimeMillis()
+        )
+        mirrorCoordinator.requestExportIfEnabled()
+    }
+
+    suspend fun setTitleRu(animeId: String, titleRu: String, atMillis: Long = System.currentTimeMillis()) {
+        db().animeQueries.setTitleRu(
+            title_ru = titleRu,
+            title_ru_checked_at = atMillis,
+            updatedAt = System.currentTimeMillis(),
+            id = animeId
+        )
+        mirrorCoordinator.requestExportIfEnabled()
+    }
+
+    suspend fun markTitleRuChecked(animeId: String, atMillis: Long = System.currentTimeMillis()) {
+        db().animeQueries.markTitleRuChecked(
+            title_ru_checked_at = atMillis,
+            updatedAt = System.currentTimeMillis(),
+            id = animeId
+        )
+        mirrorCoordinator.requestExportIfEnabled()
+    }
+
+    suspend fun setTitleEn(animeId: String, titleEn: String, atMillis: Long = System.currentTimeMillis()) {
+        db().animeQueries.setTitleEn(
+            title_en = titleEn,
+            title_en_checked_at = atMillis,
+            updatedAt = System.currentTimeMillis(),
+            id = animeId
+        )
+        mirrorCoordinator.requestExportIfEnabled()
+    }
+
+    suspend fun markTitleEnChecked(animeId: String, atMillis: Long = System.currentTimeMillis()) {
+        db().animeQueries.markTitleEnChecked(
+            title_en_checked_at = atMillis,
             updatedAt = System.currentTimeMillis(),
             id = animeId
         )

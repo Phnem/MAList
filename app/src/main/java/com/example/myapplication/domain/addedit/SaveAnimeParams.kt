@@ -6,8 +6,13 @@ package com.example.myapplication.domain.addedit
 data class SaveAnimeParams(
     val animeId: String?,
     val title: String,
+    /** Английское название (вариация). null = нет. */
+    val titleEn: String? = null,
+    /** Русское название (обратное обогащение). Пробрасывается, чтобы редактирование его не затирало. */
+    val titleRu: String? = null,
     val episodes: Int,
-    val rating: Int,
+    /** 10-балльная шкала, одна цифра после запятой (0 = не оценено). */
+    val rating: Float,
     val imageUri: String?,
     val currentImageFileName: String?,
     val orderIndex: Int,

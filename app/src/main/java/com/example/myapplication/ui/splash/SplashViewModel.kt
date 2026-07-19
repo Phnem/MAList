@@ -38,6 +38,10 @@ class SplashViewModel(
     private val _uiState = MutableStateFlow<SplashState>(SplashState.Loading)
     val uiState = _uiState.asStateFlow()
 
+    // true только если в ЭТОМ запуске реально прошла миграция со старой версии (storage/JSON).
+    // Плашку «Перенос обложек» показываем лишь тогда — не при обычной/облачно-наполненной БД.
+    private var isLegacyUpgrade = false
+
     init {
         startAppInitialization()
     }
@@ -55,35 +59,42 @@ class SplashViewModel(
                 legacyCollectionSafMigrator.saveTreeUriAndCopy(uri)
                 imageCompressionMigrator.compressExistingImages()
             }
+            legacyCollectionSafMigrator.markCoverImportResolved()
             finishStartup(legacyFolderPromptDismissed = true)
         }
     }
 
     fun skipLegacyFolderMigration() {
         viewModelScope.launch {
+            legacyCollectionSafMigrator.markCoverImportResolved()
             finishStartup(forceWithoutImages = true)
         }
     }
 
     private fun startAppInitialization() {
         viewModelScope.launch {
-            if (legacyStorageMigrator.isPendingMigration()) {
+            val pendingStorageMigration = legacyStorageMigrator.isPendingMigration()
+            if (pendingStorageMigration) {
                 _uiState.update { SplashState.MigratingStorage }
             }
             withContext(Dispatchers.IO) {
                 legacyStorageMigrator.migrateIfNeeded()
             }
 
-            if (migrationManager.needsJsonMigration()) {
+            val pendingJsonMigration = migrationManager.needsJsonMigration()
+            if (pendingJsonMigration) {
                 _uiState.update { SplashState.MigratingJson }
                 migrationManager.runMigration()
             }
+
+            // Апгрейд со старой версии = была миграция storage или JSON в этом запуске.
+            isLegacyUpgrade = pendingStorageMigration || pendingJsonMigration
 
             withContext(Dispatchers.IO) {
                 legacyCollectionSafMigrator.migrateAllAvailableSources()
             }
 
-            if (legacyCollectionSafMigrator.needsLegacyFolderAccess()) {
+            if (shouldPromptLegacyFolder()) {
                 _uiState.update { SplashState.AwaitingLegacyFolder }
                 return@launch
             }
@@ -96,6 +107,15 @@ class SplashViewModel(
         }
     }
 
+    /**
+     * Плашку «Перенос обложек» показываем только если: это апгрейд со старой версии,
+     * пользователь ещё не разобрался с переносом, и локальных обложек реально не хватает.
+     */
+    private suspend fun shouldPromptLegacyFolder(): Boolean =
+        isLegacyUpgrade &&
+            !legacyCollectionSafMigrator.isCoverImportResolved() &&
+            legacyCollectionSafMigrator.needsLegacyFolderAccess()
+
     private suspend fun finishStartup(
         forceWithoutImages: Boolean = false,
         legacyFolderPromptDismissed: Boolean = false,
@@ -103,7 +123,7 @@ class SplashViewModel(
         if (
             !forceWithoutImages &&
             !legacyFolderPromptDismissed &&
-            legacyCollectionSafMigrator.needsLegacyFolderAccess()
+            shouldPromptLegacyFolder()
         ) {
             _uiState.update { SplashState.AwaitingLegacyFolder }
             return

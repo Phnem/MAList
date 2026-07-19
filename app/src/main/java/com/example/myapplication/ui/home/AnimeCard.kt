@@ -51,6 +51,7 @@ import com.example.myapplication.isAppInDarkTheme
 import com.example.myapplication.ui.shared.fluidClickable
 import com.example.myapplication.ui.shared.theme.SnProFamily
 import com.example.myapplication.ui.shared.theme.LightBorder
+import com.example.myapplication.data.models.RatingScale
 import com.example.myapplication.ui.shared.theme.getRatingColor
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
@@ -60,7 +61,10 @@ import java.io.File
 data class AnimeCardState(
     val id: String,
     val title: String,
-    val rating: Int,
+    /** Английское название (дубляж); показывается второй строкой, если отличается от [title]. */
+    val titleEn: String? = null,
+    /** 10-балльная шкала, 0 = не оценено. */
+    val rating: Float,
     val genres: PersistentList<String>,
     val episodesCount: Int,
     val categoryLabel: String?,
@@ -79,9 +83,9 @@ fun SharedTransitionScope.OneUiAnimeCard(
 ) {
     val isDark = isAppInDarkTheme()
     val borderStroke = if (isDark) Color.White.copy(alpha = 0.15f) else LightBorder
-    val cardBg = if (isDark) Color(0xFF1C1F28) else MaterialTheme.colorScheme.surface
+    val cardBg = if (isDark) Color(0xFF1C1C1C) else MaterialTheme.colorScheme.surface
     val cardShadowColor = if (isDark) Color.Black.copy(alpha = 0.5f) else Color.Black.copy(alpha = 0.08f)
-    val subtitleColor = if (isDark) Color(0xFF9898A0) else Color(0xFF8E8E93)
+    val subtitleColor = if (isDark) Color(0xFFA7A7A7) else Color(0xFF8E8E93)
     val chipBg = if (isDark) Color.Black.copy(alpha = 0.35f) else Color.Black.copy(alpha = 0.08f)
 
     Box(
@@ -122,7 +126,7 @@ fun SharedTransitionScope.OneUiAnimeCard(
                     )
                     .skipToLookaheadSize()
                     .clip(RoundedCornerShape(16.dp))
-                    .background(if (isDark) Color(0xFF2C2C34) else Color(0xFFE8E8ED)),
+                    .background(if (isDark) Color(0xFF2C2C2C) else Color(0xFFE8E8E8)),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -176,32 +180,51 @@ fun SharedTransitionScope.OneUiAnimeCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.Top
                 ) {
-                    Text(
-                        text = state.title,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 17.sp,
-                            lineHeight = 22.sp,
-                            fontFamily = SnProFamily
-                        ),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onSurface,
+                    Column(
                         modifier = Modifier
                             .weight(1f)
                             .padding(end = 8.dp)
-                    )
+                    ) {
+                        Text(
+                            text = state.title,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 17.sp,
+                                lineHeight = 22.sp,
+                                fontFamily = SnProFamily
+                            ),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        val en = state.titleEn?.takeIf {
+                            it.isNotBlank() && !it.equals(state.title, ignoreCase = true)
+                        }
+                        if (en != null) {
+                            Text(
+                                text = en,
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontFamily = SnProFamily,
+                                    fontSize = 12.sp,
+                                ),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = subtitleColor,
+                                modifier = Modifier.padding(top = 2.dp),
+                            )
+                        }
+                    }
                     if (state.rating > 0) {
                         Box(
                             modifier = Modifier
                                 .clip(CircleShape)
                                 .background(
-                                    if (isDark) Color(0xFF0D1117)
+                                    if (isDark) Color(0xFF000000)
                                     else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
                                 )
                         ) {
                             Text(
-                                text = "★ ${state.rating}",
+                                text = "★ ${RatingScale.format(state.rating)}",
                                 style = MaterialTheme.typography.labelMedium.copy(
                                     color = getRatingColor(state.rating),
                                     fontFamily = SnProFamily

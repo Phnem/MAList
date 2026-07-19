@@ -10,8 +10,21 @@ enum class CommentMode { AddButton, Editing, Saved }
 data class AddEditUiState(
     val animeId: String? = null,
     val title: String = "",
+    /** Английское название (вариация). Пустая строка = не задано. */
+    val titleEn: String = "",
+    /** Показывать ли поле английского названия (кнопка «добавить вариацию» / уже есть перевод). */
+    val showTitleEn: Boolean = false,
+    /** Поля, которые не редактируются в UI, но должны пережить сохранение (иначе затрутся). */
+    val titleRu: String? = null,
+    val anilistId: Int? = null,
+    val malId: Int? = null,
+    val shikimoriId: Int? = null,
+    val anilistNotFoundAt: Long? = null,
+    val malNotFoundAt: Long? = null,
+    val shikimoriNotFoundAt: Long? = null,
     val episodes: String = "",
-    val rating: Int = 0,
+    /** 10-балльная шкала с шагом 0.1 (0 = не оценено). */
+    val rating: Float = 0f,
     val selectedTags: List<String> = emptyList(),
     val categoryType: String = "",
     val imageUri: Uri? = null,

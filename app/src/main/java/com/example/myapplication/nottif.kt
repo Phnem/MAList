@@ -189,7 +189,6 @@ fun NotificationSyncOverlay(
     val view = LocalView.current
     val scope = rememberCoroutineScope()
     var showLogoutDialog by remember { mutableStateOf(false) }
-    var serviceActionDialogTarget by remember { mutableStateOf<ExternalListService?>(null) }
     var showMalPlaceholderDialog by remember { mutableStateOf(false) }
     val hostActivity = LocalActivity.current ?: context.findActivity()
     val listSyncCoordinator: ExternalListSyncCoordinator = koinInject()
@@ -228,7 +227,7 @@ fun NotificationSyncOverlay(
     val detailLine = "$datePart • $statusWord"
 
     val blockingChildDialogOpen =
-        showLogoutDialog || serviceActionDialogTarget != null || showMalPlaceholderDialog
+        showLogoutDialog || showMalPlaceholderDialog
     LaunchedEffect(blockingChildDialogOpen) {
         onBlockingChildDialogChange(blockingChildDialogOpen)
     }
@@ -343,13 +342,20 @@ fun NotificationSyncOverlay(
                                 performHaptic(view, "light")
                                 showLogoutDialog = true
                             },
-                            onServiceClick = { service ->
+                            onServiceAction = { service, action ->
                                 if (listSyncUi.isRunning) return@NottifSyncServiceGrid
                                 performHaptic(view, "light")
                                 if (service == ExternalListService.MYANIMELIST) {
                                     showMalPlaceholderDialog = true
                                 } else {
-                                    serviceActionDialogTarget = service
+                                    val listAction = when (action) {
+                                        SyncCardAction.PULL -> ListServiceAction.PULL
+                                        SyncCardAction.PUSH -> ListServiceAction.PUSH
+                                        SyncCardAction.SYNC -> ListServiceAction.SYNC
+                                    }
+                                    hostActivity?.let {
+                                        listSyncCoordinator.startListServiceActionOrAuthorize(it, service, listAction)
+                                    }
                                 }
                             }
                         )
@@ -431,7 +437,7 @@ fun NotificationSyncOverlay(
                             showLogoutDialog = false
                             onLogout()
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC10801))
                     ) { Text(strings.deleteConfirm) }
                 },
                 dismissButton = {
@@ -443,61 +449,6 @@ fun NotificationSyncOverlay(
             )
         }
 
-        serviceActionDialogTarget?.let { svc ->
-            val serviceTitle = when (svc) {
-                ExternalListService.SHIKIMORI -> strings.nottifServiceShikimori
-                ExternalListService.MYANIMELIST -> strings.nottifServiceMal
-                ExternalListService.ANILIST -> strings.nottifServiceAnilist
-            }
-            AlertDialog(
-                onDismissRequest = { serviceActionDialogTarget = null },
-                containerColor = dialogSurface,
-                titleContentColor = onCard,
-                textContentColor = muted,
-                title = { Text(serviceTitle, color = onCard) },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            text = strings.nottifServiceActionDialogMessage,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = muted
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        TextButton(
-                            enabled = !listSyncUi.isRunning,
-                            colors = serviceActionButtonColors,
-                            onClick = {
-                                hostActivity?.let { listSyncCoordinator.startListServiceActionOrAuthorize(it, svc, ListServiceAction.PULL) }
-                                serviceActionDialogTarget = null
-                            }
-                        ) { Text(strings.nottifServiceActionPull) }
-                        TextButton(
-                            enabled = !listSyncUi.isRunning,
-                            colors = serviceActionButtonColors,
-                            onClick = {
-                                hostActivity?.let { listSyncCoordinator.startListServiceActionOrAuthorize(it, svc, ListServiceAction.PUSH) }
-                                serviceActionDialogTarget = null
-                            }
-                        ) { Text(strings.nottifServiceActionPush) }
-                        TextButton(
-                            enabled = !listSyncUi.isRunning,
-                            colors = serviceActionButtonColors,
-                            onClick = {
-                                hostActivity?.let { listSyncCoordinator.startListServiceActionOrAuthorize(it, svc, ListServiceAction.SYNC) }
-                                serviceActionDialogTarget = null
-                            }
-                        ) { Text(strings.nottifServiceActionSync) }
-                    }
-                },
-                confirmButton = {},
-                dismissButton = {
-                    TextButton(
-                        onClick = { serviceActionDialogTarget = null },
-                        colors = serviceActionButtonColors
-                    ) { Text(strings.cancel) }
-                }
-            )
-        }
     }
 }
 
@@ -594,7 +545,7 @@ private fun NottifUpdateRow(
                 modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)
-                    .background(if (isDark) Color(0xFF1E293B) else Color.White.copy(alpha = 0.7f))
+                    .background(if (isDark) Color(0xFF262626) else Color.White.copy(alpha = 0.7f))
                     .border(1.dp, OverlayThemeTokens.AccentNeonRed.copy(alpha = 0.45f), CircleShape)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },

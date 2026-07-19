@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -91,8 +92,8 @@ fun IosSheetScaffold(
         }
     }
 
-    // Чёрный «провал» за вдавленным экраном рисуем только когда шторка реально открыта,
-    // иначе scaffold перекрывал бы shared-element переходы своим фоном.
+    // Боковой «провал» за вдавленным экраном. Сверху контент остаётся edge-to-edge
+    // (под status bar / вырез камеры) — иначе появляется чёрная полоса в строке состояния.
     Box(modifier = modifier.fillMaxSize().drawBehind { if (progress.value > 0.001f) drawRect(Color.Black) }) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val screenPx = with(density) { maxHeight.toPx() }
@@ -101,7 +102,7 @@ fun IosSheetScaffold(
             val dragFraction = if (panelHeightPx > 0f) (dragPx / panelHeightPx).coerceIn(0f, 1f) else 0f
             val eff = (progress.value * (1f - dragFraction)).coerceIn(0f, 1f)
 
-            // --- Фон (экран под шторкой): scale + скругление углов ---
+            // --- Фон: scale от верхнего края, скругление только снизу ---
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -109,8 +110,15 @@ fun IosSheetScaffold(
                         val s = lerp(1f, backgroundScaleTarget, eff)
                         scaleX = s
                         scaleY = s
-                        clip = true
-                        shape = SquircleShape(cornerRadius * eff)
+                        transformOrigin = TransformOrigin(0.5f, 0f)
+                        clip = eff > 0.001f
+                        val bottomR = cornerRadius * eff
+                        shape = SquircleCornerShape(
+                            topStart = 0.dp,
+                            topEnd = 0.dp,
+                            bottomEnd = bottomR,
+                            bottomStart = bottomR,
+                        )
                     },
             ) {
                 content()

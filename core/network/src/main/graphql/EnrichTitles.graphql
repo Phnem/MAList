@@ -1,0 +1,25 @@
+query EnrichTitlesById($id: Int, $idMal: Int) {
+  Media(id: $id, idMal: $idMal, type: ANIME) {
+    id
+    idMal
+    title {
+      romaji
+      english
+      native
+    }
+  }
+}
+
+query EnrichTitlesSearch($q: String, $perPage: Int) {
+  Page(page: 1, perPage: $perPage) {
+    media(search: $q, type: ANIME) {
+      id
+      idMal
+      title {
+        romaji
+        english
+        native
+      }
+    }
+  }
+}

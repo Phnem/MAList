@@ -48,6 +48,7 @@ val supabaseModule = org.koin.dsl.module {
             authRepository = get(),
             supabase = get(),
             collectionImageRestoreCoordinator = get(),
+            apiKeySyncRepository = get(),
         )
     }
 
@@ -55,6 +56,12 @@ val supabaseModule = org.koin.dsl.module {
     single { SyncRepository(get(), get(), get(), get()) }
     single { CollectionImageRestoreCoordinator(get(), get(), get(), get(), get()) }
     single { AttachmentSyncManager(androidContext(), get(), get(), get()) }
+
+    // AI Connect: E2EE-синхронизация ключей.
+    single { SyncCryptoManager() }
+    single { SyncPassphraseStore(androidContext()) }
+    single { SyncPassphraseManager(get(), get(), get(), get()) }
+    single { ApiKeySyncRepository(get(), get(), get(), get(), get()) }
 }
 
 class AuthRepository(

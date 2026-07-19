@@ -32,12 +32,18 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import com.example.myapplication.isAppInDarkTheme
 import com.example.myapplication.ui.shared.theme.MotionTokens
 import com.example.myapplication.utils.getAddEditCommentStrings
 import com.example.myapplication.utils.getStrings
 import com.example.myapplication.utils.performHaptic
-import com.example.myapplication.ui.shared.components.StarRatingBar
+import com.example.myapplication.network.AppLanguage
+import com.example.myapplication.ui.shared.components.rating.RatingOverlayHost
+import com.example.myapplication.ui.shared.components.rating.RatingSliderState
+import com.example.myapplication.ui.shared.components.rating.RatingTrackMode
+import com.example.myapplication.ui.shared.components.rating.RatingTrackWidget
 import com.example.myapplication.ui.shared.InertialCollisionState
 import com.example.myapplication.ui.shared.inertialCollision
 import com.example.myapplication.ui.shared.icons.AddEditSaveFabCheck
@@ -86,6 +92,12 @@ fun AddEditScreen(
     val view = LocalView.current
     val textC = MaterialTheme.colorScheme.onBackground
     val collisionState = rememberInertialCollisionState()
+
+    // Состояние рейтинг-слайдера hoisted на уровень экрана: им пользуются и компактный
+    // трек в форме (владелец жеста), и полноэкранный бабл-оверлей поверх всего.
+    val ratingRu = currentLanguage == AppLanguage.RU
+    val ratingSliderState = remember { RatingSliderState(uiState.rating) }
+    LaunchedEffect(uiState.rating) { ratingSliderState.syncFromExternal(uiState.rating) }
 
     LaunchedEffect(Unit) {
         viewModel.effect.collect { effect ->
@@ -210,6 +222,35 @@ fun AddEditScreen(
                         )
                     }
 
+                    // ── Вариация названия (английская версия) ──
+                    AnimatedFormRow(index = 3, collisionState = collisionState) {
+                        if (uiState.showTitleEn) {
+                            Column {
+                                Spacer(Modifier.height(12.dp))
+                                AddEditSectionLabel(
+                                    if (currentLanguage == AppLanguage.RU) "АНГЛИЙСКОЕ НАЗВАНИЕ" else "ENGLISH TITLE"
+                                )
+                                PillTextFieldWithCopy(
+                                    value = uiState.titleEn,
+                                    onValueChange = {
+                                        viewModel.onEvent(AddEditEvent.OnTitleEnChanged(it))
+                                    },
+                                    placeholder = if (currentLanguage == AppLanguage.RU)
+                                        "Английская версия названия" else "English version of the title",
+                                    singleLine = false,
+                                    maxLines = 4
+                                )
+                            }
+                        } else {
+                            TextButton(onClick = { viewModel.onEvent(AddEditEvent.OnToggleTitleEn) }) {
+                                Text(
+                                    text = if (currentLanguage == AppLanguage.RU)
+                                        "+ Добавить вариацию" else "+ Add variation"
+                                )
+                            }
+                        }
+                    }
+
                     Spacer(Modifier.height(24.dp))
 
                     // ── Episodes ──
@@ -296,10 +337,19 @@ fun AddEditScreen(
                         AddEditSectionLabel(strings.addEditSectionRating)
                     }
                     AnimatedFormRow(index = 11, collisionState = collisionState) {
-                        StarRatingBar(rating = uiState.rating) { newRate ->
-                            performHaptic(view, "light")
-                            viewModel.onEvent(AddEditEvent.OnRatingChanged(newRate))
-                        }
+                        RatingTrackWidget(
+                            state = ratingSliderState,
+                            mode = RatingTrackMode.Compact,
+                            ru = ratingRu,
+                            onCommitted = { newRate ->
+                                viewModel.onEvent(AddEditEvent.OnRatingChanged(newRate))
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .onGloballyPositioned {
+                                    ratingSliderState.anchorBoundsInRoot = it.boundsInRoot()
+                                },
+                        )
                     }
 
                     Spacer(Modifier.height(24.dp))
@@ -458,6 +508,14 @@ fun AddEditScreen(
                         )
                     }
                 }
+
+                // Полноэкранный бабл рейтинга — последний ребёнок корневого Box:
+                // рисуется поверх формы и плавающих кнопок, вне клипа sharedBounds-слоя.
+                RatingOverlayHost(
+                    state = ratingSliderState,
+                    ru = ratingRu,
+                    modifier = Modifier.fillMaxSize(),
+                )
             }
         }
     }

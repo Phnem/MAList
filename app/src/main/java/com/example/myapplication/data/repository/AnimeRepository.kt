@@ -9,6 +9,7 @@ import com.example.myapplication.network.AnimeDetails
 import com.example.myapplication.network.AppContentType
 import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.network.ApiSearchResult
+import com.example.myapplication.network.EnrichedTitles
 import com.example.myapplication.network.GithubReleaseInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -139,11 +140,40 @@ class AnimeRepository(
         return apiService.malById(id, language)
     }
 
+    /** Явно проставить MAL id (напр. реконсиляция malId по Shikimori myanimelist_id в «Исправить БД»). */
+    suspend fun setMalId(animeId: String, malId: Int) {
+        localDataSource.setMalId(animeId, malId)
+    }
+
     suspend fun searchAnimeMalOnly(
         query: String,
         language: AppLanguage,
         limit: Int = 20
     ): Result<List<ApiSearchResult>> {
         return apiService.searchAnimeMalOnly(query, language, limit)
+    }
+
+    suspend fun enrichTitlesByIds(anilistId: Int?, malId: Int?): Result<EnrichedTitles?> {
+        return apiService.enrichTitlesByIds(anilistId, malId)
+    }
+
+    suspend fun enrichTitlesBySearch(query: String, limit: Int = 8): Result<List<EnrichedTitles>> {
+        return apiService.enrichTitlesBySearch(query, limit)
+    }
+
+    suspend fun malTitlesById(id: Int): Result<EnrichedTitles?> {
+        return apiService.malTitlesById(id)
+    }
+
+    suspend fun malTitlesBySearch(query: String, limit: Int = 8): Result<List<EnrichedTitles>> {
+        return apiService.malTitlesBySearch(query, limit)
+    }
+
+    suspend fun russianTitleByShikimoriId(id: Int): Result<EnrichedTitles?> {
+        return apiService.russianTitleByShikimoriId(id)
+    }
+
+    suspend fun russianTitlesBySearch(query: String, limit: Int = 8): Result<List<EnrichedTitles>> {
+        return apiService.russianTitlesBySearch(query, limit)
     }
 }

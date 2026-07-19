@@ -6,8 +6,13 @@ import kotlinx.collections.immutable.persistentListOf
 data class Anime(
     val id: String,
     val title: String,
+    /** Английское название (автообогащение). null = ещё не заполнено. */
+    val titleEn: String? = null,
+    /** Русское название (обратное обогащение через Shikimori). null = ещё не заполнено. */
+    val titleRu: String? = null,
     val episodes: Int,
-    val rating: Int,
+    /** 10-балльная шкала с одной цифрой после запятой (0 = не оценено). См. [RatingScale]. */
+    val rating: Float,
     val imageFileName: String?,
     val orderIndex: Int,
     val dateAdded: Long,

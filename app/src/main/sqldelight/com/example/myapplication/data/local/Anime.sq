@@ -22,7 +22,15 @@ CREATE TABLE anime (
     isPrivate INTEGER NOT NULL DEFAULT 0,
     encryptionIv TEXT,
     deletedAt INTEGER,
-    mediaType TEXT NOT NULL DEFAULT 'ANIME'
+    mediaType TEXT NOT NULL DEFAULT 'ANIME',
+    -- Английское название (автообогащение через API/AI). NULL = ещё не заполнено.
+    title_en TEXT,
+    -- Время последней попытки обогащения EN-названия (чтобы не перепроверять бесконечно).
+    title_en_checked_at INTEGER,
+    -- Русское название (обратное обогащение через Shikimori). NULL = ещё не заполнено.
+    title_ru TEXT,
+    -- Время последней попытки обогащения RU-названия.
+    title_ru_checked_at INTEGER
 );
 
 -- Delta Sync: rows that need to be pushed to cloud
@@ -63,6 +71,8 @@ SELECT
     anime.mal_not_found_at,
     anime.shikimori_not_found_at,
     anime.mediaType,
+    anime.title_en,
+    anime.title_ru,
     GROUP_CONCAT(anime_tags.tag, CHAR(31)) AS tagsConcat
 FROM anime
 LEFT JOIN anime_tags ON anime.id = anime_tags.anime_id
@@ -92,6 +102,8 @@ SELECT
     anime.mal_not_found_at,
     anime.shikimori_not_found_at,
     anime.mediaType,
+    anime.title_en,
+    anime.title_ru,
     GROUP_CONCAT(anime_tags.tag, CHAR(31)) AS tagsConcat
 FROM anime
 LEFT JOIN anime_tags ON anime.id = anime_tags.anime_id
@@ -118,9 +130,9 @@ INSERT INTO anime(
     categoryType, sync_status, comment, isAiRecommendation,
     anilist_id, mal_id, shikimori_id,
     anilist_not_found_at, mal_not_found_at, shikimori_not_found_at,
-    isPrivate, encryptionIv, deletedAt, mediaType
+    isPrivate, encryptionIv, deletedAt, mediaType, title_en, title_ru
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING_CREATE', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING_CREATE', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 updateAnime:
 UPDATE anime
@@ -197,6 +209,56 @@ UPDATE anime
 SET shikimori_id = ?, shikimori_not_found_at = NULL, updatedAt = ?, sync_status = 'PENDING_UPDATE'
 WHERE id = ?;
 
+setTitleEn:
+UPDATE anime
+SET title_en = ?, title_en_checked_at = ?, updatedAt = ?, sync_status = 'PENDING_UPDATE'
+WHERE id = ?;
+
+markTitleEnChecked:
+UPDATE anime
+SET title_en_checked_at = ?, updatedAt = ?, sync_status = 'PENDING_UPDATE'
+WHERE id = ?;
+
+selectNeedingTitleEn:
+SELECT * FROM anime
+WHERE mediaType = 'ANIME' AND title_en IS NULL AND title_en_checked_at IS NULL
+ORDER BY dateAdded DESC
+LIMIT ?;
+
+countNeedingTitleEn:
+SELECT COUNT(*) FROM anime
+WHERE mediaType = 'ANIME' AND title_en IS NULL AND title_en_checked_at IS NULL;
+
+resetTitleEnChecks:
+UPDATE anime
+SET title_en_checked_at = NULL, updatedAt = ?, sync_status = 'PENDING_UPDATE'
+WHERE mediaType = 'ANIME' AND title_en IS NULL AND title_en_checked_at IS NOT NULL;
+
+setTitleRu:
+UPDATE anime
+SET title_ru = ?, title_ru_checked_at = ?, updatedAt = ?, sync_status = 'PENDING_UPDATE'
+WHERE id = ?;
+
+markTitleRuChecked:
+UPDATE anime
+SET title_ru_checked_at = ?, updatedAt = ?, sync_status = 'PENDING_UPDATE'
+WHERE id = ?;
+
+selectNeedingTitleRu:
+SELECT * FROM anime
+WHERE mediaType = 'ANIME' AND title_ru IS NULL AND title_ru_checked_at IS NULL
+ORDER BY dateAdded DESC
+LIMIT ?;
+
+countNeedingTitleRu:
+SELECT COUNT(*) FROM anime
+WHERE mediaType = 'ANIME' AND title_ru IS NULL AND title_ru_checked_at IS NULL;
+
+resetTitleRuChecks:
+UPDATE anime
+SET title_ru_checked_at = NULL, updatedAt = ?, sync_status = 'PENDING_UPDATE'
+WHERE mediaType = 'ANIME' AND title_ru IS NULL AND title_ru_checked_at IS NOT NULL;
+
 markAnilistNotFound:
 UPDATE anime
 SET anilist_not_found_at = ?, updatedAt = ?, sync_status = 'PENDING_UPDATE'
@@ -239,9 +301,9 @@ INSERT OR REPLACE INTO anime(
     categoryType, sync_status, comment, isAiRecommendation,
     anilist_id, mal_id, shikimori_id,
     anilist_not_found_at, mal_not_found_at, shikimori_not_found_at,
-    isPrivate, encryptionIv, deletedAt, mediaType
+    isPrivate, encryptionIv, deletedAt, mediaType, title_en, title_en_checked_at, title_ru, title_ru_checked_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SYNCED', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SYNCED', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 keepingDirty:
 UPDATE anime

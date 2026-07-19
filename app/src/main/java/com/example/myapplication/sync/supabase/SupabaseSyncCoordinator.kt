@@ -25,6 +25,7 @@ class SupabaseSyncCoordinator(
     private val authRepository: AuthRepository,
     private val supabase: io.github.jan.supabase.SupabaseClient,
     private val collectionImageRestoreCoordinator: CollectionImageRestoreCoordinator,
+    private val apiKeySyncRepository: ApiKeySyncRepository,
 ) {
     private val workManager = WorkManager.getInstance(context)
     private val _isSyncing = MutableStateFlow(false)
@@ -108,6 +109,8 @@ class SupabaseSyncCoordinator(
                 }
                 val push = syncRepository.pushPendingChanges()
                 val pull = syncRepository.pullRemoteChanges()
+                // E2EE-синк ключей AI Connect (best-effort, не влияет на статус синка коллекции).
+                apiKeySyncRepository.sync()
                 if (includeCloudImageRestore) {
                     collectionImageRestoreCoordinator.restoreFromCloudIfNeeded()
                 }

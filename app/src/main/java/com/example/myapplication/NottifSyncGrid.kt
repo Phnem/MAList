@@ -1,7 +1,14 @@
 package com.example.myapplication
 
+import androidx.annotation.DrawableRes
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,58 +16,69 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.ExitToApp
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.rounded.ArrowOutward
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.Sync
+import androidx.compose.material.icons.rounded.Upload
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
-import androidx.annotation.DrawableRes
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.example.myapplication.data.models.UiStrings
 import com.example.myapplication.sync.ExternalListService
-import com.example.myapplication.ui.shared.theme.IosDesign
+import com.example.myapplication.ui.shared.theme.MotionTokens
 import com.example.myapplication.ui.shared.theme.SnProFamily
-import com.example.myapplication.ui.shared.theme.SquircleShape
-import com.example.myapplication.ui.shared.theme.iosRowHighlight
+import com.example.myapplication.utils.performHaptic
 import com.phnem.vetro.R
+import kotlinx.coroutines.launch
 
-private val ConnectedGreen = Color(0xFF32D74B)
-private val LogoutRed = Color(0xFFFF453A)
+private val ConnectedGreen = Color(0xFFF16001)
+private val LogoutRed = Color(0xFFE5382B)
+private val AutoAmber = Color(0xFFD08A4A)
+
+/** Действие внутри карточки сервиса — заменяет прежнее попап-меню. */
+enum class SyncCardAction { PULL, PUSH, SYNC }
 
 /**
- * Лист «Синхронизация» — композиция по вертикальному ритму на ЕДИНОЙ поверхности:
- *
- *   hero (аватар → имя → статус подключения)   — фокус
- *        ↓ воздух
- *   группа инфо-строк (последняя синхр / результат / режим)
- *        ↓ воздух
- *   строка выхода (красный текст, без плашки)
- *        ↓ большой воздух
- *   секция «Внешние сервисы» (заголовок + счётчик) → список
- *
- * Глубина — за счёт двух уровней материала: тёмная база панели (groupedBackground) + светлые
- * группы (rowBackground), а не цветных блоков и теней. Каждый ниже уровень — визуально легче.
+ * Лист «Синхронизация»: компактная строка-шапка (мини-аватар · My Vetro · Done · AUTO)
+ * + стопка горизонтальных «банковских» карточек сервисов. Карточки уходят строго вверх,
+ * а строки Pull/Push/Sync внутри карточки играют роль прежнего попап-меню.
  */
 @Composable
 internal fun NottifSyncServiceGrid(
@@ -79,273 +97,550 @@ internal fun NottifSyncServiceGrid(
     onSyncNow: () -> Unit,
     onCheckUpdates: () -> Unit,
     onLogoutClick: () -> Unit,
-    onServiceClick: (ExternalListService) -> Unit,
+    onServiceAction: (ExternalListService, SyncCardAction) -> Unit,
 ) {
     val connected = hasToken && syncState != SyncState.AUTH_REQUIRED &&
         syncState != SyncState.ERROR && syncState != SyncState.CONFLICT
     val onSurface = MaterialTheme.colorScheme.onSurface
-    val muted = onSurface.copy(alpha = 0.5f)
-    val statusColor = if (connected) ConnectedGreen else muted
-    val statusText = if (connected) strings.nottifStatusConnected else strings.nottifStatusDisconnected
 
     Column(modifier = Modifier.fillMaxWidth()) {
 
-        // ——— HERO ———
+        // ——— Шапка одной строкой ———
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(30.dp)
                     .clip(CircleShape)
-                    .background(Brush.linearGradient(listOf(Color(0xFF7C6BFF), Color(0xFFFF6FB1)))),
+                    .background(Brush.linearGradient(listOf(Color(0xFFC10801), Color(0xFFF16001)))),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.Person, null, tint = Color.White, modifier = Modifier.size(24.dp))
+                Icon(Icons.Filled.Person, null, tint = Color.White, modifier = Modifier.size(18.dp))
             }
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(10.dp))
             Text(
                 text = strings.nottifAccountTitle,
                 fontFamily = SnProFamily,
                 fontWeight = FontWeight.Bold,
-                fontSize = 18.sp,
+                fontSize = 17.sp,
                 letterSpacing = (-0.3).sp,
                 color = onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            Spacer(Modifier.width(10.dp))
+            // Зелёная пилюля-статус (Done / идёт синхронизация) — тап запускает синхронизацию.
+            StatusDonePill(
+                connected = connected,
+                syncing = syncingCloud,
+                doneText = if (ru) "Готово" else "Done",
+                onClick = onSyncNow,
+            )
+            Spacer(Modifier.width(8.dp))
+            // Жёлтый чипс режима (AUTO) — прямоугольный, как бейдж «Auto».
+            AutoBadge(text = badgeText)
             Spacer(Modifier.weight(1f))
-            // Статус подключения — приоритет №2, компактная строка с точкой (не плашка).
+        }
+
+        Spacer(Modifier.height(20.dp))
+
+        // ——— Стопка карточек сервисов ———
+        SyncServiceCardStack(
+            models = rememberSyncServiceModels(strings),
+            copy = syncCardCopy(ru),
+            onAction = onServiceAction,
+        )
+
+        // ——— Подсказка про свайп ———
+        Spacer(Modifier.height(10.dp))
+        Text(
+            text = if (ru) "Свайп вниз — следующая карта" else "Swipe down for the next card",
+            fontFamily = SnProFamily,
+            fontSize = 12.sp,
+            color = onSurface.copy(alpha = 0.45f),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
+
+        // ——— Выход (компактная строка) ———
+        if (hasToken) {
+            Spacer(Modifier.height(16.dp))
             Row(
                 modifier = Modifier
+                    .fillMaxWidth()
                     .clip(CircleShape)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
-                        enabled = !syncingCloud,
-                        onClick = onSyncNow,
+                        onClick = onLogoutClick,
                     )
-                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                    .defaultMinSize(minHeight = 40.dp)
+                    .padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(Modifier.size(6.dp).clip(CircleShape).background(statusColor))
-                Spacer(Modifier.width(6.dp))
+                Icon(Icons.AutoMirrored.Rounded.ExitToApp, null, tint = LogoutRed, modifier = Modifier.size(17.dp))
+                Spacer(Modifier.width(8.dp))
                 Text(
-                    text = statusText,
+                    text = if (ru) "Выйти из аккаунта" else "Sign out",
                     fontFamily = SnProFamily,
                     fontWeight = FontWeight.Medium,
-                    fontSize = 13.sp,
-                    color = statusColor,
+                    fontSize = 14.sp,
+                    color = LogoutRed,
                 )
             }
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(4.dp))
+    }
+}
 
-        // ——— Инфо-группа (одна вложенная группа статистики) ———
-        NottifGroup(isDark) {
-            NottifInfoRow(
-                label = if (ru) "Последняя синхронизация" else "Last sync",
-                value = datePart.ifBlank { timeStr },
+// ==========================================
+// Шапка: пилюли статуса
+// ==========================================
+
+@Composable
+private fun StatusDonePill(
+    connected: Boolean,
+    syncing: Boolean,
+    doneText: String,
+    onClick: () -> Unit,
+) {
+    val bg = ConnectedGreen.copy(alpha = 0.16f)
+    Row(
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(bg)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                enabled = !syncing,
+                onClick = onClick,
             )
-            NottifRowDivider(isDark)
-            NottifInfoRow(
-                label = if (ru) "Результат" else "Result",
-                value = statusWord,
-                valueColor = if (connected) ConnectedGreen else null,
-            )
-            NottifRowDivider(isDark)
-            NottifInfoRow(
-                label = if (ru) "Режим" else "Mode",
-                value = badgeText,
-            )
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (syncing) {
+            CircularProgressIndicator(modifier = Modifier.size(11.dp), strokeWidth = 2.dp, color = ConnectedGreen)
+        } else {
+            Icon(Icons.Rounded.Check, null, tint = ConnectedGreen, modifier = Modifier.size(13.dp))
         }
+        Spacer(Modifier.width(5.dp))
+        Text(
+            text = doneText,
+            fontFamily = SnProFamily,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 12.sp,
+            color = ConnectedGreen,
+        )
+    }
+}
 
-        if (hasToken) {
-            Spacer(Modifier.height(16.dp))
-            // ——— Выход: строка-карточка с красным текстом, без цветной плашки ———
-            NottifGroup(isDark) {
-                Row(
+/** Прямоугольный жёлтый бейдж режима — референс «Auto» из чата. */
+@Composable
+private fun AutoBadge(text: String) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(AutoAmber.copy(alpha = 0.18f))
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+    ) {
+        Text(
+            text = text,
+            fontFamily = SnProFamily,
+            fontWeight = FontWeight.Bold,
+            fontSize = 11.sp,
+            letterSpacing = 0.5.sp,
+            color = AutoAmber,
+        )
+    }
+}
+
+// ==========================================
+// Модель карточки сервиса
+// ==========================================
+
+private data class SyncServiceCardModel(
+    val service: ExternalListService,
+    val name: String,
+    @DrawableRes val iconRes: Int,
+    /** Тинт бренд-иконки в шапке; null → оставить родной цвет дровбла. */
+    val brandTint: Color?,
+    val bg: Color,
+    val rowBg: Color,
+    val iconHolderBg: Color,
+    val onCard: Color,
+    val onCardMuted: Color,
+    val chevron: Color,
+    val siteUrl: String,
+)
+
+/** Тексты Pull/Push/Sync: заголовки как в референсе (англ.), подписи локализованы. */
+private data class SyncCardCopy(
+    val pullTitle: String,
+    val pushTitle: String,
+    val syncTitle: String,
+    val pullSub: String,
+    val pushSub: String,
+    val syncSub: String,
+)
+
+private fun syncCardCopy(ru: Boolean) = SyncCardCopy(
+    pullTitle = "Pull",
+    pushTitle = "Push",
+    syncTitle = "Sync",
+    pullSub = if (ru) "импорт вашей коллекции с сайта" else "for importing your collection from the site",
+    pushSub = if (ru) "экспорт вашей коллекции на сайт" else "for exporting your collection to the site",
+    syncSub = if (ru) "синхронизация с сайтом" else "for synchronization with the site",
+)
+
+@Composable
+private fun rememberSyncServiceModels(strings: UiStrings): List<SyncServiceCardModel> = remember(strings) {
+    listOf(
+        // Shikimori — всегда светлая карта (бренд-цвет, не зависит от темы приложения).
+        SyncServiceCardModel(
+            service = ExternalListService.SHIKIMORI,
+            name = strings.nottifServiceShikimori,
+            iconRes = R.drawable.ic_shikimori,
+            brandTint = Color(0xFF111111),
+            bg = Color(0xFFEDEDED),
+            rowBg = Color(0xFFFFFFFF),
+            iconHolderBg = Color(0xFFFFFFFF),
+            onCard = Color(0xFF111111),
+            onCardMuted = Color(0xFF646464),
+            chevron = Color(0xFFA7A7A7),
+            siteUrl = "https://shikimori.io/",
+        ),
+        // AniList — почти чёрная карта (темнее фона листа, чтобы не сливалась),
+        // лого остаётся фирменно-синим.
+        SyncServiceCardModel(
+            service = ExternalListService.ANILIST,
+            name = strings.nottifServiceAnilist,
+            iconRes = R.drawable.ic_anilist,
+            brandTint = null,
+            bg = Color(0xFF0A0A0A),
+            rowBg = Color(0xFFFFFFFF).copy(alpha = 0.08f),
+            iconHolderBg = Color(0xFFFFFFFF).copy(alpha = 0.12f),
+            onCard = Color.White,
+            onCardMuted = Color.White.copy(alpha = 0.55f),
+            chevron = Color.White.copy(alpha = 0.4f),
+            siteUrl = "https://anilist.co/",
+        ),
+        // MAL — фирменная оранжевая карта (брендовый градиентный тон Vetro).
+        SyncServiceCardModel(
+            service = ExternalListService.MYANIMELIST,
+            name = strings.nottifServiceMal,
+            iconRes = R.drawable.ic_myanimelist,
+            brandTint = Color.White,
+            bg = Color(0xFFB84102),
+            rowBg = Color(0xFFFFFFFF).copy(alpha = 0.12f),
+            iconHolderBg = Color(0xFFFFFFFF).copy(alpha = 0.16f),
+            onCard = Color.White,
+            onCardMuted = Color.White.copy(alpha = 0.7f),
+            chevron = Color.White.copy(alpha = 0.55f),
+            siteUrl = "https://myanimelist.net/",
+        ),
+    )
+}
+
+// ==========================================
+// Стопка карточек (горизонтальные, уходят строго вверх — как карты в банк-приложениях)
+// ==========================================
+
+private val CARD_HEIGHT = 300.dp
+private val CARD_PEEK = 42.dp
+private const val CARD_SCALE_STEP = 0.05f
+private const val STACK_VISIBLE = 3
+
+private data class StackVisual(val translateY: Float, val scale: Float, val alpha: Float, val dim: Float)
+
+@Composable
+private fun SyncServiceCardStack(
+    models: List<SyncServiceCardModel>,
+    copy: SyncCardCopy,
+    onAction: (ExternalListService, SyncCardAction) -> Unit,
+) {
+    val view = LocalView.current
+    val density = LocalDensity.current
+    val scope = rememberCoroutineScope()
+
+    var deck by remember(models) { mutableStateOf(models) }
+    val offsetY = remember(models) { Animatable(0f) }
+    var isFlyingOut by remember { mutableStateOf(false) }
+
+    val upThresholdPx = with(density) { 90.dp.toPx() }
+    val downThresholdPx = with(density) { 60.dp.toPx() }
+    val peekPx = with(density) { CARD_PEEK.toPx() }
+    val flyDistancePx = with(density) { (CARD_HEIGHT + CARD_PEEK * (STACK_VISIBLE)).toPx() }
+
+    fun settleBack() {
+        scope.launch { offsetY.animateTo(0f, animationSpec = MotionTokens.menuPop()) }
+    }
+
+    /**
+     * Пролистнуть вперёд на [steps] позиций с анимацией (верхняя карта улетает вверх,
+     * следующие подтягиваются за счёт progress). steps=1 — свайп/следующая,
+     * steps>1 — тап по более глубокой карте (та же анимация, без резкого перескока).
+     */
+    fun commitTo(steps: Int) {
+        if (isFlyingOut || deck.size <= 1) return
+        scope.launch {
+            performHaptic(view, "light")
+            isFlyingOut = true
+            offsetY.animateTo(-flyDistancePx, animationSpec = tween(280))
+            deck = deck.drop(steps) + deck.take(steps)
+            offsetY.snapTo(0f)
+            isFlyingOut = false
+        }
+    }
+
+    fun commitPrev() {
+        scope.launch {
+            performHaptic(view, "light")
+            // последняя карта возвращается на фронт и «прилетает» сверху
+            offsetY.snapTo(-flyDistancePx)
+            deck = listOf(deck.last()) + deck.dropLast(1)
+            offsetY.animateTo(0f, animationSpec = MotionTokens.sheetPresent())
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(CARD_HEIGHT + CARD_PEEK * (STACK_VISIBLE - 1)),
+        contentAlignment = Alignment.BottomCenter,
+    ) {
+        // Прогресс подтягивания следующей карты, пока верхнюю тянут вверх.
+        val progress = (-offsetY.value / upThresholdPx).coerceIn(0f, 1f)
+
+        deck.take(STACK_VISIBLE).withIndex().reversed().forEach { (index, model) ->
+            val visual = if (index == 0) {
+                StackVisual(
+                    translateY = offsetY.value,
+                    scale = 1f,
+                    alpha = if (isFlyingOut) (1f - (-offsetY.value / 500f)).coerceIn(0f, 1f) else 1f,
+                    dim = 0f,
+                )
+            } else {
+                val curY = -peekPx * index
+                val nextY = -peekPx * (index - 1)
+                val curScale = 1f - CARD_SCALE_STEP * index
+                val nextScale = 1f - CARD_SCALE_STEP * (index - 1)
+                StackVisual(
+                    translateY = curY + (nextY - curY) * progress,
+                    scale = curScale + (nextScale - curScale) * progress,
+                    alpha = 1f,
+                    dim = (0.14f * index - 0.14f * progress).coerceIn(0f, 0.5f),
+                )
+            }
+
+            val dragModifier = if (index == 0) {
+                Modifier.pointerInput(deck) {
+                    detectVerticalDragGestures(
+                        onDragEnd = {
+                            when {
+                                offsetY.value < -upThresholdPx && deck.size > 1 -> commitTo(1)
+                                offsetY.value > downThresholdPx && deck.size > 1 -> commitPrev()
+                                else -> settleBack()
+                            }
+                        },
+                        onDragCancel = { settleBack() },
+                    ) { change, dragAmount ->
+                        change.consume()
+                        scope.launch {
+                            val cur = offsetY.value
+                            // вниз (undo) — с демпфированием, вверх — свободно
+                            val delta = if (cur + dragAmount > 0f) dragAmount * 0.5f else dragAmount
+                            offsetY.snapTo(cur + delta)
+                        }
+                    }
+                }
+            } else {
+                // тап по «пику» задней карты — вывести её на фронт ТОЙ ЖЕ анимацией
+                // пролистывания (не резкий перескок): пролистываем вперёд на index позиций.
+                Modifier.clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                ) { commitTo(index) }
+            }
+
+            key(model.service) {
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = iosRowHighlight(isDark, SquircleShape(0.dp)),
-                            onClick = onLogoutClick,
-                        )
-                        .defaultMinSize(minHeight = 44.dp)
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically,
+                        .zIndex((STACK_VISIBLE - index).toFloat())
+                        .graphicsLayer {
+                            translationY = visual.translateY
+                            scaleX = visual.scale
+                            scaleY = visual.scale
+                            alpha = visual.alpha
+                        }
+                        .then(dragModifier),
                 ) {
-                    Icon(Icons.AutoMirrored.Rounded.ExitToApp, null, tint = LogoutRed, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = if (ru) "Выйти из аккаунта" else "Sign out",
-                        fontFamily = SnProFamily,
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 15.sp,
-                        color = LogoutRed,
+                    SyncServiceCard(
+                        model = model,
+                        copy = copy,
+                        dim = visual.dim,
+                        interactive = index == 0,
+                        onAction = onAction,
                     )
                 }
             }
         }
-
-        Spacer(Modifier.height(24.dp))
-
-        // ——— Секция «Внешние сервисы» ———
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            Text(
-                text = (if (ru) "Внешние сервисы" else "External services").uppercase(),
-                fontFamily = SnProFamily,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 12.sp,
-                letterSpacing = 0.6.sp,
-                color = muted,
-            )
-            Text(
-                text = if (ru) "3 доступно" else "3 available",
-                fontFamily = SnProFamily,
-                fontSize = 12.sp,
-                color = onSurface.copy(alpha = 0.4f),
-            )
-        }
-        Spacer(Modifier.height(4.dp))
-        NottifGroup(isDark) {
-            NottifServiceRow(strings.nottifServiceShikimori, R.drawable.ic_shikimori, Color(0xFF2AA3C4), isDark, ru) { onServiceClick(ExternalListService.SHIKIMORI) }
-            NottifRowDivider(isDark, inset = 58.dp)
-            NottifServiceRow(strings.nottifServiceMal, R.drawable.ic_myanimelist, Color(0xFF2E51A2), isDark, ru) { onServiceClick(ExternalListService.MYANIMELIST) }
-            NottifRowDivider(isDark, inset = 58.dp)
-            NottifServiceRow(strings.nottifServiceAnilist, R.drawable.ic_anilist, Color(0xFF3577FF), isDark, ru) { onServiceClick(ExternalListService.ANILIST) }
-        }
-
-        Spacer(Modifier.height(4.dp))
-    }
-}
-
-/** Светлая группа (уровень материала выше базы панели). */
-@Composable
-private fun NottifGroup(isDark: Boolean, content: @Composable () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(SquircleShape(18.dp))
-            .background(IosDesign.rowBackground(isDark)),
-    ) { content() }
-}
-
-@Composable
-private fun NottifInfoRow(label: String, value: String, valueColor: Color? = null) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .defaultMinSize(minHeight = 36.dp)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = label,
-            fontFamily = SnProFamily,
-            fontSize = 14.sp,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-        Spacer(Modifier.width(12.dp))
-        Text(
-            text = value,
-            fontFamily = SnProFamily,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 14.sp,
-            color = valueColor ?: MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
     }
 }
 
 @Composable
-private fun NottifRowDivider(isDark: Boolean, inset: Dp = 16.dp) {
+private fun SyncServiceCard(
+    model: SyncServiceCardModel,
+    copy: SyncCardCopy,
+    dim: Float,
+    interactive: Boolean,
+    onAction: (ExternalListService, SyncCardAction) -> Unit,
+) {
+    val view = LocalView.current
+    val uriHandler = LocalUriHandler.current
+    val shape = RoundedCornerShape(28.dp)
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = inset)
-            .height(IosDesign.SeparatorThickness)
-            .background(IosDesign.separator(isDark)),
-    )
+            .height(CARD_HEIGHT)
+            .clip(shape)
+            .background(model.bg),
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+            // —— Шапка карточки ——
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(model.iconHolderBg),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        painter = painterResource(id = model.iconRes),
+                        contentDescription = model.name,
+                        tint = model.brandTint ?: Color.Unspecified,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    text = model.name,
+                    fontFamily = SnProFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 22.sp,
+                    letterSpacing = (-0.3).sp,
+                    color = model.onCard,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.weight(1f))
+                // Кнопка «перейти на сайт» (нет на референсах — добавлено по ТЗ).
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(model.iconHolderBg)
+                        .clickable(enabled = interactive) {
+                            performHaptic(view, "light")
+                            uriHandler.openUri(model.siteUrl)
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Rounded.ArrowOutward,
+                        contentDescription = "Open site",
+                        tint = model.onCard,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(14.dp))
+
+            // —— Строки-действия (заменяют попап) ——
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                SyncActionRow(
+                    model, Icons.Rounded.Download, copy.pullTitle, copy.pullSub, interactive,
+                ) { onAction(model.service, SyncCardAction.PULL) }
+                SyncActionRow(
+                    model, Icons.Rounded.Upload, copy.pushTitle, copy.pushSub, interactive,
+                ) { onAction(model.service, SyncCardAction.PUSH) }
+                SyncActionRow(
+                    model, Icons.Rounded.Sync, copy.syncTitle, copy.syncSub, interactive,
+                ) { onAction(model.service, SyncCardAction.SYNC) }
+            }
+        }
+
+        // Затемнение задних карточек в стопке.
+        if (dim > 0f) {
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = dim)))
+        }
+    }
 }
 
 @Composable
-private fun NottifServiceRow(
-    name: String,
-    @DrawableRes iconRes: Int,
-    accent: Color,
-    isDark: Boolean,
-    ru: Boolean,
+private fun SyncActionRow(
+    model: SyncServiceCardModel,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    interactive: Boolean,
     onClick: () -> Unit,
 ) {
-    val onSurface = MaterialTheme.colorScheme.onSurface
+    val view = LocalView.current
+    val rowShape = RoundedCornerShape(20.dp)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = iosRowHighlight(isDark, SquircleShape(0.dp)),
-                onClick = onClick,
-            )
-            .defaultMinSize(minHeight = 44.dp)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .clip(rowShape)
+            .background(model.rowBg)
+            .clickable(enabled = interactive) {
+                performHaptic(view, "light")
+                onClick()
+            }
+            .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             modifier = Modifier
-                .size(32.dp)
+                .size(44.dp)
                 .clip(CircleShape)
-                .background(accent),
+                .background(model.iconHolderBg),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                painter = painterResource(id = iconRes),
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(20.dp)
-            )
+            Icon(icon, contentDescription = null, tint = model.onCard, modifier = Modifier.size(22.dp))
         }
-        Spacer(Modifier.width(12.dp))
-        Row(
-            modifier = Modifier.weight(1f),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        Spacer(Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = name,
+                text = title,
                 fontFamily = SnProFamily,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 15.sp,
-                color = onSurface,
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp,
+                color = model.onCard,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Spacer(Modifier.width(8.dp))
             Text(
-                text = if (ru) "Не подключено" else "Not connected",
+                text = subtitle,
                 fontFamily = SnProFamily,
                 fontSize = 13.sp,
-                color = onSurface.copy(alpha = 0.5f),
+                color = model.onCardMuted,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
+        Spacer(Modifier.width(8.dp))
         Icon(
-            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
             contentDescription = null,
-            tint = IosDesign.chevron(isDark),
-            modifier = Modifier.size(20.dp),
+            tint = model.chevron,
+            modifier = Modifier.size(22.dp),
         )
     }
 }

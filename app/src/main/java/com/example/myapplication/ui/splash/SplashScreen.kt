@@ -1,22 +1,15 @@
 package com.example.myapplication.ui.splash
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -43,25 +36,32 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.phnem.vetro.R
 import com.example.myapplication.isAppInDarkTheme
-import com.example.myapplication.ui.shared.theme.MotionTokens
 import com.example.myapplication.ui.shared.theme.BrandBlue
 import com.example.myapplication.ui.shared.theme.DarkSurface
 import com.example.myapplication.ui.shared.theme.LightSurface
+import com.example.myapplication.ui.shared.theme.MotionTokens
 import com.example.myapplication.ui.shared.theme.SnProFamily
+import kotlinx.coroutines.delay
+
+private const val HoldBlackMs = 250L
+private const val WaveInMs = 1400
+private const val HoldMinMs = 500L
+private const val WaveOutMs = 700
 
 @Composable
 fun VetroSplashScreen(
@@ -80,13 +80,32 @@ fun VetroSplashScreen(
     onSkipLegacyFolder: () -> Unit,
     onSplashComplete: (String) -> Unit,
 ) {
-    val isDark = isAppInDarkTheme()
-    val bgColor = MaterialTheme.colorScheme.background
+    val waveProgress = remember { Animatable(0f) }
+    val exitProgress = remember { Animatable(0f) }
+    var introDone by remember { mutableStateOf(false) }
+    var outroStarted by remember { mutableStateOf(false) }
 
-    LaunchedEffect(uiState) {
-        if (uiState is SplashState.Completed) {
-            onSplashComplete(uiState.nextRoute)
-        }
+    // Intro: black hold → wave in
+    LaunchedEffect(Unit) {
+        delay(HoldBlackMs)
+        waveProgress.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(WaveInMs, easing = FastOutSlowInEasing),
+        )
+        delay(HoldMinMs)
+        introDone = true
+    }
+
+    // Outro только после intro и Completed (не во время AwaitingLegacyFolder)
+    LaunchedEffect(uiState, introDone) {
+        val completed = uiState as? SplashState.Completed ?: return@LaunchedEffect
+        if (!introDone || outroStarted) return@LaunchedEffect
+        outroStarted = true
+        exitProgress.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(WaveOutMs, easing = FastOutSlowInEasing),
+        )
+        onSplashComplete(completed.nextRoute)
     }
 
     val showMigrationCard = uiState is SplashState.MigratingStorage ||
@@ -112,56 +131,32 @@ fun VetroSplashScreen(
         else -> migrationSubtitle
     }
 
-    val infiniteTransition = rememberInfiniteTransition(label = "logo_pulse")
-    val logoScale by infiniteTransition.animateFloat(
-        initialValue = 0.95f,
-        targetValue = 1.05f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "logo_scale",
+    val wordmarkAlpha = splashWaveAlphaAt(
+        xFrac = 0.5f,
+        yFrac = 0.45f,
+        progress = waveProgress.value,
+        exitProgress = exitProgress.value,
     )
+    // Лёгкий zoom-out логотипа на outro
+    val wordmarkScale = 1f + exitProgress.value * 0.12f
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(bgColor),
+        modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center,
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(120.dp)
-                    .scale(logoScale)
-                    .clip(RoundedCornerShape(32.dp))
-                    .background(if (isDark) Color(0xFF1A1D26) else Color.White)
-                    .padding(16.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Image(
-                    painter = painterResource(id = R.mipmap.ic_launcher_foreground),
-                    contentDescription = "Vetro Logo",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Fit,
-                )
-            }
+        SplashWaveBackground(
+            progress = waveProgress.value,
+            exitProgress = exitProgress.value,
+        )
 
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Text(
-                text = "Vetro",
-                style = MaterialTheme.typography.displaySmall.copy(
-                    fontFamily = SnProFamily,
-                    fontWeight = FontWeight.Black,
-                    letterSpacing = (-0.5).sp,
-                ),
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-        }
+        VetroWordmark(
+            modifier = Modifier
+                .graphicsLayer {
+                    scaleX = wordmarkScale
+                    scaleY = wordmarkScale
+                }
+                .alpha(wordmarkAlpha),
+        )
 
         AnimatedVisibility(
             visible = showMigrationCard,

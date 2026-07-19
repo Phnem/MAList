@@ -107,20 +107,26 @@ class AttachmentSyncManager(
                 setBody(TextContent(jsonString, ContentType.Application.Json))
             }
             val presignResponse = json.decodeFromString<PresignUploadResponse>(functionResponse.bodyAsText())
-            
+
+            // Прошлые обложки этого тайтла — до вставки новой записи (для чистки R2 ниже).
+            val previousAttachments = db.attachmentQueries.getAttachmentsForAnime(animeId).executeAsList()
+
             // 2. Upload with HttpURLConnection
             val url = java.net.URL(presignResponse.uploadUrl)
-            val connection = url.openConnection() as java.net.HttpURLConnection
+            val connection = (url.openConnection() as java.net.HttpURLConnection).applyTimeouts()
             connection.requestMethod = "PUT"
             connection.doOutput = true
             connection.setRequestProperty("Content-Type", "image/webp")
             connection.outputStream.use { it.write(compressedBytes) }
-            
+
             val responseCode = connection.responseCode
-            if (responseCode !in 200..299) return@withContext null
-            
+            if (responseCode !in 200..299) {
+                android.util.Log.w(TAG, "R2 PUT failed for $animeId: HTTP $responseCode")
+                return@withContext null
+            }
+
             val cloudUrl = "collection-attachment://$attachmentId"
-            
+
             db.attachmentQueries.insertAttachment(
                 id = attachmentId,
                 anime_id = animeId,
@@ -130,14 +136,23 @@ class AttachmentSyncManager(
                 created_at = System.currentTimeMillis(),
                 updated_at = System.currentTimeMillis()
             )
-            
+
             // 4. Cache locally
             val cachedFile = File(syncCacheDir, fileName)
             cachedFile.writeBytes(compressedBytes)
-            
+
+            // 5. Экономия R2: прошлые обложки тайтла осиротели — новая канонична.
+            //    Best-effort, ошибки не роняют загрузку.
+            previousAttachments
+                .filter { it.is_uploaded == 1L && it.id != attachmentId && !it.cloud_url.isNullOrBlank() }
+                .forEach { old ->
+                    deleteAttachment(old.cloud_url!!)
+                    db.attachmentQueries.deleteAttachment(old.id)
+                }
+
             return@withContext cloudUrl
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.w(TAG, "uploadAttachment failed for $animeId", e)
             null
         }
     }
@@ -156,21 +171,36 @@ class AttachmentSyncManager(
             if (imagePath.startsWith("collection-attachment://")) {
                 continue
             }
-            
+            // Внешние CDN-ссылки (постеры API) не зеркалим в R2 — это лишние трафик и хранилище:
+            // строка синкается с URL как есть, другое устройство грузит постер напрямую с CDN.
+            if (imagePath.startsWith("http://") || imagePath.startsWith("https://")) {
+                continue
+            }
+
             try {
                 val bytes = readLocalImageBytes(imagePath) ?: continue
                 val cloudUrl = uploadAttachment(anime.id, bytes)
                 if (cloudUrl != null) {
                     db.animeQueries.updateAnimeImagePath(imagePath = cloudUrl, id = anime.id)
                     db.animeQueries.markPendingSync(anime.id)
-                    println("Retroactive upload success for ${anime.id}")
+                    android.util.Log.d(TAG, "Retroactive upload success for ${anime.id}")
                 } else {
-                    println("Retroactive upload failed (or file not found) for ${anime.id} / $imagePath")
+                    android.util.Log.w(TAG, "Retroactive upload failed (or file not found) for ${anime.id} / $imagePath")
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                android.util.Log.w(TAG, "Retroactive upload error for ${anime.id}", e)
             }
         }
+    }
+
+    /**
+     * Есть ли реальный локальный источник картинки по пути из anime.imagePath.
+     * Нужен пушу: отличить «файл потерян» (пушим как есть) от «загрузка в R2 упала»
+     * (оставляем запись dirty для ретрая).
+     */
+    fun localImageExists(imagePath: String): Boolean = when {
+        imagePath.startsWith("content://") || imagePath.startsWith("file://") -> true
+        else -> resolveLocalImageFile(imagePath) != null
     }
 
     fun hasLocalCopy(animeId: String, cloudUrl: String): Boolean {
@@ -206,19 +236,20 @@ class AttachmentSyncManager(
             try {
                 val attachmentId = cloudUrl.removePrefix("collection-attachment://")
                 val bytes = fetchAttachmentBytes(attachmentId) ?: return@withContext null
-                val compressed = compressImageToWebP(bytes)
+                // Байты в R2 уже сжаты в WebP на этапе загрузки — повторная перекодировка
+                // только жгла CPU и теряла качество. Пишем как есть.
 
                 val fileName = "img_${animeId}_${attachmentId.take(8)}_c.webp"
                 storagePaths.collectionDir.mkdirs()
                 val collectionFile = File(storagePaths.collectionDir, fileName)
-                collectionFile.writeBytes(compressed)
+                collectionFile.writeBytes(bytes)
 
-                File(syncCacheDir, "$attachmentId.webp").writeBytes(compressed)
+                File(syncCacheDir, "$attachmentId.webp").writeBytes(bytes)
 
                 db.animeQueries.updateAnimeImagePath(imagePath = fileName, id = animeId)
                 fileName
             } catch (e: Exception) {
-                e.printStackTrace()
+                android.util.Log.w(TAG, "downloadAndImportToCollection failed for $animeId", e)
                 null
             }
         }
@@ -234,7 +265,7 @@ class AttachmentSyncManager(
         val presignResponse = json.decodeFromString<PresignDownloadResponse>(functionResponse.bodyAsText())
 
         val url = java.net.URL(presignResponse.downloadUrl)
-        val connection = url.openConnection() as java.net.HttpURLConnection
+        val connection = (url.openConnection() as java.net.HttpURLConnection).applyTimeouts()
         connection.requestMethod = "GET"
         if (connection.responseCode !in 200..299) return null
         return connection.inputStream.use { it.readBytes() }
@@ -254,7 +285,7 @@ class AttachmentSyncManager(
             // 2. Delete local cache
             findCachedAttachment(attachmentId)?.delete()
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.w(TAG, "deleteAttachment failed for $cloudUrl", e)
         }
     }
 
@@ -270,7 +301,7 @@ class AttachmentSyncManager(
         return try {
             when {
                 imagePath.startsWith("http://") || imagePath.startsWith("https://") -> {
-                    val connection = java.net.URL(imagePath).openConnection() as java.net.HttpURLConnection
+                    val connection = (java.net.URL(imagePath).openConnection() as java.net.HttpURLConnection).applyTimeouts()
                     connection.requestMethod = "GET"
                     connection.inputStream.use { it.readBytes() }
                 }
@@ -280,7 +311,7 @@ class AttachmentSyncManager(
                 else -> resolveLocalImageFile(imagePath)?.readBytes()
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.w(TAG, "readLocalImageBytes failed for $imagePath", e)
             null
         }
     }
@@ -340,6 +371,13 @@ class AttachmentSyncManager(
     }
 
     private companion object {
+        private const val TAG = "AttachmentSync"
         val json = Json { ignoreUnknownKeys = true }
+
+        /** Сетевые таймауты для R2/CDN: без них зависший коннект блокировал синк навсегда. */
+        private fun java.net.HttpURLConnection.applyTimeouts(): java.net.HttpURLConnection = apply {
+            connectTimeout = 15_000
+            readTimeout = 60_000
+        }
     }
 }

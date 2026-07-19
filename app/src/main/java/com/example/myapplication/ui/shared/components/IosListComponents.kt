@@ -2,7 +2,6 @@ package com.example.myapplication.ui.shared.components
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -493,7 +492,7 @@ fun IosPickerSheet(
                         Icon(
                             imageVector = Icons.Filled.Check,
                             contentDescription = null,
-                            tint = Color(0xFF007AFF),
+                            tint = Color(0xFFE85002),
                             modifier = Modifier.size(20.dp),
                         )
                     }
@@ -552,7 +551,7 @@ fun IosSelectionSheet(
             )
         }
         if (doneLabel != null && onDone != null) {
-            val doneAccent = options.getOrNull(selectedIndex)?.accent ?: Color(0xFF007AFF)
+            val doneAccent = options.getOrNull(selectedIndex)?.accent ?: Color(0xFFE85002)
             Spacer(Modifier.height(6.dp))
             Box(
                 modifier = Modifier
@@ -729,24 +728,46 @@ private fun IosRadioDot(progress: Float, accent: Color, isDark: Boolean) {
     }
 }
 
-/** iOS toggle switch: 51×31 трек, 27 thumb, зелёный «on». Мгновенно-упругий переход. */
+/**
+ * iOS toggle switch: 51×31 трек, 27 thumb, брендовый «on».
+ *
+ * Плавный эластичный переход (4 ключевых кадра референса): при переключении ползунок
+ * скользит вдоль трека и одновременно вытягивается в горизонтальную капсулу в середине
+ * пути (`sin(p·π)` — 0 в крайних положениях, максимум в центре), а трек плавно
+ * перекрашивается. Всё завязано на один пружинный `progress`, поэтому цвет, сдвиг и
+ * растяжение идут абсолютно синхронно.
+ */
 @Composable
 fun IosSwitch(
     checked: Boolean,
     modifier: Modifier = Modifier,
-    onColor: Color = Color(0xFF34C759),
+    onColor: Color = Color(0xFFE85002),
     onCheckedChange: ((Boolean) -> Unit)? = null,
 ) {
-    val trackColor by animateColorAsState(
-        targetValue = if (checked) onColor else Color(0xFF787880).copy(alpha = 0.32f),
-        animationSpec = MotionTokens.standard(),
-        label = "iosSwitchTrack",
+    // Единый прогресс 0 (off) → 1 (on): лёгкий overshoot придаёт «резину» движению.
+    val progress by animateFloatAsState(
+        targetValue = if (checked) 1f else 0f,
+        animationSpec = MotionTokens.menuPop(),
+        label = "iosSwitchProgress",
     )
-    val thumbOffset by animateDpAsState(
-        targetValue = if (checked) 20.dp else 0.dp,
-        animationSpec = MotionTokens.press(),
-        label = "iosSwitchThumb",
-    )
+    val p = progress.coerceIn(0f, 1f)
+
+    val offColor = Color(0xFF787880).copy(alpha = 0.32f)
+    val trackColor = androidx.compose.ui.graphics.lerp(offColor, onColor, p)
+
+    // Геометрия: трек 51×31, padding 2 → внутренняя зона 47×27, ход центра thumb = 20dp.
+    val thumbDiameter = 27.dp
+    val travel = 20.dp
+    val stretchExtra = 9.dp
+
+    // Растяжение по колоколу: 0 в крайних, максимум в середине хода.
+    val stretch = kotlin.math.sin(p * Math.PI.toFloat()).coerceIn(0f, 1f)
+    val thumbWidth = thumbDiameter + stretchExtra * stretch
+    // Центр ползунка едет по прямой; вытягивание симметрично относительно центра,
+    // поэтому капсула не вылезает за края (в крайних точках растяжение = 0).
+    val thumbCenterX = thumbDiameter / 2 + travel * progress
+    val thumbOffsetX = thumbCenterX - thumbWidth / 2
+
     Box(
         modifier = modifier
             .size(width = 51.dp, height = 31.dp)
@@ -766,9 +787,10 @@ fun IosSwitch(
     ) {
         Box(
             modifier = Modifier
-                .offset(x = thumbOffset)
-                .size(27.dp)
-                .clip(SquircleShape(13.5.dp, smoothing = 0.4f))
+                .offset(x = thumbOffsetX)
+                .size(width = thumbWidth, height = thumbDiameter)
+                // corner = высота/2 → капсула остаётся идеально скруглённой при растяжении.
+                .clip(SquircleShape(thumbDiameter / 2, smoothing = 0.4f))
                 .background(Color.White),
         )
     }

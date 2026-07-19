@@ -1,0 +1,5 @@
+-- Русские названия (обратное обогащение через Shikimori) + отметка последней попытки.
+-- Колонки добавляются в конец таблицы (ALTER ADD COLUMN), порядок совпадает с CREATE TABLE в .sq.
+-- Nullable-колонки: старые строки получают NULL, ничего не ломается.
+ALTER TABLE anime ADD COLUMN title_ru TEXT;
+ALTER TABLE anime ADD COLUMN title_ru_checked_at INTEGER;

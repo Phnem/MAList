@@ -174,6 +174,90 @@ class VetroApiService(
         searchJikan(query.trim(), language).take(limit)
     }
 
+    override suspend fun enrichTitlesByIds(anilistId: Int?, malId: Int?): Result<EnrichedTitles?> = runCatching {
+        searchRate.acquire()
+        aniList.enrichTitlesByIds(anilistId, malId).getOrThrow()
+    }
+
+    override suspend fun enrichTitlesBySearch(query: String, limit: Int): Result<List<EnrichedTitles>> = runCatching {
+        searchRate.acquire()
+        aniList.enrichTitlesBySearch(query.trim(), limit).getOrThrow()
+    }
+
+    override suspend fun malTitlesById(id: Int): Result<EnrichedTitles?> = runCatching {
+        searchRate.acquire()
+        fetchJikanTitlesById(id)
+    }
+
+    override suspend fun malTitlesBySearch(query: String, limit: Int): Result<List<EnrichedTitles>> = runCatching {
+        searchRate.acquire()
+        searchJikanTitles(query.trim(), limit)
+    }
+
+    override suspend fun russianTitleByShikimoriId(id: Int): Result<EnrichedTitles?> = runCatching {
+        searchRate.acquire()
+        shikimori.enrichRussianById(id).getOrThrow()
+    }
+
+    override suspend fun russianTitlesBySearch(query: String, limit: Int): Result<List<EnrichedTitles>> = runCatching {
+        searchRate.acquire()
+        shikimori.enrichRussianBySearch(query.trim(), limit).getOrThrow()
+    }
+
+    override suspend fun anilistRecommendationsBatch(
+        anilistIds: List<Int>,
+        perSeed: Int
+    ): Result<Map<Int, List<ApiSearchResult>>> = runCatching {
+        if (anilistIds.isEmpty()) return@runCatching emptyMap()
+        searchRate.acquire()
+        aniList.recommendationsForIds(anilistIds, perSeed).getOrThrow()
+    }
+
+    override suspend fun shikimoriSimilar(id: Int, language: AppLanguage): Result<List<ApiSearchResult>> = runCatching {
+        searchRate.acquire()
+        shikimori.getSimilarAnime(id, language).getOrThrow()
+    }
+
+    override suspend fun malRecommendations(id: Int): Result<List<ApiSearchResult>>  = runCatching {
+        searchRate.acquire()
+        val response = httpClient.get {
+            url {
+                protocol = URLProtocol.HTTPS
+                host = "api.jikan.moe"
+                appendPathSegments("v4", "anime", id.toString(), "recommendations")
+            }
+        }.bodyAsText()
+        val root = json.parseToJsonElement(response).jsonObject
+        val data = root["data"]?.jsonArray ?: return@runCatching emptyList()
+        data.mapNotNull { el ->
+            val entry = el.jsonObject["entry"]?.jsonObject ?: return@mapNotNull null
+            val title = entry["title"]?.jsonPrimitive?.content ?: return@mapNotNull null
+            val jpg = entry["images"]?.jsonObject?.get("jpg")?.jsonObject
+            val image = jpg?.get("large_image_url")?.jsonPrimitive?.content
+                ?: jpg?.get("image_url")?.jsonPrimitive?.content
+            ApiSearchResult(
+                title = title,
+                altTitle = null,
+                posterUrl = image,
+                // У Jikan recommendations усечённая entry: без жанров/оценки/эпизодов —
+                // скоринг у таких кандидатов опирается на co-occurrence.
+                episodes = 0,
+                description = "",
+                type = "",
+                genres = emptyList(),
+                rating = null,
+                source = "MAL",
+                categoryType = "ANIME",
+                externalId = entry["mal_id"]?.jsonPrimitive?.intOrNull?.toString()
+            )
+        }
+    }
+
+    override suspend fun anilistTrending(limit: Int): Result<List<ApiSearchResult>> = runCatching {
+        searchRate.acquire()
+        aniList.trendingAnime(limit).getOrThrow()
+    }
+
     private fun tmdbKey(): String = BuildConfig.TMDB_API_KEY
 
     private enum class SearchMatch { EXACT, PARTIAL, FUZZY, NONE }
@@ -232,11 +316,69 @@ class VetroApiService(
         burstRate.acquire()
         searchJikan(query, language).forEach { addIfNew(it) }
         val ranked = filterAndRankByQuery(query, raw)
-        if (ranked.isNotEmpty()) return ranked
+        // Stage 12: при RU-запросе без сильного Shikimori — мост через EN-название → Shikimori.
+        val withBridge = if (language == AppLanguage.RU) {
+            augmentRuSearchViaEnglish(query, raw, ranked)
+        } else {
+            ranked
+        }
+        if (withBridge.isNotEmpty()) return withBridge
         if (raw.isEmpty()) return emptyList()
         return raw
             .sortedWith(compareByDescending<ApiSearchResult> { it.rating ?: Int.MIN_VALUE })
             .take(20)
+    }
+
+    /**
+     * RU miss → EN → Shikimori: если у Shikimori нет exact/partial по запросу, берём
+     * английские/ромадзи-названия из AniList/Jikan (или EnrichTitles-поиска) и ищем
+     * по ним на Shikimori уже на русском. Найденные карточки ставятся в начало выдачи.
+     */
+    private suspend fun augmentRuSearchViaEnglish(
+        query: String,
+        raw: List<ApiSearchResult>,
+        ranked: List<ApiSearchResult>,
+    ): List<ApiSearchResult> {
+        val hasStrongShiki = ranked.any { r ->
+            r.source.equals("shikimori", ignoreCase = true) &&
+                searchMatchType(r, query).let { it == SearchMatch.EXACT || it == SearchMatch.PARTIAL }
+        }
+        if (hasStrongShiki) return ranked
+
+        val enQueries = linkedSetOf<String>()
+        for (r in raw) {
+            when (r.source.lowercase()) {
+                "anilist", "mal", "jikan" -> {
+                    r.title.takeIf { it.isNotBlank() }?.let(enQueries::add)
+                    r.altTitle?.takeIf { it.isNotBlank() }?.let(enQueries::add)
+                }
+            }
+        }
+        if (enQueries.isEmpty()) {
+            enrichTitlesBySearch(query, limit = 5).getOrNull().orEmpty()
+                .mapNotNull { it.englishOrNull ?: it.romaji }
+                .forEach(enQueries::add)
+        }
+        if (enQueries.isEmpty()) return ranked
+
+        val seen = ranked.map { resultDedupKey(it) }.filter { it.isNotEmpty() }.toMutableSet()
+        val shikiExtra = mutableListOf<ApiSearchResult>()
+        for (en in enQueries.take(3)) {
+            burstRate.acquire()
+            val hits = shikimori.searchAnime(en, 8, AppLanguage.RU).getOrNull().orEmpty()
+            for (hit in hits) {
+                val key = resultDedupKey(hit)
+                if (key.isEmpty() || !seen.add(key)) continue
+                val matchEn = searchMatchType(hit, en)
+                val matchRu = searchMatchType(hit, query)
+                if (matchEn != SearchMatch.NONE || matchRu != SearchMatch.NONE) {
+                    shikiExtra.add(hit)
+                }
+            }
+            if (shikiExtra.size >= 5) break
+        }
+        if (shikiExtra.isEmpty()) return ranked
+        return (shikiExtra + ranked).distinctBy { resultDedupKey(it) }.take(20)
     }
 
     private suspend fun searchJikan(query: String, language: AppLanguage): List<ApiSearchResult> = runCatching {
@@ -418,6 +560,48 @@ class VetroApiService(
                 ?: obj["mal_id"]?.jsonPrimitive?.content
         )
     }.getOrNull()
+
+    private fun parseJikanTitles(obj: kotlinx.serialization.json.JsonObject): EnrichedTitles? {
+        val titleJp = obj["title"]?.jsonPrimitive?.content
+        val titleEng = obj["title_english"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+        val titleNative = obj["title_japanese"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+        val malId = obj["mal_id"]?.jsonPrimitive?.intOrNull
+        if (titleJp == null && titleEng == null) return null
+        return EnrichedTitles(
+            malId = malId,
+            romaji = titleJp,
+            english = titleEng,
+            native = titleNative,
+        )
+    }
+
+    private suspend fun fetchJikanTitlesById(id: Int): EnrichedTitles? = runCatching {
+        val response = httpClient.get {
+            url {
+                protocol = URLProtocol.HTTPS
+                host = "api.jikan.moe"
+                appendPathSegments("v4", "anime", id.toString())
+            }
+        }.bodyAsText()
+        val obj = json.parseToJsonElement(response).jsonObject["data"]?.jsonObject ?: return@runCatching null
+        parseJikanTitles(obj)
+    }.getOrNull()
+
+    private suspend fun searchJikanTitles(query: String, limit: Int): List<EnrichedTitles> = runCatching {
+        if (query.isBlank()) return@runCatching emptyList()
+        val response = httpClient.get {
+            url {
+                protocol = URLProtocol.HTTPS
+                host = "api.jikan.moe"
+                appendPathSegments("v4", "anime")
+                parameters.append("q", query)
+                parameters.append("limit", limit.toString())
+            }
+        }.bodyAsText()
+        json.parseToJsonElement(response).jsonObject["data"]?.jsonArray
+            ?.mapNotNull { parseJikanTitles(it.jsonObject) }
+            .orEmpty()
+    }.getOrElse { emptyList() }
 
     private suspend fun searchTmdbMovie(query: String): List<ApiSearchResult> = runCatching {
         val key = tmdbKey()

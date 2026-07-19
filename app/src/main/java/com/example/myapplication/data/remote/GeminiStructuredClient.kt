@@ -42,7 +42,7 @@ class GeminiStructuredClient(
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    private val modelId = "gemini-2.5-flash"
+    private val modelId = "gemini-3.1-flash-lite"
 
     suspend fun russianAnimeTitle(
         romaji: String,

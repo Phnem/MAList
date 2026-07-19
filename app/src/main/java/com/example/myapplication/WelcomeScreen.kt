@@ -60,7 +60,7 @@ import com.example.myapplication.ui.shared.theme.SnProFamily
 import com.phnem.vetro.R
 import kotlinx.coroutines.launch
 
-private val SupabaseGreen = Color(0xFF3ECF8E)
+private val SupabaseGreen = Color(0xFFF16001)
 
 @Composable
 fun WelcomeScreen(
@@ -74,10 +74,10 @@ fun WelcomeScreen(
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
 
-    val bgColor = Color(0xFF0E1116)
-    val inputBgColor = Color(0xFF0E1116)
+    val bgColor = Color(0xFF0A0A0A)
+    val inputBgColor = Color(0xFF0A0A0A)
     val textColor = Color.White
-    val subtitleColor = Color(0xFF8B949E)
+    val subtitleColor = Color(0xFFA7A7A7)
 
     val context = androidx.compose.ui.platform.LocalContext.current
     val scrollState = rememberScrollState()
@@ -106,7 +106,7 @@ fun WelcomeScreen(
                 modifier = Modifier
                     .size(64.dp)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(Color(0xFF1E2430)),
+                    .background(Color(0xFF262626)),
                 contentAlignment = Alignment.Center
             ) {
                 Image(
@@ -213,9 +213,9 @@ fun WelcomeScreen(
                     .fillMaxWidth()
                     .height(52.dp),
                 shape = RoundedCornerShape(12.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF2A313E)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF333333)),
                 colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = Color(0xFF1E2430),
+                    containerColor = Color(0xFF262626),
                     contentColor = textColor,
                 ),
             ) {
@@ -331,7 +331,7 @@ fun WelcomeScreen(
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = BrandBlue,
-                    disabledContainerColor = Color(0xFF2A313E),
+                    disabledContainerColor = Color(0xFF333333),
                     contentColor = Color.White,
                     disabledContentColor = subtitleColor
                 )
@@ -382,7 +382,7 @@ fun WelcomeScreen(
 private fun outlinedFieldColors(inputBgColor: Color, textColor: Color, subtitleColor: Color) =
     OutlinedTextFieldDefaults.colors(
         focusedBorderColor = BrandBlue,
-        unfocusedBorderColor = Color(0xFF2A313E),
+        unfocusedBorderColor = Color(0xFF333333),
         focusedContainerColor = inputBgColor,
         unfocusedContainerColor = inputBgColor,
         focusedTextColor = textColor,

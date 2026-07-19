@@ -37,6 +37,18 @@ data class UiStrings(
     val statsGenreOther: String,
     val statsNoGenreData: String,
     val statsOk: String,
+    /** Заголовки карточек колоды статистики. */
+    val statsCardRatingTitle: String,
+    val statsCardFrequencyTitle: String,
+    val statsCardOverviewTitle: String,
+    /** Подсказка под колодой: свайп/тап. */
+    val statsDeckHint: String,
+    /** Заголовок AI-блока в детальном режиме карточки. */
+    val statsAiTitle: String,
+    /** Нет подключённого ИИ — тихая подсказка вместо объяснения. */
+    val statsAiUnavailable: String,
+    /** Недостаточно данных для AI-выводов по карточке. */
+    val statsAiInsufficient: String,
     val rankTitle: String,
     val updatesTitle: String,
     val updatesChecking: String,

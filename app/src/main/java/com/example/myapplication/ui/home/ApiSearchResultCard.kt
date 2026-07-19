@@ -42,7 +42,8 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import coil3.size.Size
-import com.example.myapplication.domain.search.rating10To5
+import com.example.myapplication.data.models.RatingScale
+import com.example.myapplication.domain.search.apiRatingTo10
 import com.example.myapplication.isAppInDarkTheme
 import com.example.myapplication.network.ApiSearchResult
 import com.example.myapplication.ui.shared.fluidClickable
@@ -56,7 +57,8 @@ import kotlinx.collections.immutable.persistentListOf
 @Immutable
 data class ApiSearchResultCardState(
     val title: String,
-    val rating: Int?,
+    /** 10-балльная шкала (одна десятая). */
+    val rating: Float?,
     val genres: PersistentList<String>,
     val episodesText: String,
     val posterUrl: String?,
@@ -82,10 +84,10 @@ fun ApiSearchResultCard(
     forceDarkCardStyle: Boolean = false
 ) {
     val state = remember(result, isAdded, isLoading, displayGenres) {
-        val r10 = result.rating?.let { if (it > 10) it / 10 else it } ?: 0
+        val r10 = apiRatingTo10(result.rating)
         ApiSearchResultCardState(
             title = result.title,
-            rating = if (r10 > 0) rating10To5(r10) else null,
+            rating = r10.takeIf { it > 0f },
             genres = displayGenres ?: persistentListOf(*(result.genres.take(3).toTypedArray())),
             episodesText = buildString {
                 append(if (result.categoryType == "MOVIE") "1 film" else "${result.episodes} eps")
@@ -100,10 +102,10 @@ fun ApiSearchResultCard(
     }
 
     val isDark = forceDarkCardStyle || isAppInDarkTheme()
-    val cardBg = if (isDark) Color(0xFF1C1F28) else MaterialTheme.colorScheme.surface
+    val cardBg = if (isDark) Color(0xFF1C1C1C) else MaterialTheme.colorScheme.surface
     val borderStroke = if (isDark) Color.White.copy(alpha = 0.15f) else LightBorder
     val cardShadowColor = if (isDark) Color.Black.copy(alpha = 0.5f) else Color.Black.copy(alpha = 0.08f)
-    val subtitleColor = if (isDark) Color(0xFF9898A0) else Color(0xFF8E8E93)
+    val subtitleColor = if (isDark) Color(0xFFA7A7A7) else Color(0xFF8E8E93)
     val chipBg = if (isDark) Color.Black.copy(alpha = 0.35f) else Color.Black.copy(alpha = 0.08f)
 
     Box(
@@ -129,7 +131,7 @@ fun ApiSearchResultCard(
                     .fillMaxHeight()
                     .aspectRatio(0.7f)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(if (isDark) Color(0xFF2C2C34) else Color(0xFFE8E8ED)),
+                    .background(if (isDark) Color(0xFF2C2C2C) else Color(0xFFE8E8E8)),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -199,17 +201,17 @@ fun ApiSearchResultCard(
                             .weight(1f)
                             .padding(end = 8.dp)
                     )
-                    state.rating?.let { rating5 ->
-                        if (rating5 > 0) {
+                    state.rating?.let { rating10 ->
+                        if (rating10 > 0f) {
                             Box(
                                 modifier = Modifier
                                     .clip(CircleShape)
                                     .background(MaterialTheme.colorScheme.secondaryContainer)
                             ) {
                                 Text(
-                                    text = "★ $rating5",
+                                    text = "★ ${RatingScale.format(rating10)}",
                                     style = MaterialTheme.typography.labelMedium.copy(
-                                        color = getRatingColor(rating5),
+                                        color = getRatingColor(rating10),
                                         fontFamily = SnProFamily
                                     ),
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)

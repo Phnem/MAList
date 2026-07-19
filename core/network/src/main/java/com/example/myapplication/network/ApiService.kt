@@ -46,4 +46,41 @@ interface ApiService {
         language: AppLanguage,
         limit: Int = 20
     ): Result<List<ApiSearchResult>>
+
+    // ---- Обогащение EN-названий (явные romaji/english/native + внешние id) ----
+
+    /** AniList: явные названия по AniList id и/или MAL id (idMal). */
+    suspend fun enrichTitlesByIds(anilistId: Int?, malId: Int?): Result<EnrichedTitles?>
+
+    /** AniList: явные названия по поиску (для сопоставления, когда id нет). */
+    suspend fun enrichTitlesBySearch(query: String, limit: Int = 8): Result<List<EnrichedTitles>>
+
+    /** MAL/Jikan: явные названия по MAL id (title / title_english / title_japanese). */
+    suspend fun malTitlesById(id: Int): Result<EnrichedTitles?>
+
+    /** MAL/Jikan: явные названия по поиску (fallback). */
+    suspend fun malTitlesBySearch(query: String, limit: Int = 8): Result<List<EnrichedTitles>>
+
+    /** Shikimori: явное русское название по shikimori_id (обратное обогащение, Stage 10). */
+    suspend fun russianTitleByShikimoriId(id: Int): Result<EnrichedTitles?>
+
+    /** Shikimori: явные русские названия по поиску (fallback, когда shikimori_id нет). */
+    suspend fun russianTitlesBySearch(query: String, limit: Int = 8): Result<List<EnrichedTitles>>
+
+    // ---- Recommendations (related-графы источников) ----
+
+    /** AniList: related для ВСЕХ сидов одним батч-запросом. Map: anilistId сида → кандидаты. */
+    suspend fun anilistRecommendationsBatch(
+        anilistIds: List<Int>,
+        perSeed: Int = 12
+    ): Result<Map<Int, List<ApiSearchResult>>>
+
+    /** Shikimori: похожие тайтлы по id (fallback для сидов без anilistId). */
+    suspend fun shikimoriSimilar(id: Int, language: AppLanguage): Result<List<ApiSearchResult>>
+
+    /** MAL/Jikan: рекомендации по id (fallback для сидов только с malId). */
+    suspend fun malRecommendations(id: Int): Result<List<ApiSearchResult>>
+
+    /** AniList: глобальный тренд — cold-start, когда сидов нет. */
+    suspend fun anilistTrending(limit: Int = 20): Result<List<ApiSearchResult>>
 }

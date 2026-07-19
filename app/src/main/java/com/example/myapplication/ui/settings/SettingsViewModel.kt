@@ -33,8 +33,11 @@ import com.example.myapplication.data.local.SQLDelightDatabaseFactory
 import com.example.myapplication.data.repository.AnimeRepository
 import com.example.myapplication.data.repository.AppUpdateRepository
 import com.example.myapplication.domain.settings.ImportAnimeDbUseCase
-import com.example.myapplication.domain.settings.RepairDbSessionLog
-import com.example.myapplication.domain.settings.RepairAnimeDbUseCase
+import com.example.myapplication.domain.settings.RepairDbCoordinator
+import com.example.myapplication.domain.settings.RepairDbState
+import com.example.myapplication.domain.titles.TitleDubbingCoordinator
+import com.example.myapplication.domain.titles.TitleDubbingState
+import com.example.myapplication.data.ai.AiCredentialsStore
 import com.example.myapplication.utils.getDevRepairDbStrings
 import com.example.myapplication.utils.getStrings
 import kotlinx.coroutines.Dispatchers
@@ -76,6 +79,11 @@ private data class SettingsTransientState(
     val repairDbMessage: String? = null,
     val showRepairDbLogDialog: Boolean = false,
     val pendingRepairDbLog: String? = null,
+    val isTitleDubbing: Boolean = false,
+    val titleDubbingProcessed: Int = 0,
+    val titleDubbingTotal: Int = 0,
+    val titleDubbingMessage: String? = null,
+    val showTitleDubbingNoAiDialog: Boolean = false,
     val isApkDownloading: Boolean = false,
     val apkDownloadProgress: Float = 0f,
     val pendingApkPathForInstall: String? = null,
@@ -99,7 +107,7 @@ private fun mergeSettingsUi(
         devMirrorDbToDocuments = prefs[KEY_DEV_MIRROR_DB] ?: false,
         devHideShareButton = prefs[KEY_DEV_HIDE_SHARE] ?: false,
         devFpsOverlay = prefs[KEY_DEV_FPS_OVERLAY] ?: false,
-        devAdaptiveGlassScroll = prefs[DevPreferencesKeys.ADAPTIVE_GLASS_SCROLL] ?: true,
+        devAdaptiveGlassScroll = prefs[DevPreferencesKeys.ADAPTIVE_GLASS_SCROLL] ?: false,
         devGithubUpdatesEnabled = githubUpdatesEnabled,
         isExportingLogs = t.isExportingLogs,
         isExportingPdf = t.isExportingPdf,
@@ -108,6 +116,11 @@ private fun mergeSettingsUi(
         isRepairingDb = t.isRepairingDb,
         repairDbMessage = t.repairDbMessage,
         showRepairDbLogDialog = t.showRepairDbLogDialog,
+        isTitleDubbing = t.isTitleDubbing,
+        titleDubbingProcessed = t.titleDubbingProcessed,
+        titleDubbingTotal = t.titleDubbingTotal,
+        titleDubbingMessage = t.titleDubbingMessage,
+        showTitleDubbingNoAiDialog = t.showTitleDubbingNoAiDialog,
         updateStatus = updateStatus,
         currentVersion = t.currentVersionDisplay,
         latestVersion = snap.latestTag,
@@ -129,8 +142,10 @@ class SettingsViewModel(
     private val settingsDataStore: DataStore<Preferences>,
     private val databaseFactory: SQLDelightDatabaseFactory,
     private val importAnimeDbUseCase: ImportAnimeDbUseCase,
-    private val repairAnimeDbUseCase: RepairAnimeDbUseCase,
+    private val repairDbCoordinator: RepairDbCoordinator,
     private val collectionPdfGenerator: CollectionPdfGenerator,
+    private val titleDubbingCoordinator: TitleDubbingCoordinator,
+    private val aiCredentialsStore: AiCredentialsStore,
     private val app: Application
 ) : ViewModel() {
 
@@ -182,6 +197,51 @@ class SettingsViewModel(
                 pInfo.versionName ?: "v1.0.0"
             }.getOrElse { "v1.0.0" }
             _transient.update { it.copy(currentVersionDisplay = v) }
+        }
+
+        // Фоновое «Исправление БД» живёт в RepairDbCoordinator (WorkManager) —
+        // экран настроек лишь отражает его состояние, даже если открыт заново.
+        viewModelScope.launch {
+            repairDbCoordinator.state.collect { state ->
+                when (state) {
+                    is RepairDbState.Idle -> _transient.update {
+                        it.copy(isRepairingDb = false)
+                    }
+                    is RepairDbState.Running -> _transient.update {
+                        it.copy(isRepairingDb = true, repairDbMessage = null)
+                    }
+                    is RepairDbState.Finished -> _transient.update {
+                        it.copy(
+                            isRepairingDb = false,
+                            repairDbMessage = state.message,
+                            showRepairDbLogDialog = true,
+                            pendingRepairDbLog = state.log,
+                        )
+                    }
+                }
+            }
+        }
+
+        // Фоновый «Дубляж названий» — экран лишь отражает состояние координатора.
+        viewModelScope.launch {
+            titleDubbingCoordinator.state.collect { state ->
+                when (state) {
+                    is TitleDubbingState.Idle -> _transient.update {
+                        it.copy(isTitleDubbing = false)
+                    }
+                    is TitleDubbingState.Running -> _transient.update {
+                        it.copy(
+                            isTitleDubbing = true,
+                            titleDubbingProcessed = state.processed,
+                            titleDubbingTotal = state.total,
+                            titleDubbingMessage = null,
+                        )
+                    }
+                    is TitleDubbingState.Finished -> _transient.update {
+                        it.copy(isTitleDubbing = false, titleDubbingMessage = state.message)
+                    }
+                }
+            }
         }
     }
 
@@ -618,60 +678,50 @@ class SettingsViewModel(
         _transient.update { it.copy(importDbMessage = null) }
     }
 
+    /**
+     * «Нажал и пошёл»: сама проверка выполняется в WorkManager ([RepairDbCoordinator]),
+     * можно уходить с экрана и сворачивать приложение — работа доедет до конца.
+     * ViewModel лишь отражает состояние координатора (см. коллектор в init).
+     */
     fun repairDatabase() {
         if (_transient.value.isRepairingDb) return
-        val repairStrings = getDevRepairDbStrings(uiState.value.language)
-        viewModelScope.launch {
-            _transient.update {
-                it.copy(
-                    isRepairingDb = true,
-                    repairDbMessage = null,
-                    showRepairDbLogDialog = false,
-                    pendingRepairDbLog = null,
-                )
-            }
-            val sessionLog = RepairDbSessionLog()
-            try {
-                val result = withContext(Dispatchers.IO) {
-                    repairAnimeDbUseCase(
-                        language = uiState.value.language,
-                        contentType = uiState.value.contentType,
-                        sessionLog = sessionLog,
-                    )
-                }
-                val message = repairStrings.resultTemplate.format(
-                    result.repairedCount,
-                    result.scannedCount,
-                    result.skippedCount,
-                    result.failedCount,
-                )
-                _transient.update {
-                    it.copy(
-                        isRepairingDb = false,
-                        repairDbMessage = message,
-                        showRepairDbLogDialog = true,
-                        pendingRepairDbLog = sessionLog.asText(),
-                    )
-                }
-            } catch (e: Exception) {
-                sessionLog.error("Repair aborted", e)
-                Log.w(LOG_TAG, "Failed to repair DB", e)
-                _transient.update {
-                    it.copy(
-                        isRepairingDb = false,
-                        repairDbMessage = repairStrings.resultFailed,
-                        showRepairDbLogDialog = true,
-                        pendingRepairDbLog = sessionLog.asText(),
-                    )
-                }
-            }
-        }
+        repairDbCoordinator.start(
+            language = uiState.value.language,
+            contentType = uiState.value.contentType,
+        )
     }
 
     fun discardRepairDbLog() {
+        repairDbCoordinator.acknowledgeResult()
         _transient.update {
             it.copy(showRepairDbLogDialog = false, pendingRepairDbLog = null)
         }
+    }
+
+    /**
+     * «Дубляж названий»: полный перескан. Помечает фичу как включённую (для авто-дубляжа новых
+     * тайтлов), затем запускает фоновый проход. Если нет подключённого AI — показываем диалог,
+     * но проход всё равно стартует (API-обогащение полезно и без AI).
+     */
+    fun runTitleDubbing() {
+        if (_transient.value.isTitleDubbing) return
+        viewModelScope.launch {
+            settingsDataStore.edit { it[DevPreferencesKeys.TITLE_DUBBING_EVER_ENABLED] = true }
+            val hasAi = aiCredentialsStore.getAllConnectedProviders().isNotEmpty()
+            if (!hasAi) {
+                _transient.update { it.copy(showTitleDubbingNoAiDialog = true) }
+            }
+            titleDubbingCoordinator.start(uiState.value.language, fullRescan = true)
+        }
+    }
+
+    fun dismissTitleDubbingNoAiDialog() {
+        _transient.update { it.copy(showTitleDubbingNoAiDialog = false) }
+    }
+
+    fun clearTitleDubbingMessage() {
+        titleDubbingCoordinator.acknowledgeResult()
+        _transient.update { it.copy(titleDubbingMessage = null) }
     }
 
     fun exportRepairDbLog(context: Context) {

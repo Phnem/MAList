@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Placeholder brand mark for OpenAI (swap for official asset when available). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M12,2L20.66,7V17L12,22L3.34,17V7L12,2ZM12,4.31L5.34,8.15V15.85L12,19.69L18.66,15.85V8.15L12,4.31Z"
+        android:fillColor="#FF10A37F" />
+    <path
+        android:pathData="M12,8.4A3.6,3.6 0,1 0,12 15.6A3.6,3.6 0,1 0,12 8.4Z"
+        android:fillColor="#FF10A37F" />
+</vector>

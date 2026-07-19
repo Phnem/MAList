@@ -1,0 +1,52 @@
+# Батч: related-рекомендации сразу для ВСЕХ сидов одним HTTP-запросом (id_in),
+# вместо N запросов по одному сиду. Ключевая оптимизация пайплайна рекомендаций.
+query RecommendationsBatch($ids: [Int], $perSeed: Int) {
+  Page(page: 1, perPage: 25) {
+    media(id_in: $ids) {
+      id
+      recommendations(sort: [RATING_DESC], perPage: $perSeed) {
+        nodes {
+          rating
+          mediaRecommendation {
+            id
+            title {
+              romaji
+              english
+            }
+            description
+            type
+            status
+            episodes
+            coverImage {
+              large
+            }
+            averageScore
+            genres
+          }
+        }
+      }
+    }
+  }
+}
+
+# Cold-start: глобальный тренд одним запросом, когда у пользователя нет сидов.
+query TrendingMedia($page: Int, $perPage: Int, $type: MediaType = ANIME) {
+  Page(page: $page, perPage: $perPage) {
+    media(sort: [TRENDING_DESC], type: $type) {
+      id
+      title {
+        romaji
+        english
+      }
+      description
+      type
+      status
+      episodes
+      coverImage {
+        large
+      }
+      averageScore
+      genres
+    }
+  }
+}

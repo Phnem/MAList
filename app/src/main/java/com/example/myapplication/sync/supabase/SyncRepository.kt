@@ -34,16 +34,24 @@ data class AnimeRemoteDto(
     val created_at: Long,
     val updated_at: String,
     val deleted_at: Long?,
-    val media_type: String = "ANIME"
+    val media_type: String = "ANIME",
+    val title_en: String? = null,
+    val title_en_checked_at: Long? = null,
+    val title_ru: String? = null,
+    val title_ru_checked_at: Long? = null
 )
 
+/**
+ * Строка облачной таблицы anime_tags. ВАЖНО: поля должны 1-в-1 совпадать со схемой Supabase
+ * (anime_id, user_id, tag, updated_at) — лишнее поле в upsert валит запрос целиком
+ * («Could not find the column …»), из-за чего жанры раньше вообще не пушились.
+ */
 @Serializable
 data class AnimeTagRemoteDto(
     val anime_id: String,
     val user_id: String,
     val tag: String,
-    val updated_at: String,
-    val is_deleted: Boolean = false
+    val updated_at: String
 )
 
 
@@ -66,13 +74,29 @@ class SyncRepository(
         Log.d(TAG, "Push for user_id=$userId, pending=${db.animeQueries.selectPendingSync().executeAsList().size}")
         ensureInitialLocalUpload(userId)
 
+        // Однократный ресинк жанров в облако. Причины: (1) старый push тегов падал молча
+        // (лишняя колонка is_deleted), (2) таблица anime_tags могла быть НЕ создана на боевой
+        // базе (миграция не применялась). Пушим теги всех тайтлов напрямую (без пометки аниме
+        // pending — лишний трафик); флаг ставим ТОЛЬКО при успехе, поэтому после создания
+        // таблицы жанры до-синкнутся автоматически на ближайшем синке.
+        if (!syncPrefs.getBoolean("tags_resync_done_v2", false)) {
+            val taggedIds = db.animeQueries.getAllAnime().executeAsList()
+                .map { it.id }
+                .filter { db.animeQueries.getAnimeTags(it).executeAsList().isNotEmpty() }
+            val ok = runCatching { pushTagsForAnime(userId, taggedIds) }
+                .onFailure { Log.w(TAG, "Genre resync deferred (anime_tags missing?): ${it.message}") }
+                .isSuccess
+            if (ok) syncPrefs.edit().putBoolean("tags_resync_done_v2", true).apply()
+        }
+
         val pendingAnime = db.animeQueries.selectPendingSync().executeAsList()
         if (pendingAnime.isEmpty()) return@withContext PushResult(0, null)
 
         val syncedIds = mutableListOf<String>()
         val dtos = pendingAnime.map { anime ->
             var finalImagePath = anime.imagePath
-            
+            var imageUploadFailed = false
+
             if (finalImagePath != null &&
                 !finalImagePath.startsWith("http") &&
                 !finalImagePath.startsWith("collection-attachment://")
@@ -81,10 +105,15 @@ class SyncRepository(
                 if (cloudUrl != null) {
                     finalImagePath = cloudUrl
                     db.animeQueries.updateAnimeImagePath(imagePath = cloudUrl, id = anime.id)
+                } else if (attachmentSyncManager.localImageExists(finalImagePath)) {
+                    // Файл есть, но загрузка в R2 не удалась: строку пушим (метаданные не теряем),
+                    // но SYNCED не ставим — следующий цикл повторит загрузку обложки.
+                    // Раньше запись помечалась SYNCED и обложка не доезжала до облака никогда.
+                    imageUploadFailed = true
                 }
             }
 
-            syncedIds.add(anime.id)
+            if (!imageUploadFailed) syncedIds.add(anime.id)
 
             AnimeRemoteDto(
                 id = anime.id,
@@ -111,7 +140,11 @@ class SyncRepository(
                 created_at = anime.dateAdded,
                 updated_at = java.time.Instant.ofEpochMilli(anime.updatedAt).toString(),
                 deleted_at = anime.deletedAt,
-                media_type = anime.mediaType
+                media_type = anime.mediaType,
+                title_en = anime.title_en,
+                title_en_checked_at = anime.title_en_checked_at,
+                title_ru = anime.title_ru,
+                title_ru_checked_at = anime.title_ru_checked_at
             )
         }
 
@@ -119,46 +152,53 @@ class SyncRepository(
 
         try {
             supabase.postgrest["anime"].upsert(dtos)
-            db.transaction {
-                syncedIds.forEach { id ->
-                    db.animeQueries.markAnimeSynced(id)
-                }
-            }
-            syncPrefs.edit().putBoolean(initialUploadKey(userId), true).apply()
-            Log.i(TAG, "Pushed ${dtos.size} anime row(s) to cloud")
-
-            pushTagsForAnime(userId, pendingAnime, syncedIds)
-            return@withContext PushResult(dtos.size, null)
         } catch (e: Exception) {
             Log.e(TAG, "Push anime failed: ${e.message}", e)
             return@withContext PushResult(0, e.message ?: e.toString())
         }
+
+        // Аниме уже в облаке — помечаем synced. Теги (жанры) пушим отдельно и best-effort:
+        // отсутствие таблицы anime_tags (не применённая миграция) НЕ должно валить весь синк —
+        // аниме-данные важнее и уже сохранены. Ошибку логируем; после создания таблицы жанры
+        // до-синкнутся ресинком выше (tags_resync_done_v2 не выставлен, пока push тегов падает).
+        db.transaction {
+            syncedIds.forEach { id -> db.animeQueries.markAnimeSynced(id) }
+        }
+        syncPrefs.edit().putBoolean(initialUploadKey(userId), true).apply()
+        runCatching { pushTagsForAnime(userId, syncedIds) }
+            .onFailure { Log.w(TAG, "Push tags failed (genres deferred until anime_tags exists): ${it.message}") }
+        Log.i(TAG, "Pushed ${dtos.size} anime row(s) to cloud")
+        return@withContext PushResult(dtos.size, null)
     }
 
-    private suspend fun pushTagsForAnime(
-        userId: String,
-        pendingAnime: List<com.example.myapplication.data.local.Anime>,
-        syncedIds: List<String>,
-    ) {
-        val pendingTagsDtos = mutableListOf<AnimeTagRemoteDto>()
-        pendingAnime.filter { it.id in syncedIds }.forEach { anime ->
-            val tags = db.animeQueries.getAnimeTags(anime.id).executeAsList()
-            tags.forEach { tag ->
-                pendingTagsDtos.add(
+    /**
+     * Полная замена облачного набора тегов для изменённых тайтлов: DELETE по anime_id + INSERT
+     * текущего набора. Так удаление жанра доезжает до других устройств без tombstone-колонок:
+     * та сторона перечитает теги по факту обновления строки anime (см. [pullTagsFor]).
+     */
+    private suspend fun pushTagsForAnime(userId: String, syncedIds: List<String>) {
+        if (syncedIds.isEmpty()) return
+        val now = java.time.Instant.now().toString()
+        syncedIds.chunked(TAG_CHUNK_SIZE).forEach { chunk ->
+            supabase.postgrest["anime_tags"].delete {
+                filter {
+                    eq("user_id", userId)
+                    isIn("anime_id", chunk)
+                }
+            }
+            val dtos = chunk.flatMap { animeId ->
+                db.animeQueries.getAnimeTags(animeId).executeAsList().map { tag ->
                     AnimeTagRemoteDto(
-                        anime_id = anime.id,
+                        anime_id = animeId,
                         user_id = userId,
                         tag = tag,
-                        updated_at = java.time.Instant.now().toString()
+                        updated_at = now
                     )
-                )
+                }
             }
-        }
-        if (pendingTagsDtos.isEmpty()) return
-        try {
-            supabase.postgrest["anime_tags"].upsert(pendingTagsDtos)
-        } catch (e: Exception) {
-            Log.e(TAG, "Push tags failed: ${e.message}", e)
+            if (dtos.isNotEmpty()) {
+                supabase.postgrest["anime_tags"].upsert(dtos)
+            }
         }
     }
 
@@ -182,6 +222,15 @@ class SyncRepository(
 
             if (remoteChanges.isEmpty()) return@withContext PullResult(0, null)
 
+            // Теги (жанры) изменённых тайтлов тянем заранее, ДО локальной транзакции:
+            // сетевые вызовы внутри db.transaction недопустимы. Курсорная выборка тегов была
+            // с багом: приходили только изменённые строки, а локальный набор заменялся целиком —
+            // старые теги терялись. Теперь читаем ПОЛНЫЙ набор тегов по каждому anime_id.
+            val remoteTagsByAnime = pullTagsFor(
+                userId = userId,
+                animeIds = remoteChanges.filter { it.deleted_at == null }.map { it.id },
+            )
+
             var maxUpdatedAt = cursorMs
             val attachmentsToDownload = mutableListOf<Pair<String, String>>()
             db.transaction {
@@ -192,7 +241,7 @@ class SyncRepository(
                     }
 
                     val local = db.animeQueries.getAnimeById(remote.id).executeAsOneOrNull()
-                    
+
                     // LWW: local dirty wins
                     if (local != null && local.sync_status != "SYNCED") {
                         return@forEach
@@ -201,6 +250,9 @@ class SyncRepository(
                     // Soft delete: only apply if remote is newer than local
                     if (remote.deleted_at != null) {
                         if (local == null || remoteUpdatedMs > local.updatedAt) {
+                            // FK CASCADE в SQLite не гарантирован (PRAGMA может быть выключен) —
+                            // чистим теги явно.
+                            db.animeQueries.deleteAnimeTags(remote.id)
                             db.animeQueries.deleteAnime(remote.id)
                         }
                         return@forEach
@@ -211,7 +263,9 @@ class SyncRepository(
                         title = remote.title,
                         imagePath = remote.image_path,
                         episodes = remote.episodes.toLong(),
-                        rating = remote.rating.toLong(),
+                        // Рейтинг хранится ×10 (0..100). Легаси-строки в облаке (5-звёзд, 1..5)
+                        // нормализуем на лету: новая шкала значений <10 не порождает.
+                        rating = normalizeRemoteRating(remote.rating),
                         status = remote.status,
                         isFavorite = if (remote.is_favorite) 1L else 0L,
                         updatedAt = remoteUpdatedMs,
@@ -229,9 +283,24 @@ class SyncRepository(
                         isPrivate = if (remote.is_private) 1L else 0L,
                         encryptionIv = remote.encryption_iv,
                         deletedAt = remote.deleted_at,
-                        mediaType = remote.media_type
+                        mediaType = remote.media_type,
+                        title_en = remote.title_en,
+                        title_en_checked_at = remote.title_en_checked_at,
+                        title_ru = remote.title_ru,
+                        title_ru_checked_at = remote.title_ru_checked_at
                     )
                     
+                    // Локальный набор тегов заменяем облачным целиком (мы только что применили
+                    // облачную версию строки anime — теги едут тем же снапшотом). Но ТОЛЬКО если
+                    // теги реально прочитаны (remoteTagsByAnime != null); при недоступной таблице
+                    // anime_tags локальные жанры НЕ трогаем, иначе затёрли бы их пустотой.
+                    if (remoteTagsByAnime != null) {
+                        db.animeQueries.deleteAnimeTags(remote.id)
+                        remoteTagsByAnime[remote.id].orEmpty().forEach { tag ->
+                            db.animeQueries.insertAnimeTag(remote.id, tag)
+                        }
+                    }
+
                     val imagePath = remote.image_path
                     if (imagePath?.startsWith("collection-attachment://") == true) {
                         if (!attachmentSyncManager.hasLocalCopy(remote.id, imagePath)) {
@@ -245,7 +314,6 @@ class SyncRepository(
                 attachmentSyncManager.downloadAndImportToCollection(animeId, cloudUrl)
             }
 
-            pullRemoteTags(userId)
             Log.i(TAG, "Pulled ${remoteChanges.size} anime row(s) from cloud")
             return@withContext PullResult(remoteChanges.size, null)
         } catch (e: Exception) {
@@ -289,40 +357,33 @@ class SyncRepository(
 
     private fun initialUploadKey(userId: String) = "initial_local_upload_v1_$userId"
 
-    private suspend fun pullRemoteTags(userId: String) {
-        try {
-            val tagCursorMs = db.syncQueries.getCursor("anime_tags").executeAsOneOrNull() ?: 0L
-            val tagCursorIso = java.time.Instant.ofEpochMilli(tagCursorMs).toString()
-            val remoteTags = supabase.postgrest["anime_tags"]
-                .select {
-                    filter {
-                        eq("user_id", userId)
-                        gt("updated_at", tagCursorIso)
+    /** Полный набор облачных тегов по списку anime_id (чанками, чтобы не упереться в лимит URL). */
+    /**
+     * @return null — теги прочитать НЕ удалось (таблицы нет и т.п.): вызывающий должен
+     * оставить локальные теги нетронутыми, НЕ затирать. Непустая/пустая карта — авторитетный
+     * облачный набор (пустая = у тайтла в облаке тегов нет).
+     */
+    private suspend fun pullTagsFor(
+        userId: String,
+        animeIds: List<String>,
+    ): Map<String, List<String>>? {
+        if (animeIds.isEmpty()) return emptyMap()
+        return runCatching {
+            val result = mutableListOf<AnimeTagRemoteDto>()
+            animeIds.chunked(TAG_CHUNK_SIZE).forEach { chunk ->
+                result += supabase.postgrest["anime_tags"]
+                    .select {
+                        filter {
+                            eq("user_id", userId)
+                            isIn("anime_id", chunk)
+                        }
                     }
-                }
-                .decodeList<AnimeTagRemoteDto>()
-
-            if (remoteTags.isEmpty()) return
-
-            var tagMaxUpdatedAt = tagCursorMs
-            db.transaction {
-                val tagsByAnime = remoteTags.groupBy { it.anime_id }
-                for ((animeId, tags) in tagsByAnime) {
-                    db.animeQueries.deleteAnimeTags(animeId)
-                    tags.filter { !it.is_deleted }.forEach {
-                        db.animeQueries.insertAnimeTag(animeId, it.tag)
-                    }
-                }
-                remoteTags.forEach {
-                    val remoteUpdatedMs = java.time.Instant.parse(it.updated_at).toEpochMilli()
-                    if (remoteUpdatedMs > tagMaxUpdatedAt) {
-                        tagMaxUpdatedAt = remoteUpdatedMs
-                    }
-                }
-                db.syncQueries.setCursor("anime_tags", tagMaxUpdatedAt)
+                    .decodeList<AnimeTagRemoteDto>()
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "Pull tags skipped: ${e.message}", e)
+            result.groupBy({ it.anime_id }, { it.tag })
+        }.getOrElse {
+            Log.w(TAG, "Pull tags skipped (anime_tags missing?): ${it.message}")
+            null
         }
     }
 
@@ -345,5 +406,11 @@ class SyncRepository(
 
     private companion object {
         private const val TAG = "SyncRepository"
+        /** Размер чанка для isIn-фильтров по anime_id (PostgREST кодирует список в URL). */
+        private const val TAG_CHUNK_SIZE = 100
+
+        /** Легаси 5-звёздочный рейтинг (1..9) → хранимые единицы 10-балльной шкалы (×20). */
+        private fun normalizeRemoteRating(rating: Int): Long =
+            if (rating in 1..9) (rating * 20L).coerceAtMost(100L) else rating.toLong()
     }
 }

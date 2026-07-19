@@ -18,7 +18,6 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material.icons.rounded.Star
-import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -36,11 +35,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapplication.isAppInDarkTheme
 import com.example.myapplication.data.models.GenreCategory
+import com.example.myapplication.data.models.RatingScale
 import com.example.myapplication.data.models.UiStrings
 import com.example.myapplication.data.repository.GenreRepository
 import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.ui.shared.theme.*
+import com.example.myapplication.utils.performHaptic
 import org.koin.compose.koinInject
+import kotlin.math.roundToInt
 
 // ==========================================
 // AnimatedOneUiTextField
@@ -131,30 +133,8 @@ fun EpisodeSuggestions(onSelect: (String) -> Unit) {
     }
 }
 
-// ==========================================
-// StarRatingBar
-// ==========================================
-@Composable
-fun StarRatingBar(rating: Int, onRatingChanged: (Int) -> Unit) {
-    val emptyStarTint =
-        if (isAppInDarkTheme()) RateColorEmpty
-        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.48f)
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.Center
-    ) {
-        for (i in 1..5) {
-            IconButton(onClick = { onRatingChanged(i) }) {
-                Icon(
-                    imageVector = if (i <= rating) Icons.Rounded.Star else Icons.Rounded.StarBorder,
-                    contentDescription = "Star $i",
-                    tint = if (i <= rating) getRatingColor(i) else emptyStarTint,
-                    modifier = Modifier.size(36.dp)
-                )
-            }
-        }
-    }
-}
+// RatingSlider заменён на морфинг-виджет со смайликом:
+// см. ui/shared/components/rating/ (RatingTrackWidget + RatingOverlayHost).
 
 // ==========================================
 // GenreSelectionSection — collapsible categories (delegates to ExpandableGenreFlow)
@@ -193,9 +173,9 @@ fun GenreSelectionSection(
     )
 
     val categories = listOf(
-        GenreCategoryData("Anime", strings.genreAnime, animeGenres, Color(0xFFFF2D55)),
-        GenreCategoryData("Movies", strings.genreMovies, movieGenres, Color(0xFF5AC8FA)),
-        GenreCategoryData("Series", strings.genreSeries, seriesGenres, Color(0xFFFFCC00))
+        GenreCategoryData("Anime", strings.genreAnime, animeGenres, Color(0xFFE85002)),
+        GenreCategoryData("Movies", strings.genreMovies, movieGenres, Color(0xFF8A8A8E)),
+        GenreCategoryData("Series", strings.genreSeries, seriesGenres, Color(0xFFD9C3AB))
     )
 
     ExpandableGenreFlow(

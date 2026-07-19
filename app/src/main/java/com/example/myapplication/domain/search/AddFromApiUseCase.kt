@@ -1,14 +1,17 @@
 package com.example.myapplication.domain.search
 
+import com.example.myapplication.data.models.RatingScale
 import com.example.myapplication.data.repository.GenreRepository
 import com.example.myapplication.data.repository.ImageStorageRepository
 import com.example.myapplication.domain.IdGenerator
+import com.example.myapplication.data.repository.AnimeRepository
 import com.example.myapplication.domain.addedit.SaveAnimeParams
 import com.example.myapplication.domain.addedit.SaveAnimeUseCase
 import com.example.myapplication.network.ApiSearchResult
+import com.example.myapplication.network.AppLanguage
 
-/** Конвертация рейтинга из шкалы 1–10 в 5 звёзд: rating5 = min(5, floor(rating10/2) + 1). */
-fun rating10To5(rating10: Int): Int = (rating10 / 2 + 1).coerceIn(1, 5)
+/** Рейтинг API → 10-балльная шкала приложения (см. [RatingScale.fromApi]). */
+fun apiRatingTo10(apiRating: Int?): Float = RatingScale.fromApi(apiRating)
 
 fun mapApiGenresToTagIds(genres: List<String>, genreRepository: GenreRepository): List<String> =
     genres.mapNotNull { apiGenre ->
@@ -24,13 +27,14 @@ fun mapApiGenresToTagIds(genres: List<String>, genreRepository: GenreRepository)
 
 /**
  * Adds a media item from API search result to the local database.
- * Downloads poster from URL, maps genres to app genre IDs, converts rating to 5-star, saves via SaveAnimeUseCase.
+ * Downloads poster from URL, maps genres to app genre IDs, converts rating to the 10-point scale, saves via SaveAnimeUseCase.
  */
 class AddFromApiUseCase(
     private val saveAnimeUseCase: SaveAnimeUseCase,
     private val imageStorage: ImageStorageRepository,
     private val idGenerator: IdGenerator,
-    private val genreRepository: GenreRepository
+    private val genreRepository: GenreRepository,
+    private val repository: AnimeRepository,
 ) {
     suspend operator fun invoke(
         result: ApiSearchResult
@@ -40,15 +44,27 @@ class AddFromApiUseCase(
             imageStorage.saveImageFromUrl(url, animeId).getOrNull()
         }
 
-        val rating10 = (result.rating ?: 0).let { if (it > 10) it / 10 else it }
-        val rating5 = rating10To5(rating10)
+        val rating10 = apiRatingTo10(result.rating)
         val selectedTags = mapApiGenresToTagIds(result.genres, genreRepository)
+
+        // Shikimori-результат из поиска несёт только shikimori_id; MAL id дотягиваем detail-запросом,
+        // чтобы у записи сразу были ОБА id (для обогащения english по id, а не по названию).
+        val shikimoriMalId = if (result.source.equals("Shikimori", ignoreCase = true) && result.malId == null) {
+            result.externalId?.toIntOrNull()?.let { sid ->
+                repository.shikimoriById(sid, AppLanguage.EN).getOrNull()?.malId
+            }
+        } else {
+            null
+        }
+        val effectiveMalId = result.malId ?: shikimoriMalId ?: result.externalId?.toIntOrNull().takeIf {
+            result.source.equals("MAL", ignoreCase = true) || result.source.equals("Jikan", ignoreCase = true)
+        }
 
         val params = SaveAnimeParams(
             animeId = null,
             title = result.title,
             episodes = result.episodes.coerceAtLeast(1),
-            rating = rating5,
+            rating = rating10,
             imageUri = null,
             currentImageFileName = imageFileName,
             orderIndex = 0,
@@ -58,9 +74,7 @@ class AddFromApiUseCase(
             categoryType = result.categoryType,
             comment = "",
             anilistId = result.externalId?.toIntOrNull().takeIf { result.source.equals("AniList", ignoreCase = true) },
-            malId = result.externalId?.toIntOrNull().takeIf {
-                result.source.equals("MAL", ignoreCase = true) || result.source.equals("Jikan", ignoreCase = true)
-            },
+            malId = effectiveMalId,
             shikimoriId = result.externalId?.toIntOrNull().takeIf { result.source.equals("Shikimori", ignoreCase = true) }
         )
         saveAnimeUseCase(params)

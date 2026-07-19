@@ -9,6 +9,7 @@ import android.provider.MediaStore
 import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.documentfile.provider.DocumentFile
@@ -34,6 +35,14 @@ class LegacyCollectionSafMigrator(
     }
 
     suspend fun needsLegacyFolderAccess(): Boolean = countMissingCollectionImages() > 0
+
+    /** Пользователь уже разобрался с переносом обложек (импортировал или пропустил) — больше не спрашивать. */
+    suspend fun isCoverImportResolved(): Boolean =
+        dataStore.data.first()[LEGACY_COVER_IMPORT_RESOLVED] == true
+
+    suspend fun markCoverImportResolved() {
+        dataStore.edit { prefs -> prefs[LEGACY_COVER_IMPORT_RESOLVED] = true }
+    }
 
     suspend fun migrateAllAvailableSources(): Int = withContext(Dispatchers.IO) {
         var copied = 0
@@ -193,5 +202,6 @@ class LegacyCollectionSafMigrator(
         private const val COLLECTION_DIR = "collection"
         private const val VETRO_FOLDER = "Vetro"
         private val LEGACY_VETRO_TREE_URI = stringPreferencesKey("legacy_vetro_tree_uri")
+        private val LEGACY_COVER_IMPORT_RESOLVED = booleanPreferencesKey("legacy_cover_import_resolved")
     }
 }

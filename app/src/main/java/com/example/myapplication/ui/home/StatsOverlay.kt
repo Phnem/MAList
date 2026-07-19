@@ -1,14 +1,17 @@
 package com.example.myapplication.ui.home
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -46,6 +49,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -67,8 +71,13 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.example.myapplication.data.models.Anime
 import com.example.myapplication.data.models.UiStrings
+import com.example.myapplication.domain.stats.StatsCardExplanationState
+import com.example.myapplication.domain.stats.StatsCardKind
+import com.example.myapplication.domain.stats.StatsExplanationCoordinator
 import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.isAppInDarkTheme
+import com.example.myapplication.ui.home.stats.StatsCardDeckContent
+import com.example.myapplication.ui.home.stats.StatsCardDetailContent
 import com.example.myapplication.ui.shared.inertialCollision
 import com.example.myapplication.ui.shared.rememberInertialCollisionState
 import com.example.myapplication.ui.shared.components.GrabberHandle
@@ -84,6 +93,7 @@ import com.example.myapplication.ui.shared.theme.SnProFamily
 import com.example.myapplication.ui.shared.theme.glassEdge
 import com.example.myapplication.ui.shared.theme.glassFill
 import com.example.myapplication.ui.shared.theme.softPlateShadowForLightSheet
+import org.koin.compose.koinInject
 import java.util.Locale
 
 // ==========================================
@@ -100,6 +110,10 @@ fun StatsOverlay(
 ) {
     val isDark = isAppInDarkTheme()
     var visible by remember { mutableStateOf(false) }
+    // null — режим «колода», иначе — детальный режим тапнутой карточки
+    var expandedCard by remember { mutableStateOf<StatsCardKind?>(null) }
+    val explanationCoordinator: StatsExplanationCoordinator = koinInject()
+    val explanations by explanationCoordinator.state.collectAsState()
 
     LaunchedEffect(Unit) { visible = true }
 
@@ -114,13 +128,9 @@ fun StatsOverlay(
         }
     }
 
-    BackHandler { triggerDismiss() }
-
-    val totalAnime = animeList.size
-    val avgRating = if (animeList.isNotEmpty()) animeList.map { it.rating }.average() else 0.0
-    val totalEpisodes = animeList.sumOf { it.episodes }
-    val favorites = animeList.count { it.isFavorite }
-    val ratingFormatted = String.format(Locale.getDefault(), "%.1f", avgRating)
+    BackHandler {
+        if (expandedCard != null) expandedCard = null else triggerDismiss()
+    }
 
     val collisionState = rememberInertialCollisionState()
     LaunchedEffect(visible) {
@@ -188,12 +198,12 @@ fun StatsOverlay(
                     strings = strings,
                     appLanguage = appLanguage,
                     isDark = isDark,
-                    totalAnime = totalAnime,
-                    ratingFormatted = ratingFormatted,
-                    totalEpisodes = totalEpisodes,
-                    favorites = favorites,
                     footerPhrase = footerPhrase,
                     collisionState = collisionState,
+                    expandedCard = expandedCard,
+                    explanations = explanations,
+                    onCardTap = { expandedCard = it },
+                    onBackFromDetail = { expandedCard = null },
                     onDismiss = ::triggerDismiss
                     )
                 }
@@ -202,19 +212,22 @@ fun StatsOverlay(
     }
 }
 
-/** Декомпозированный «контент» — заголовок, плитки, CTA. Хранится здесь, не в glass.kt/nottif.kt. */
+/**
+ * Декомпозированный «контент» — два режима под AnimatedContent:
+ * колода из трёх карточек (тап — детали) и детальный режим с AI-объяснением.
+ */
 @Composable
 private fun StatsContent(
     animeList: List<Anime>,
     strings: UiStrings,
     appLanguage: AppLanguage,
     isDark: Boolean,
-    totalAnime: Int,
-    ratingFormatted: String,
-    totalEpisodes: Int,
-    favorites: Int,
     footerPhrase: String,
     collisionState: com.example.myapplication.ui.shared.InertialCollisionState,
+    expandedCard: StatsCardKind?,
+    explanations: Map<StatsCardKind, StatsCardExplanationState>,
+    onCardTap: (StatsCardKind) -> Unit,
+    onBackFromDetail: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val scroll = rememberScrollState()
@@ -222,156 +235,116 @@ private fun StatsContent(
         modifier = Modifier
             .fillMaxWidth()
             .verticalScroll(scroll)
-            .padding(28.dp),
+            .padding(horizontal = 28.dp, vertical = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .inertialCollision(state = collisionState, index = 0, baseMultiplier = 3f)
-        ) {
-            Text(
-                text = strings.statsTitle,
-                style = MaterialTheme.typography.titleLarge.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = SnProFamily,
-                    fontSize = 24.sp,
-                    letterSpacing = (-0.3).sp
-                ),
-                color = MaterialTheme.colorScheme.onSurface
-            )
-        }
-
-        Spacer(Modifier.height(6.dp))
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .inertialCollision(state = collisionState, index = 1, baseMultiplier = 3f)
-        ) {
-            Text(
-                text = strings.statsSubtitle,
-                style = OverlayThemeTokens.SectionLabel,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = OverlayThemeTokens.LabelMutedAlpha)
-            )
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .inertialCollision(state = collisionState, index = 2, baseMultiplier = 3f)
-        ) {
-            StatsChartsRow(
-                animeList = animeList,
-                strings = strings,
-                appLanguage = appLanguage
-            )
-        }
-
-        Spacer(Modifier.height(24.dp))
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .inertialCollision(state = collisionState, index = 3, baseMultiplier = 3f)
-        ) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(IntrinsicSize.Min),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    StatsMetricTile(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight(),
-                        value = totalAnime.toString(),
-                        label = strings.statsTotal,
-                        accent = OverlayThemeTokens.AccentNeonBlue,
-                        icon = Icons.Default.Visibility,
-                        isDark = isDark
-                    )
-                    StatsMetricTile(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight(),
-                        value = ratingFormatted,
-                        label = strings.avgRating,
-                        accent = OverlayThemeTokens.AccentNeonYellow,
-                        icon = Icons.Rounded.Star,
-                        isDark = isDark
-                    )
-                }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(IntrinsicSize.Min),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    StatsMetricTile(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight(),
-                        value = totalEpisodes.toString(),
-                        label = strings.episodesWatched,
-                        accent = OverlayThemeTokens.AccentNeonPurple,
-                        icon = Icons.Default.Layers,
-                        isDark = isDark
-                    )
-                    StatsMetricTile(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight(),
-                        value = favorites.toString(),
-                        label = strings.favorites,
-                        accent = OverlayThemeTokens.AccentNeonPink,
-                        icon = Icons.Default.Favorite,
-                        isDark = isDark
-                    )
-                }
-            }
-        }
-
-        if (footerPhrase.isNotBlank()) {
-            Spacer(Modifier.height(16.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .inertialCollision(state = collisionState, index = 4, baseMultiplier = 3f),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = footerPhrase,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontFamily = SnProFamily,
-                        lineBreak = LineBreak.Paragraph,
-                        hyphens = Hyphens.Auto
-                    ),
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = OverlayThemeTokens.LabelMutedAlpha),
-                    textAlign = TextAlign.Center
+        // Morph «карточка → детали»: фоновые карточки уходят (fade+scale-out),
+        // детальный экран влетает тем же sheetPresent-спрингом, что и сама шторка.
+        AnimatedContent(
+            targetState = expandedCard,
+            transitionSpec = {
+                (fadeIn(tween(240, delayMillis = 80)) + slideInVertically(
+                    initialOffsetY = { it / 8 },
+                    animationSpec = MotionTokens.sheetPresent()
+                )).togetherWith(
+                    fadeOut(tween(150)) + scaleOut(targetScale = 0.94f, animationSpec = tween(180))
                 )
+            },
+            label = "statsMode",
+            modifier = Modifier.fillMaxWidth()
+        ) { card ->
+            if (card == null) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .inertialCollision(state = collisionState, index = 0, baseMultiplier = 3f)
+                    ) {
+                        Text(
+                            text = strings.statsTitle,
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = SnProFamily,
+                                fontSize = 24.sp,
+                                letterSpacing = (-0.3).sp
+                            ),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    Spacer(Modifier.height(6.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .inertialCollision(state = collisionState, index = 1, baseMultiplier = 3f)
+                    ) {
+                        Text(
+                            text = strings.statsSubtitle,
+                            style = OverlayThemeTokens.SectionLabel,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = OverlayThemeTokens.LabelMutedAlpha)
+                        )
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .inertialCollision(state = collisionState, index = 2, baseMultiplier = 3f)
+                    ) {
+                        StatsCardDeckContent(
+                            animeList = animeList,
+                            strings = strings,
+                            appLanguage = appLanguage,
+                            isDark = isDark,
+                            onCardTap = onCardTap
+                        )
+                    }
+
+                    Spacer(Modifier.height(20.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .inertialCollision(state = collisionState, index = 3, baseMultiplier = 3f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        StatsDoneButton(
+                            label = strings.statsOk,
+                            isDark = isDark,
+                            onClick = onDismiss
+                        )
+                    }
+                }
+            } else {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    StatsCardDetailContent(
+                        kind = card,
+                        animeList = animeList,
+                        strings = strings,
+                        appLanguage = appLanguage,
+                        isDark = isDark,
+                        explanationState = explanations[card] ?: StatsCardExplanationState.Loading,
+                        footerPhrase = footerPhrase,
+                        onBack = onBackFromDetail
+                    )
+
+                    Spacer(Modifier.height(24.dp))
+
+                    StatsDoneButton(
+                        label = strings.statsOk,
+                        isDark = isDark,
+                        onClick = onDismiss
+                    )
+                }
             }
-        }
-
-        Spacer(Modifier.height(24.dp))
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .inertialCollision(state = collisionState, index = 5, baseMultiplier = 3f),
-            contentAlignment = Alignment.Center
-        ) {
-            StatsDoneButton(
-                label = strings.statsOk,
-                isDark = isDark,
-                onClick = onDismiss
-            )
         }
     }
 }
@@ -432,13 +405,16 @@ private fun StatsDoneButton(
  * Объёмность создаётся за счёт fill, rim и edge-highlight, а не толстого accent-border.
  */
 @Composable
-private fun StatsMetricTile(
+internal fun StatsMetricTile(
     value: String,
     label: String,
     accent: Color,
     icon: ImageVector,
     isDark: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    minHeight: androidx.compose.ui.unit.Dp = 116.dp,
+    /** Компактная горизонтальная раскладка (иконка+метка слева, число справа) для невысоких тайлов. */
+    horizontal: Boolean = false
 ) {
     val tileBg = if (isDark) {
         OverlayThemeTokens.TileBackgroundDark
@@ -457,71 +433,100 @@ private fun StatsMetricTile(
         alpha = if (isDark) 0.18f else OverlayThemeTokens.TileGlowAlphaLight
     )
 
-    Column(
-        modifier = modifier
-            .defaultMinSize(minHeight = 116.dp)
-            .then(
-                if (isDark) Modifier else Modifier.softPlateShadowForLightSheet(
-                    isDark = false,
-                    shape = shape,
-                    elevation = OverlayThemeTokens.SortOverlayGridLightShadowElevation,
-                )
+    val visualModifier = modifier
+        .defaultMinSize(minHeight = minHeight)
+        .then(
+            if (isDark) Modifier else Modifier.softPlateShadowForLightSheet(
+                isDark = false,
+                shape = shape,
+                elevation = OverlayThemeTokens.SortOverlayGridLightShadowElevation,
             )
-            .clip(shape)
-            .background(tileBg)
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(accentGlow, Color.Transparent),
-                    center = Offset(0f, 0f),
-                    radius = 320f
-                )
+        )
+        .clip(shape)
+        .background(tileBg)
+        .background(
+            Brush.radialGradient(
+                colors = listOf(accentGlow, Color.Transparent),
+                center = Offset(0f, 0f),
+                radius = 320f
             )
-            .glassFill(isDark)
-            .glassEdge(tileCorner, isDark)
-            .border(1.dp, accentRim, shape)
-            .padding(horizontal = 14.dp, vertical = 14.dp)
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(28.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(
-                        if (isDark) OverlayThemeTokens.TileIconBgDark
-                        else MaterialTheme.colorScheme.surface.copy(alpha = 0.65f)
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = accent,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-            Text(
-                text = label.uppercase(Locale.getDefault()),
-                style = OverlayThemeTokens.MetricLabel.copy(
-                    lineBreak = LineBreak.Heading,
-                    hyphens = Hyphens.None
+        )
+        .glassFill(isDark)
+        .glassEdge(tileCorner, isDark)
+        .border(1.dp, accentRim, shape)
+
+    val iconBox: @Composable () -> Unit = {
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(
+                    if (isDark) OverlayThemeTokens.TileIconBgDark
+                    else MaterialTheme.colorScheme.surface.copy(alpha = 0.65f)
                 ),
-                color = labelMuted,
-                maxLines = 2,
-                overflow = TextOverflow.Clip,
-                modifier = Modifier.weight(1f)
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = accent,
+                modifier = Modifier.size(16.dp)
             )
         }
-        Spacer(Modifier.weight(1f))
+    }
+    val labelText: @Composable (Modifier) -> Unit = { mod ->
         Text(
-            text = value,
-            style = OverlayThemeTokens.MetricValue,
-            color = accent,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            text = label.uppercase(Locale.getDefault()),
+            style = OverlayThemeTokens.MetricLabel.copy(
+                lineBreak = LineBreak.Heading,
+                hyphens = Hyphens.None
+            ),
+            color = labelMuted,
+            maxLines = 2,
+            overflow = TextOverflow.Clip,
+            modifier = mod
         )
+    }
+
+    if (horizontal) {
+        // Компактно: иконка + метка слева, крупное число справа по вертикальному центру.
+        Row(
+            modifier = visualModifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            iconBox()
+            labelText(Modifier.weight(1f))
+            Text(
+                text = value,
+                style = OverlayThemeTokens.MetricValue,
+                color = accent,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    } else {
+        Column(
+            modifier = visualModifier.padding(horizontal = 14.dp, vertical = 14.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                iconBox()
+                labelText(Modifier.weight(1f))
+            }
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = value,
+                style = OverlayThemeTokens.MetricValue,
+                color = accent,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }

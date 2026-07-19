@@ -68,7 +68,7 @@ fun ListSyncLoadingOverlay(
     val muted = if (isDark) OverlayThemeTokens.LabelMutedDark else MaterialTheme.colorScheme.onSurfaceVariant
 
     val blue = OverlayThemeTokens.AccentNeonBlue
-    val cyan = Color(0xFF22D3EE)
+    val cyan = Color(0xFFFF8A3D)
 
     val targetFrac = if (total > 0) (processed.toFloat() / total.toFloat()).coerceIn(0f, 1f) else 0f
     val animatedFrac by animateFloatAsState(
@@ -123,14 +123,14 @@ fun ListSyncLoadingOverlay(
                             strokeWidth = 5.dp,
                             size = ringSize,
                             trackColor = Color.White.copy(alpha = 0.12f),
-                            gradient = listOf(blue, cyan, Color(0xFF67E8F9))
+                            gradient = listOf(blue, cyan, Color(0xFFFFB067))
                         )
                     } else {
                         IndeterminateSyncRing(
                             strokeWidth = 5.dp,
                             size = ringSize,
                             trackColor = Color.White.copy(alpha = 0.12f),
-                            gradient = listOf(blue, cyan, Color(0xFF67E8F9))
+                            gradient = listOf(blue, cyan, Color(0xFFFFB067))
                         )
                     }
 

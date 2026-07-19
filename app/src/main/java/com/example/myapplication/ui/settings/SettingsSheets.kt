@@ -98,7 +98,7 @@ fun CloudSettingsSheet(
 
     val sheetInDarkTheme = isAppInDarkTheme()
     val sheetSurface = if (sheetInDarkTheme) {
-        Color(0xFF0D1117).copy(alpha = 0.8f)
+        Color(0xFF000000).copy(alpha = 0.8f)
     } else {
         MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
     }
@@ -448,7 +448,7 @@ private fun CloudOutlinedActionButton(
             if (isDark) OverlayThemeTokens.RimDark else MaterialTheme.colorScheme.outline.copy(alpha = 0.38f),
         ),
         colors = ButtonDefaults.outlinedButtonColors(
-            containerColor = if (isDark) Color(0xFF161B22) else Color.Transparent,
+            containerColor = if (isDark) Color(0xFF1C1C1C) else Color.Transparent,
             contentColor = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface,
         ),
     ) {
@@ -480,7 +480,7 @@ private fun SetEmailPasswordSection(
     val bodyColor = if (isDark) OverlayThemeTokens.LabelMutedDark else MaterialTheme.colorScheme.onSurfaceVariant
     val fieldShape = RoundedCornerShape(12.dp)
     val syncBrush = Brush.horizontalGradient(
-        colors = listOf(OverlayThemeTokens.AccentSyncBlue, Color(0xFF0284C7)),
+        colors = listOf(OverlayThemeTokens.AccentSyncBlue, Color(0xFFC10801)),
     )
 
     Column(
@@ -599,8 +599,8 @@ private fun SetEmailPasswordSection(
 private fun cloudSheetFieldColors(isDark: Boolean) = OutlinedTextFieldDefaults.colors(
     focusedBorderColor = OverlayThemeTokens.AccentSyncBlue,
     unfocusedBorderColor = if (isDark) OverlayThemeTokens.RimDark else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
-    focusedContainerColor = if (isDark) Color(0xFF161B22) else MaterialTheme.colorScheme.surface,
-    unfocusedContainerColor = if (isDark) Color(0xFF161B22) else MaterialTheme.colorScheme.surface,
+    focusedContainerColor = if (isDark) Color(0xFF1C1C1C) else MaterialTheme.colorScheme.surface,
+    unfocusedContainerColor = if (isDark) Color(0xFF1C1C1C) else MaterialTheme.colorScheme.surface,
     focusedTextColor = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface,
     unfocusedTextColor = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface,
     focusedLabelColor = OverlayThemeTokens.LabelMutedDark,
@@ -695,7 +695,7 @@ fun UpdateChangelogSheet(
     val sheetInDarkTheme = isAppInDarkTheme()
 
     val sheetSurface = if (sheetInDarkTheme) {
-        Color(0xFF0D1117).copy(alpha = 0.8f)
+        Color(0xFF000000).copy(alpha = 0.8f)
     } else {
         MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
     }

@@ -60,6 +60,15 @@ class AddEditViewModel(
                             it.copy(
                                 animeId = anime.id,
                                 title = anime.title,
+                                titleEn = anime.titleEn.orEmpty(),
+                                showTitleEn = !anime.titleEn.isNullOrBlank(),
+                                titleRu = anime.titleRu,
+                                anilistId = anime.anilistId,
+                                malId = anime.malId,
+                                shikimoriId = anime.shikimoriId,
+                                anilistNotFoundAt = anime.anilistNotFoundAt,
+                                malNotFoundAt = anime.malNotFoundAt,
+                                shikimoriNotFoundAt = anime.shikimoriNotFoundAt,
                                 episodes = anime.episodes.toString(),
                                 rating = anime.rating,
                                 selectedTags = anime.tags,
@@ -89,6 +98,8 @@ class AddEditViewModel(
     fun onEvent(event: AddEditEvent) {
         when (event) {
             is AddEditEvent.OnTitleChanged -> _uiState.update { it.copy(title = event.title) }
+            is AddEditEvent.OnTitleEnChanged -> _uiState.update { it.copy(titleEn = event.titleEn) }
+            is AddEditEvent.OnToggleTitleEn -> _uiState.update { it.copy(showTitleEn = !it.showTitleEn) }
             is AddEditEvent.OnEpisodesChanged -> {
                 if (event.episodes.all { it.isDigit() }) {
                     _uiState.update { it.copy(episodes = event.episodes) }
@@ -130,6 +141,8 @@ class AddEditViewModel(
             val params = SaveAnimeParams(
                 animeId = state.animeId,
                 title = state.title,
+                titleEn = state.titleEn.trim().takeIf { it.isNotBlank() },
+                titleRu = state.titleRu,
                 episodes = state.episodes.toIntOrNull() ?: 0,
                 rating = state.rating,
                 imageUri = state.imageUri?.toString(),
@@ -139,7 +152,13 @@ class AddEditViewModel(
                 isFavorite = state.isFavorite,
                 selectedTags = state.selectedTags,
                 categoryType = state.categoryType,
-                comment = state.comment
+                comment = state.comment,
+                anilistId = state.anilistId,
+                malId = state.malId,
+                shikimoriId = state.shikimoriId,
+                anilistNotFoundAt = state.anilistNotFoundAt,
+                malNotFoundAt = state.malNotFoundAt,
+                shikimoriNotFoundAt = state.shikimoriNotFoundAt,
             )
             saveAnimeUseCase(params)
                 .onSuccess {

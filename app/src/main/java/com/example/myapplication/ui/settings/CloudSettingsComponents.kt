@@ -71,14 +71,14 @@ fun CloudSettingsSection(
         Brush.horizontalGradient(
             colors = listOf(
                 OverlayThemeTokens.AccentSyncBlue,
-                Color(0xFF0284C7)
+                Color(0xFFC10801)
             )
         )
     } else {
         Brush.horizontalGradient(
             colors = listOf(
                 OverlayThemeTokens.AccentSyncBlue.copy(alpha = 0.92f),
-                Color(0xFF0284C7)
+                Color(0xFFC10801)
             )
         )
     }

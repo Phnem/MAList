@@ -1,30 +1,27 @@
 package com.example.myapplication.ui.navigation
 
-import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.example.myapplication.ui.details.DetailsSheetContent
 import com.example.myapplication.ui.shared.components.IosSheetScaffold
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -39,15 +36,29 @@ import com.example.myapplication.ui.inspect.InspectScreen
 import com.example.myapplication.ui.inspect.InspectViewModel
 import com.example.myapplication.ui.settings.SettingsScreen
 import com.example.myapplication.ui.settings.SettingsViewModel
-import com.example.myapplication.ui.splash.SplashState
 import com.example.myapplication.ui.splash.SplashViewModel
 import com.example.myapplication.ui.splash.VetroSplashScreen
-import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.utils.getStrings
 import com.example.myapplication.utils.getWelcomeStrings
 import com.example.myapplication.utils.systemAppLanguage
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
+
+private const val SplashZoomMillis = 450
+
+private fun splashExitTransition() =
+    fadeOut(animationSpec = tween(SplashZoomMillis, easing = FastOutSlowInEasing)) +
+        scaleOut(
+            targetScale = 1.08f,
+            animationSpec = tween(SplashZoomMillis, easing = FastOutSlowInEasing),
+        )
+
+private fun splashEnterZoom() =
+    fadeIn(animationSpec = tween(SplashZoomMillis, easing = FastOutSlowInEasing)) +
+        scaleIn(
+            initialScale = 0.92f,
+            animationSpec = tween(SplashZoomMillis, easing = FastOutSlowInEasing),
+        )
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
@@ -95,7 +106,10 @@ fun AppNavGraph(
             navController = navController,
             startDestination = startDestination
         ) {
-            composable<SplashRoute> {
+            composable<SplashRoute>(
+                exitTransition = { splashExitTransition() },
+                popExitTransition = { splashExitTransition() },
+            ) {
                 val splashViewModel: SplashViewModel = koinViewModel()
                 val splashState by splashViewModel.uiState.collectAsStateWithLifecycle()
                 val splashStrings = getStrings(systemAppLanguage())
@@ -131,13 +145,18 @@ fun AppNavGraph(
                 )
             }
 
-            composable<WelcomeRoute> {
-                val context = androidx.compose.ui.platform.LocalContext.current
-                val scope = androidx.compose.runtime.rememberCoroutineScope()
+            composable<WelcomeRoute>(
+                enterTransition = {
+                    if (initialState.destination.isSplashDestination()) splashEnterZoom()
+                    else fadeIn(animationSpec = tween(300))
+                },
+            ) {
+                val context = LocalContext.current
+                val scope = rememberCoroutineScope()
                 val isUserSignedIn by authRepository.isUserSignedIn.collectAsStateWithLifecycle(initialValue = false)
                 val welcomeStrings = getWelcomeStrings(systemAppLanguage())
-                
-                androidx.compose.runtime.LaunchedEffect(isUserSignedIn) {
+
+                LaunchedEffect(isUserSignedIn) {
                     if (isUserSignedIn) {
                         navController.navigateToHome()
                     }
@@ -209,7 +228,12 @@ fun AppNavGraph(
                 )
             }
 
-            composable<HomeRoute> {
+            composable<HomeRoute>(
+                enterTransition = {
+                    if (initialState.destination.isSplashDestination()) splashEnterZoom()
+                    else fadeIn(animationSpec = tween(300))
+                },
+            ) {
                 HomeScreen(
                     navController = navController,
                     viewModel = homeViewModel,

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
+import com.example.myapplication.data.ai.AiCredentialsStore
 import com.example.myapplication.data.local.AnimeLocalDataSource
 import com.example.myapplication.data.local.DeveloperMirrorCoordinator
 import com.example.myapplication.data.local.EncryptedGeminiApiKeyRepository
@@ -46,11 +47,12 @@ val databaseModule = module {
     }
     single<IdGenerator> { RealIdGenerator() }
     single { GetAnimeForEditUseCase(get()) }
-    single { SaveAnimeUseCase(get(), get(), get()) }
+    single { SaveAnimeUseCase(get(), get(), get(), get(named("settings")), get()) }
     single { UpdateCommentUseCase(get()) }
     single<GeminiApiKeyRepository> {
         EncryptedGeminiApiKeyRepository(context = androidContext())
     }
+    single { AiCredentialsStore(context = androidContext()) }
 
     single<DataStore<Preferences>>(named("migration")) {
         androidContext().migrationDataStore

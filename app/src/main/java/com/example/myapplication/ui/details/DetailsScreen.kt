@@ -248,8 +248,13 @@ private fun DetailsBody(
                             Spacer(Modifier.height(12.dp))
                         }
 
+                        // Название по выбранному языку (замена, а не вторая строка).
+                        val displayTitle = when (language) {
+                            AppLanguage.EN -> anime.titleEn?.takeIf { it.isNotBlank() } ?: anime.title
+                            AppLanguage.RU -> anime.titleRu?.takeIf { it.isNotBlank() } ?: anime.title
+                        }
                         Text(
-                            text = anime.title,
+                            text = displayTitle,
                             style = MaterialTheme.typography.headlineSmall.copy(
                                 fontWeight = FontWeight.Bold,
                                 fontFamily = SnProFamily,
@@ -267,13 +272,13 @@ private fun DetailsBody(
 
                 // ——— Рейтинг-пилюля • дата ———
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    val apiRating = details?.rating
-                    val displayRating = apiRating ?: anime.rating.takeIf { it > 0 }
-                    if (displayRating != null && displayRating > 0) {
+                    val apiRating = details?.rating?.takeIf { it > 0 }
+                    val userRating = anime.rating.takeIf { it > 0f }
+                    if (apiRating != null || userRating != null) {
                         val ratingText = when {
                             apiRating != null && apiRating > 10 -> "$apiRating / 100"
-                            apiRating != null && apiRating > 5 -> "$apiRating / 10"
-                            else -> "$displayRating / 5"
+                            apiRating != null -> "$apiRating / 10"
+                            else -> "${com.example.myapplication.data.models.RatingScale.format(userRating!!)} / 10"
                         }
                         Row(
                             modifier = Modifier

@@ -15,28 +15,30 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.myapplication.ui.shared.theme.lightTileShadowInLightTheme
 
+// Монохромно-оранжевая брендовая гамма: категории различаются светлотой/температурой
+// внутри палитры #E85002 / #C10801 / #D9C3AB + серые.
 object AddEditColors {
-    val CoverGradientStart = Color(0xFF1B2540)
-    val CoverGradientEnd = Color(0xFF2A1F3D)
-    val CoverIconCircle = Color(0xFF3A5A9E)
+    val CoverGradientStart = Color(0xFF262626)
+    val CoverGradientEnd = Color(0xFF3A1E0D)
+    val CoverIconCircle = Color(0xFF9E4A1F)
 
-    val FormatAnimeGradientStart = Color(0xFF3A1A2A)
-    val FormatAnimeGradientEnd = Color(0xFF1A0E18)
-    val FormatAnimeIconBg = Color(0xFFFF2D55)
+    val FormatAnimeGradientStart = Color(0xFF3A1E0D)
+    val FormatAnimeGradientEnd = Color(0xFF1A0D06)
+    val FormatAnimeIconBg = Color(0xFFE85002)
 
-    val FormatMoviesGradientStart = Color(0xFF1A2A3A)
-    val FormatMoviesGradientEnd = Color(0xFF0E1520)
-    val FormatMoviesIconBg = Color(0xFF5AC8FA)
+    val FormatMoviesGradientStart = Color(0xFF262626)
+    val FormatMoviesGradientEnd = Color(0xFF101010)
+    val FormatMoviesIconBg = Color(0xFF8A8A8E)
 
-    val FormatSeriesGradientStart = Color(0xFF3A3018)
-    val FormatSeriesGradientEnd = Color(0xFF1A1608)
-    val FormatSeriesIconBg = Color(0xFFFFCC00)
+    val FormatSeriesGradientStart = Color(0xFF383021)
+    val FormatSeriesGradientEnd = Color(0xFF1A160E)
+    val FormatSeriesIconBg = Color(0xFFD9C3AB)
 
-    val QuickSelectGlow = Color(0xFF007AFF)
-    val QuickSelectActiveBg = Color(0xFF007AFF)
+    val QuickSelectGlow = Color(0xFFE85002)
+    val QuickSelectActiveBg = Color(0xFFE85002)
 
-    val PillBackground = Color(0xFF1C1C2E)
-    val PillBackgroundLight = Color(0xFFE8E8ED)
+    val PillBackground = Color(0xFF1C1C1C)
+    val PillBackgroundLight = Color(0xFFE8E8E8)
 
     val SectionLabel = Color(0xFF8E8E93)
 }
@@ -76,7 +78,7 @@ fun formatCategoryIconBg(categoryKey: String): Color = when (categoryKey) {
 /** Horizontal pill: accent-tinted left bleeding into near-black (reference layout). */
 fun formatCategoryPillBrush(categoryKey: String): Brush {
     val accent = formatCategoryIconBg(categoryKey)
-    val deep = Color(0xFF0A0A0E)
+    val deep = Color(0xFF0A0A0A)
     return Brush.horizontalGradient(
         colors = listOf(
             lerp(accent, deep, 0.62f).copy(alpha = 0.88f),

@@ -44,7 +44,7 @@ fun buildDonutChartData(animeList: List<Anime>): DonutChartData? {
  * Средний рейтинг по тегу; только жанры с достаточной выборкой; топ-5 по max среднему, tie-break по tagId.
  */
 fun buildBarChartData(animeList: List<Anime>): List<BarChartEntry> {
-    val map = linkedMapOf<String, MutableList<Int>>()
+    val map = linkedMapOf<String, MutableList<Float>>()
     for (a in animeList) {
         for (t in a.tags) {
             map.getOrPut(t) { mutableListOf() }.add(a.rating)

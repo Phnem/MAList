@@ -32,8 +32,11 @@ enum class GlassPreset(
     val lensRefraction: Dp,
     val lensDepth: Dp,
 ) {
-    CompactNav(fullBlur = 16.dp, reducedBlur = 4.dp, lensRefraction = 10.dp, lensDepth = 44.dp),
-    Card(fullBlur = 12.dp, reducedBlur = 4.dp, lensRefraction = 8.dp, lensDepth = 40.dp),
+    // Рецепт «жидкого стекла» бегунка рейтинга: слабый blur + сильная линза → контент
+    // под элементом заметно преломляется/увеличивается, а не размывается в кашу.
+    // Blur приподнят на 20% относительно базовых 2dp → 2.4dp (не до прежних 12–16dp).
+    CompactNav(fullBlur = 2.4.dp, reducedBlur = 2.4.dp, lensRefraction = 16.dp, lensDepth = 44.dp),
+    Card(fullBlur = 2.4.dp, reducedBlur = 2.4.dp, lensRefraction = 16.dp, lensDepth = 44.dp),
     IconButton(fullBlur = 28.dp, reducedBlur = 6.dp, lensRefraction = 16.dp, lensDepth = 48.dp),
 }
 

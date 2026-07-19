@@ -6,6 +6,9 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class ShikimoriSearchItemDto(
     val id: Int,
+    // MAL id — присутствует только в detail-ответе (/api/animes/{id}), в списковом поиске его нет.
+    // Отдельный от [id] (shikimori_id); нужен для поиска на AniList/MAL по id.
+    @SerialName("myanimelist_id") val malId: Int? = null,
     val name: String? = null,
     val russian: String? = null,
     val kind: String? = null,

@@ -3,7 +3,9 @@ package com.example.myapplication.di
 import com.example.myapplication.ui.addedit.AddEditViewModel
 import com.example.myapplication.ui.details.DetailsViewModel
 import com.example.myapplication.ui.home.HomeViewModel
+import com.example.myapplication.ui.home.recommendations.RecommendationsViewModel
 import com.example.myapplication.ui.inspect.InspectViewModel
+import com.example.myapplication.ui.settings.AiConnectViewModel
 import com.example.myapplication.ui.settings.SettingsViewModel
 import com.example.myapplication.ui.splash.SplashViewModel
 import org.koin.android.ext.koin.androidApplication
@@ -35,6 +37,14 @@ val viewModelModule = module {
         )
     }
     viewModel {
+        RecommendationsViewModel(
+            engine = get(),
+            localDataSource = get(),
+            addFromApiUseCase = get(),
+            settingsDataStore = get(named("settings"))
+        )
+    }
+    viewModel {
         AddEditViewModel(
             getAnimeUseCase = get(),
             saveAnimeUseCase = get(),
@@ -50,8 +60,10 @@ val viewModelModule = module {
             settingsDataStore = get(named("settings")),
             databaseFactory = get(),
             importAnimeDbUseCase = get(),
-            repairAnimeDbUseCase = get(),
+            repairDbCoordinator = get(),
             collectionPdfGenerator = get(),
+            titleDubbingCoordinator = get(),
+            aiCredentialsStore = get(),
             app = androidApplication()
         )
     }
@@ -61,7 +73,14 @@ val viewModelModule = module {
             localDataSource = get(),
             addFromApiUseCase = get(),
             settingsDataStore = get(named("settings")),
-            geminiApiKeyRepository = get()
+            credentialsStore = get()
+        )
+    }
+    viewModel {
+        AiConnectViewModel(
+            credentialsStore = get(),
+            endpoint = get(),
+            apiKeySyncRepository = get(),
         )
     }
     viewModel { (animeId: String) ->

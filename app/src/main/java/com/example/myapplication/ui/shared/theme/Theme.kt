@@ -22,6 +22,9 @@ import com.phnem.vetro.R
 // Чтобы вернуть SN Pro — восстановить FontFamily(Font(...)) ниже.
 val SnProFamily = FontFamily.SansSerif
 
+/** Display-шрифт для splash wordmark «Vetro». */
+val AsgrikeFamily = FontFamily(Font(R.font.asgrike, FontWeight.Normal))
+
 @Composable
 fun OneUiTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
@@ -38,7 +41,7 @@ fun OneUiTheme(
             onSurface = DarkTextPrimary,
             secondary = DarkTextSecondary,
             outline = DarkBorder,
-            error = BrandRed,
+            error = BrandDeepRed,
             surfaceContainer = DarkSurfaceVariant
         )
     } else {
@@ -46,16 +49,16 @@ fun OneUiTheme(
             background = LightBackground,
             surface = LightSurface,
             surfaceVariant = LightSurfaceVariant,
-            primary = BrandRed,
+            primary = BrandOrange,
             onPrimary = Color.White,
             onBackground = LightTextPrimary,
             onSurface = LightTextPrimary,
             onSurfaceVariant = LightTextSecondary,
             secondary = LightTextSecondary,
-            secondaryContainer = BrandRed.copy(alpha = 0.12f),
-            onSecondaryContainer = BrandRed,
+            secondaryContainer = BrandOrange.copy(alpha = 0.12f),
+            onSecondaryContainer = BrandOrange,
             outline = LightBorder,
-            error = BrandRed,
+            error = BrandDeepRed,
             surfaceContainer = LightSurface,
             surfaceContainerLow = LightSurface,
             surfaceContainerHigh = LightSurfaceVariant,

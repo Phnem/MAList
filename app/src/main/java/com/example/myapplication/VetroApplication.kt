@@ -31,6 +31,10 @@ class VetroApplication : Application(), SingletonImageLoader.Factory {
             )
         }
         WorkManager.getInstance(this).cancelUniqueWork("AiRecommendationWork")
+        // Фоновые AI-объяснения статистики: живут независимо от открытия шторки
+        org.koin.core.context.GlobalContext.get()
+            .get<com.example.myapplication.domain.stats.StatsExplanationCoordinator>()
+            .start()
     }
 
     override fun newImageLoader(context: PlatformContext): ImageLoader {

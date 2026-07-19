@@ -219,8 +219,10 @@ class HomeViewModel(
             // Enforce media type check (categoryType is ANIME, MANGA, TV_SERIES)
             if (anime.mediaType.name != result.categoryType && !(anime.mediaType.name == "TV_SERIES" && result.categoryType == "SERIES")) return@any false
             
-            val t = anime.title.normalizeForSearch()
-            t.isNotEmpty() && (t.contains(q) || q.contains(t))
+            val keys = listOfNotNull(anime.title, anime.titleEn, anime.titleRu)
+                .map { it.normalizeForSearch() }
+                .filter { it.isNotEmpty() }
+            keys.any { t -> t.contains(q) || q.contains(t) }
         }
     }
 

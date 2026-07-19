@@ -27,6 +27,7 @@ import androidx.compose.foundation.border
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -55,12 +56,12 @@ import kotlin.math.roundToInt
 /**
  * Пять фиксированных контрастных цветов. Индекс i в топ-5 обоих графиков = palette[i] в графике и в легенде.
  */
-private val StatsGenrePalette: List<Color> = listOf(
-    Color(0xFF3B82F6),
-    Color(0xFFA855F7),
-    Color(0xFFEC4899),
-    Color(0xFFF59E0B),
-    Color(0xFF22C55E)
+internal val StatsGenrePalette: List<Color> = listOf(
+    Color(0xFFE85002),
+    Color(0xFFD9C3AB),
+    Color(0xFFC10801),
+    Color(0xFFFFB067),
+    Color(0xFF646464)
 )
 
 private const val DONUT_SEGMENT_GAP_DEG = 4f
@@ -247,7 +248,7 @@ fun StatsChartsRow(
 }
 
 @Composable
-private fun GenreLegendItem(
+internal fun GenreLegendItem(
     color: Color,
     name: String,
     detail: String,
@@ -288,8 +289,12 @@ private fun GenreLegendItem(
     }
 }
 
+/**
+ * Столбчатая диаграмма «качество жанров» на всю высоту контейнера.
+ * Шкала — 10-балльная (значок ★ = 2 балла), пять пунктирных линий сетки на уровнях 2/4/6/8/10.
+ */
 @Composable
-private fun StatsBarChartCanvas(
+internal fun StatsBarChartCanvas(
     entries: List<BarChartEntry>,
     barColors: List<Color>,
     isDark: Boolean
@@ -304,21 +309,20 @@ private fun StatsBarChartCanvas(
         )
         return
     }
-    val maxRating = 5f
-    val barAreaH = 120
+    val maxRating = 10f
     val axisColor = (if (isDark) OverlayThemeTokens.LabelMutedDark
     else MaterialTheme.colorScheme.onSurface).copy(alpha = 0.5f)
+    val gridColor = axisColor.copy(alpha = 0.22f)
     Row(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 6.dp, vertical = 4.dp),
+        modifier = Modifier.fillMaxSize(),
         verticalAlignment = Alignment.Bottom
     ) {
         Column(
             modifier = Modifier
                 .width(26.dp)
-                .height(barAreaH.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+                .fillMaxHeight(),
+            verticalArrangement = Arrangement.SpaceBetween,
+            horizontalAlignment = Alignment.Start
         ) {
             for (star in 5 downTo 1) {
                 Text(
@@ -331,33 +335,47 @@ private fun StatsBarChartCanvas(
                 )
             }
         }
-        Row(
+        Box(
             modifier = Modifier
                 .weight(1f)
-                .height(barAreaH.dp),
-            verticalAlignment = Alignment.Bottom
+                .fillMaxHeight()
+                .padding(start = 4.dp)
         ) {
-            for ((i, e) in entries.withIndex()) {
-                val hFrac = (e.averageRating / maxRating).toFloat().coerceIn(0.12f, 1f)
-                val c = barColors.getOrElse(i) { barColors[i % barColors.size] }
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Spacer(
-                        Modifier.height(
-                            (barAreaH * (1f - hFrac)).roundToInt().coerceAtLeast(0).dp
-                        )
+            // Пунктирная сетка на уровнях звёзд (позади столбцов)
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val dash = PathEffect.dashPathEffect(floatArrayOf(6f, 6f), 0f)
+                val stroke = 1.dp.toPx()
+                for (k in 0 until 5) {
+                    val y = size.height * k / 4f
+                    drawLine(
+                        color = gridColor,
+                        start = Offset(0f, y),
+                        end = Offset(size.width, y),
+                        strokeWidth = stroke,
+                        pathEffect = dash
                     )
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                for ((i, e) in entries.withIndex()) {
+                    val hFrac = (e.averageRating / maxRating).toFloat().coerceIn(0.06f, 1f)
+                    val c = barColors.getOrElse(i) { barColors[i % barColors.size] }
                     Box(
-                        modifier = Modifier
-                            .size(
-                                width = 20.dp,
-                                height = (barAreaH * hFrac).roundToInt().coerceAtLeast(4).dp
-                            )
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(c.copy(alpha = 0.92f))
-                    )
+                        modifier = Modifier.weight(1f),
+                        contentAlignment = Alignment.BottomCenter
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .fillMaxHeight(hFrac)
+                                .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 3.dp, bottomEnd = 3.dp))
+                                .background(c)
+                        )
+                    }
                 }
             }
         }
@@ -365,7 +383,7 @@ private fun StatsBarChartCanvas(
 }
 
 @Composable
-private fun StatsDonutChartCanvas(
+internal fun StatsDonutChartCanvas(
     data: DonutChartData,
     sliceColors: List<Color>
 ) {

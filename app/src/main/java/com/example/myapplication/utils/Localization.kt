@@ -39,6 +39,13 @@ val RussianStrings = UiStrings(
     statsGenreOther = "Прочее",
     statsNoGenreData = "Добавьте жанры к тайтлам, чтобы увидеть графики.",
     statsOk = "ОК",
+    statsCardRatingTitle = "Качество жанров",
+    statsCardFrequencyTitle = "Частотность жанров",
+    statsCardOverviewTitle = "Обзор коллекции",
+    statsDeckHint = "Свайп вниз — следующая · тап — подробнее",
+    statsAiTitle = "Что это значит",
+    statsAiUnavailable = "Подключите ИИ в настройках, чтобы получать объяснения статистики.",
+    statsAiInsufficient = "Пока недостаточно данных для выводов.",
     rankTitle = "Ваш ранг:",
     updatesTitle = "Обновления",
     updatesChecking = "Проверка API (AniList, Shikimori, TMDB)...\nЭто может занять некоторое время.",
@@ -180,8 +187,8 @@ val RussianStrings = UiStrings(
     inspectReadImageFailed = "Не удалось прочитать изображение",
     inspectNoResults = "Совпадений не найдено",
     inspectErrorGeneric = "Произошла ошибка",
-    inspectGeminiRequiredRuAnime = "Добавьте ваш Gemini API-ключ, чтобы использовать поиск аниме на русском (trace.moe → Gemini → Shikimori).",
-    inspectGeminiRequiredMovies = "Добавьте ваш Gemini API-ключ, чтобы искать фильмы и сериалы по скриншоту.",
+    inspectGeminiRequiredRuAnime = "Подключите AI-провайдера в «AI Connect», чтобы искать аниме на русском по скриншоту.",
+    inspectGeminiRequiredMovies = "Подключите AI-провайдера с поддержкой изображений в «AI Connect», чтобы искать фильмы и сериалы по скриншоту.",
     inspectGeminiKeyTitle = "Gemini API-ключ",
     inspectGeminiKeyInputPlaceholder = "Вставьте API-ключ",
     inspectGeminiGetKeyOneClick = "Получить ключ в один клик",
@@ -295,6 +302,13 @@ val EnglishStrings = UiStrings(
     statsGenreOther = "Other",
     statsNoGenreData = "Add genre tags to titles to see the charts.",
     statsOk = "OK",
+    statsCardRatingTitle = "Genre quality",
+    statsCardFrequencyTitle = "Genre frequency",
+    statsCardOverviewTitle = "Collection overview",
+    statsDeckHint = "Swipe down for next · tap for details",
+    statsAiTitle = "What it means",
+    statsAiUnavailable = "Connect AI in settings to get explanations of your stats.",
+    statsAiInsufficient = "Not enough data for insights yet.",
     rankTitle = "Your rank:",
     updatesTitle = "Updates",
     updatesChecking = "Checking APIs (AniList, Shikimori, TMDB)...\nThis will take a moment.",
@@ -436,8 +450,8 @@ val EnglishStrings = UiStrings(
     inspectReadImageFailed = "Could not read image",
     inspectNoResults = "No matches found",
     inspectErrorGeneric = "Something went wrong",
-    inspectGeminiRequiredRuAnime = "Add your Gemini API key to use Russian anime search (trace.moe → Gemini → Shikimori).",
-    inspectGeminiRequiredMovies = "Add your Gemini API key to search movies and TV from screenshots.",
+    inspectGeminiRequiredRuAnime = "Connect an AI provider in AI Connect to search anime in Russian from screenshots.",
+    inspectGeminiRequiredMovies = "Connect a vision-capable AI provider in AI Connect to search movies and TV from screenshots.",
     inspectGeminiKeyTitle = "Gemini API key",
     inspectGeminiKeyInputPlaceholder = "Paste your API key",
     inspectGeminiGetKeyOneClick = "Get key in one click",
@@ -589,6 +603,124 @@ private val EnglishDevRepairDbStrings = DevRepairDbStrings(
 fun getDevRepairDbStrings(lang: AppLanguage): DevRepairDbStrings = when (lang) {
     AppLanguage.RU -> RussianDevRepairDbStrings
     AppLanguage.EN -> EnglishDevRepairDbStrings
+}
+
+/** Отдельно от [UiStrings]: лимит JVM — 255 параметров конструктора. Строки «Дубляж названий». */
+data class TitleDubbingStrings(
+    val title: String,
+    val subtitle: String,
+    val contentDescription: String,
+    val runningTemplate: String,
+    val resultTemplate: String,
+    val resultNothing: String,
+    /** Очередь была, но ни одно название не удалось заполнить. */
+    val resultNoneFilled: String,
+    val resultFailed: String,
+    val noAiTitle: String,
+    val noAiMessage: String,
+    val noAiConnect: String,
+    val noAiCancel: String,
+)
+
+private val RussianTitleDubbingStrings = TitleDubbingStrings(
+    title = "Дубляж названий",
+    subtitle = "Подтянуть английские названия из API, а недостающие перевести через AI",
+    contentDescription = "Дубляж названий",
+    runningTemplate = "Дубляж: %1${'$'}d из %2${'$'}d",
+    resultTemplate = "Готово: заполнено %1${'$'}d из %2${'$'}d названий",
+    resultNothing = "Все названия уже заполнены",
+    resultNoneFilled = "Не удалось заполнить названия (API/AI не дали english). Запустите дубляж ещё раз",
+    resultFailed = "Не удалось выполнить дубляж названий",
+    noAiTitle = "AI не подключён",
+    noAiMessage = "Часть названий не удалось найти в базах — для их перевода нужен подключённый AI. Подключить сейчас?",
+    noAiConnect = "Подключить AI",
+    noAiCancel = "Позже",
+)
+
+private val EnglishTitleDubbingStrings = TitleDubbingStrings(
+    title = "Title dubbing",
+    subtitle = "Fetch English titles from APIs and translate the rest with AI",
+    contentDescription = "Title dubbing",
+    runningTemplate = "Dubbing: %1${'$'}d of %2${'$'}d",
+    resultTemplate = "Done: filled %1${'$'}d of %2${'$'}d titles",
+    resultNothing = "All titles are already filled",
+    resultNoneFilled = "Could not fill any titles (API/AI returned no english). Run dubbing again",
+    resultFailed = "Failed to run title dubbing",
+    noAiTitle = "AI not connected",
+    noAiMessage = "Some titles weren't found in the databases — translating them needs a connected AI provider. Connect now?",
+    noAiConnect = "Connect AI",
+    noAiCancel = "Later",
+)
+
+fun getTitleDubbingStrings(lang: AppLanguage): TitleDubbingStrings = when (lang) {
+    AppLanguage.RU -> RussianTitleDubbingStrings
+    AppLanguage.EN -> EnglishTitleDubbingStrings
+}
+
+/** Отдельно от [UiStrings]: лимит JVM — 255 параметров конструктора. Строки экрана AI Connect (BYOK). */
+data class AiConnectStrings(
+    val tileTitle: String,
+    val tileSubtitle: String,
+    val sheetTitle: String,
+    val sheetSubtitle: String,
+    val inputPlaceholder: String,
+    val connectButton: String,
+    val getApiKey: String,
+    val storageHint: String,
+    val statusDetecting: String,
+    val statusValidating: String,
+    val statusError: String,
+    val connectedLabel: String,
+    val emptyHint: String,
+    val removeCd: String,
+    val showKeyCd: String,
+    val hideKeyCd: String,
+    val doneButton: String,
+)
+
+private val RussianAiConnectStrings = AiConnectStrings(
+    tileTitle = "AI Connect",
+    tileSubtitle = "Подключите свой AI-ключ (BYOK)",
+    sheetTitle = "AI Connect",
+    sheetSubtitle = "Вставьте API-ключ — провайдер определится автоматически",
+    inputPlaceholder = "API-ключ",
+    connectButton = "Подключить",
+    getApiKey = "Получить ключ",
+    storageHint = "Ключ шифруется и хранится на этом устройстве, а также синхронизируется с вашим аккаунтом.",
+    statusDetecting = "Определяем провайдера…",
+    statusValidating = "Проверяем ключ…",
+    statusError = "Не удалось определить провайдера или ключ недействителен",
+    connectedLabel = "Подключено",
+    emptyHint = "Пока нет подключённых провайдеров",
+    removeCd = "Удалить",
+    showKeyCd = "Показать ключ",
+    hideKeyCd = "Скрыть ключ",
+    doneButton = "Готово",
+)
+
+private val EnglishAiConnectStrings = AiConnectStrings(
+    tileTitle = "AI Connect",
+    tileSubtitle = "Bring your own AI key (BYOK)",
+    sheetTitle = "AI Connect",
+    sheetSubtitle = "Paste an API key — the provider is detected automatically",
+    inputPlaceholder = "API key",
+    connectButton = "Connect",
+    getApiKey = "Get API Key",
+    storageHint = "The key is encrypted and stored on this device, and synced to your account.",
+    statusDetecting = "Detecting provider…",
+    statusValidating = "Validating key…",
+    statusError = "Could not detect the provider or the key is invalid",
+    connectedLabel = "Connected",
+    emptyHint = "No providers connected yet",
+    removeCd = "Remove",
+    showKeyCd = "Show key",
+    hideKeyCd = "Hide key",
+    doneButton = "Done",
+)
+
+fun getAiConnectStrings(lang: AppLanguage): AiConnectStrings = when (lang) {
+    AppLanguage.RU -> RussianAiConnectStrings
+    AppLanguage.EN -> EnglishAiConnectStrings
 }
 
 /** Отдельно от [UiStrings]: лимит JVM — 255 параметров конструктора. */

@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.myapplication.HeroiconsRectangleStack
 import com.example.myapplication.data.models.UiStrings
+import com.example.myapplication.isAppInDarkTheme
 import com.example.myapplication.ui.shared.theme.BrandBlue
 import com.example.myapplication.ui.shared.theme.BrandRed
 
@@ -45,6 +46,8 @@ fun WorkspaceSortNotificationActions(
     useDockSizing: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    // Иконки дока — ярче/белее: чистый белый на полной непрозрачности в тёмной теме.
+    val iconTint = if (isAppInDarkTheme()) Color.White else MaterialTheme.colorScheme.onSurface
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(0.dp),
@@ -63,7 +66,7 @@ fun WorkspaceSortNotificationActions(
             modifier = sortModifier,
         ) {
             val icon = if (filterSelectedTags.isNotEmpty()) Icons.Outlined.FilterList else Icons.AutoMirrored.Filled.Sort
-            val tint = if (filterSelectedTags.isNotEmpty()) BrandBlue else MaterialTheme.colorScheme.onSurface
+            val tint = if (filterSelectedTags.isNotEmpty()) BrandBlue else iconTint
             Icon(icon, contentDescription = strings.cdSort, tint = tint)
         }
         val notifModifier = if (useDockSizing) {
@@ -99,7 +102,7 @@ fun WorkspaceSortNotificationActions(
                 Icon(
                     imageVector = HeroiconsRectangleStack,
                     contentDescription = strings.cdNotifications,
-                    tint = MaterialTheme.colorScheme.onSurface,
+                    tint = iconTint,
                 )
             }
         }
@@ -118,7 +121,7 @@ fun WorkspaceSortNotificationActions(
             Icon(
                 imageVector = Icons.Default.MoreVert,
                 contentDescription = strings.contentTypeTitle,
-                tint = MaterialTheme.colorScheme.onSurface,
+                tint = iconTint,
             )
         }
     }

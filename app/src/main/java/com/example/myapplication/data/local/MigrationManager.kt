@@ -202,7 +202,10 @@ class MigrationManager(
                     val id = obj["id"]?.jsonPrimitive?.content ?: UUID.randomUUID().toString()
                     val title = obj["title"]?.jsonPrimitive?.content ?: "Unknown Title"
                     val episodes = obj["episodes"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0
-                    val rating = obj["rating"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0
+                    // Легаси-JSON хранит 5-звёздочный Int — конвертер приводит к 10-балльной шкале.
+                    val rating = com.example.myapplication.data.models.RatingScale.fromImportedStored(
+                        obj["rating"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0
+                    )
                     val orderIndex = obj["orderIndex"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0
                     val dateAdded = obj["dateAdded"]?.jsonPrimitive?.content?.toLongOrNull() ?: System.currentTimeMillis()
                     val imageFileName = obj["imageFileName"]?.jsonPrimitive?.content

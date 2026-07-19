@@ -27,14 +27,18 @@ internal object OverlayThemeTokens {
     val CardElevation = 16.dp
 
     val RimDark = Color.White.copy(alpha = 0.09f)
-    val LabelMutedDark = Color(0xFF94A3B8)
-    val IconSyncBlue = Color(0xFF38BDF8)
+    val LabelMutedDark = Color(0xFFA7A7A7)
+    /** Главный акцент оверлеев — яркий брендовый оранжевый (#F16001). Имя легаси. */
+    val IconSyncBlue = Color(0xFFF16001)
     /** Алиас акцента синх-панели (не путать с мягкими токенами кнопки сортировки). */
     val AccentSyncBlue: Color get() = IconSyncBlue
-    val IconSignalGreen = Color(0xFF40F090)
-    val IconAccountYellow = Color(0xFFFFDF45)
+    /** Статус/статистика — тёплый песочный из брендового градиента. Имя легаси. */
+    val IconSignalGreen = Color(0xFFD9C3AB)
+    /** Аккаунт — светлый персиковый оттенок бренд-оранжевого. Имя легаси. */
+    val IconAccountYellow = Color(0xFFFFB067)
     val OnSyncBlueButton = Color.White
-    val LogoutIconTint = Color(0xFFFF5A4D)
+    /** Destructive — глубокий брендовый красный, осветлённый для тёмного фона. */
+    val LogoutIconTint = Color(0xFFE5382B)
 
     val TileCornerRadius = 20.dp
     val MainTileCornerRadius = 22.dp
@@ -43,7 +47,7 @@ internal object OverlayThemeTokens {
     val SortTileMinHeight = 90.dp
     val ApplyButtonCornerRadius = 14.dp
 
-    val TileBackgroundDark = Color(0xFF161B26)
+    val TileBackgroundDark = Color(0xFF171717)
     val TileIconBgDark = Color.Black.copy(alpha = 0.35f)
 
     /** Базовый radial glow на тёмных плитках оверлея ([tileGlow] по умолчанию совпадает). */
@@ -73,9 +77,9 @@ internal object OverlayThemeTokens {
     /** Мягкая тень под карточками/оверлеями в светлой теме. */
     val LightCardShadowElevation = 8.dp
 
-    /** Кнопка «Применить»: тёмная подложка + приглушённый текст без «кислотного» cyan. */
-    val ApplyButtonContainerDark = Color(0xFF1C2633)
-    val ApplyButtonLabelSoft = Color(0xFF9DB0BE)
+    /** Кнопка «Применить»: тёмная подложка + приглушённый текст без «кислотных» акцентов. */
+    val ApplyButtonContainerDark = Color(0xFF262626)
+    val ApplyButtonLabelSoft = Color(0xFFA7A7A7)
 
     // ============================================================
     // Glass edge / fill — параметры стеклянных панелей
@@ -105,21 +109,21 @@ internal object OverlayThemeTokens {
     // ============================================================
     // Неоновые акценты — общая палитра для иконок/метрик/индикаторов
     // ============================================================
-    /** Холодный голубой (синхронизация, эпизоды). */
+    /** Главный яркий акцент (синхронизация, эпизоды) — бренд-оранжевый #F16001. */
     val AccentNeonBlue: Color = IconSyncBlue
-    /** Кислотно-зелёный (статус, статистика). */
+    /** Песочный (статус, статистика) — #D9C3AB из брендового градиента. */
     val AccentNeonGreen: Color = IconSignalGreen
-    /** Тёплый янтарь (рейтинги, аккаунт). */
+    /** Персиковый (рейтинги, аккаунт). */
     val AccentNeonYellow: Color = IconAccountYellow
-    /** Тёплый оранжевый (контент, акценты). */
-    val AccentNeonOrange = Color(0xFFFB923C)
-    /** Электрический фиолетовый (метрики/декор). */
-    val AccentNeonPurple = Color(0xFFA78BFA)
-    /** Малиновый (favorites, ошибки в инфо-плитках). */
-    val AccentNeonPink = Color(0xFFFF6FB1)
-    /** Кнопка подтверждения «В избранное» в шите списка. */
-    val FavoriteConfirmGold = Color(0xFFE6B84C)
-    val OnFavoriteConfirmGold = Color(0xFF2A2010)
+    /** Фирменный оранжевый (контент, акценты) — #E85002. */
+    val AccentNeonOrange = Color(0xFFE85002)
+    /** Нейтральный светло-серый (метрики/декор) — #A7A7A7. */
+    val AccentNeonPurple = Color(0xFFA7A7A7)
+    /** Тёплый коралловый тинт бренд-оранжевого (favorites, ошибки в инфо-плитках). */
+    val AccentNeonPink = Color(0xFFEF7B54)
+    /** Кнопка подтверждения «В избранное» в шите списка — брендовый песочный. */
+    val FavoriteConfirmGold = Color(0xFFD9C3AB)
+    val OnFavoriteConfirmGold = Color(0xFF2B2014)
     /** Алый (logout, destructive). */
     val AccentNeonRed: Color = LogoutIconTint
 

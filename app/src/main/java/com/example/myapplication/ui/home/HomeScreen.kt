@@ -28,12 +28,17 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import com.example.myapplication.ui.shared.components.pulltorefresh.PullRefreshIndicator
+import com.example.myapplication.ui.shared.components.pulltorefresh.rememberPullRefreshController
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -48,6 +53,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -66,6 +72,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import com.example.myapplication.ui.shared.GlassBackdropRecovery
 import com.example.myapplication.ui.shared.ListSyncLoadingOverlay
 import com.example.myapplication.ui.shared.LocalAdaptiveGlassScrollInProgress
 import com.example.myapplication.ui.shared.customOverscroll
@@ -86,6 +93,11 @@ import com.example.myapplication.utils.getCloudSyncPillStrings
 import com.example.myapplication.utils.getStrings
 import com.example.myapplication.utils.systemAppLanguage
 import com.example.myapplication.utils.performHaptic
+import com.example.myapplication.ui.home.recommendations.DiscoveryCard
+import com.example.myapplication.ui.home.recommendations.RecommendationsSheet
+import com.example.myapplication.ui.home.recommendations.RecommendationsUiState
+import com.example.myapplication.ui.home.recommendations.RecommendationsViewModel
+import com.example.myapplication.ui.home.recommendations.getRecommendationsStrings
 import com.example.myapplication.ui.navigation.navigateToAddEdit
 import com.example.myapplication.ui.navigation.navigateToDetails
 import com.example.myapplication.ui.navigation.navigateToInspect
@@ -97,6 +109,7 @@ import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import kotlin.math.roundToInt
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.launch
+import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 
 @OptIn(ExperimentalSharedTransitionApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -132,6 +145,12 @@ fun HomeScreen(
     val view = LocalView.current
     val ctx = LocalContext.current
     var showCSheet by remember { mutableStateOf(false) }
+    var showRecsSheet by remember { mutableStateOf(false) }
+    /** Инкремент перемонтирует LazyColumn+layerBackdrop после закрытия оверлеев (см. GlassBackdropRecovery). */
+    var layerBackdropResetKey by remember { mutableIntStateOf(0) }
+    val recommendationsViewModel: RecommendationsViewModel = koinViewModel()
+    val recsState by recommendationsViewModel.uiState.collectAsStateWithLifecycle()
+    val recsStrings = getRecommendationsStrings(currentLanguage)
     var isSearchVisible by remember { mutableStateOf(false) }
     var showNotificationsOverlay by remember { mutableStateOf(false) }
     var notificationsBlockingChildDialog by remember { mutableStateOf(false) }
@@ -220,6 +239,8 @@ fun HomeScreen(
         drawContent()
     }
 
+    // showRecsSheet НЕ в shouldBlur: RenderEffect на родителе layerBackdrop портит запись
+    // стекла → после закрытия доки заливаются сплошным bgColor. У шторки свой scrim.
     val shouldBlur = (isSearchVisible && uiState.searchQuery.isBlank()) ||
             showCSheet || animeToDelete != null || animeToFavorite != null ||
             uiState.isGenreFilterVisible || showNotificationsOverlay || showSortOverlay ||
@@ -233,9 +254,11 @@ fun HomeScreen(
         label = "blur"
     )
 
-    // Кнопка «вверх» опускается к низу, когда док скрыт (как кнопка поиска), и поднимается вместе с доком
+    // Кнопка «вверх» опускается к низу, когда док скрыт (как кнопка поиска), и поднимается вместе с доком.
+    // При видимом доке держим её выше плавающей кнопки поиска (её верх ≈162dp над нав-панелью),
+    // чтобы кнопки не слипались.
     val scrollToTopBottomPadding by animateDpAsState(
-        targetValue = if (finalDockVisible) 160.dp else 88.dp,
+        targetValue = if (finalDockVisible) 180.dp else 88.dp,
         animationSpec = MotionTokens.standard(),
         label = "scrollToTopBottom"
     )
@@ -272,6 +295,8 @@ fun HomeScreen(
     }
 
     // «Вдавливание» контента Home под открытой bottom-sheet шторкой (iOS §2.4).
+    // showRecsSheet исключён: scale+clip на родителе layerBackdrop ломает стекло так же,
+    // как RenderEffect (см. shouldBlur). Шторка рекомендаций перекрывает экран своим scrim.
     val anyHomeSheetOpen = showMediaTypeFilterOverlay || showSortOverlay ||
         uiState.isGenreFilterVisible || showNotificationsOverlay || showCSheet
     val homePushProgress by animateFloatAsState(
@@ -407,11 +432,19 @@ fun HomeScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer {
+                        // Якорь сверху: при «вдавливании» не открывается чёрный letterbox
+                        // под status bar — контент остаётся edge-to-edge до выреза камеры.
                         val s = androidx.compose.ui.util.lerp(1f, 0.94f, homePushProgress)
                         scaleX = s
                         scaleY = s
-                        clip = true
-                        shape = SquircleShape(16.dp * homePushProgress)
+                        transformOrigin = TransformOrigin(0.5f, 0f)
+                        clip = homePushProgress > 0.001f
+                        shape = SquircleCornerShape(
+                            topStart = 0.dp,
+                            topEnd = 0.dp,
+                            bottomEnd = 16.dp * homePushProgress,
+                            bottomStart = 16.dp * homePushProgress,
+                        )
                     }
                     .homeScrollBlur(blurAmount)
             ) {
@@ -419,22 +452,45 @@ fun HomeScreen(
                     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
                     val apiSearchModels by viewModel.apiSearchWithStatus.collectAsStateWithLifecycle()
 
+                    val refreshPullState = rememberPullToRefreshState()
+                    val refreshController = rememberPullRefreshController(refreshPullState, isRefreshing, view)
+                    val refreshRevealMax = 96.dp
+
+                    // Индикатор pull-to-refresh лежит ЗА контентом (рисуется раньше него) и
+                    // открывается в зазоре сверху, когда контент уезжает вниз. Он — СИБЛИНГ контента,
+                    // а НЕ его предок, поэтому не оборачивает layerBackdrop-список и не ломает стекло дока.
+                    PullRefreshIndicator(controller = refreshController, revealMax = refreshRevealMax)
+
                     CompositionLocalProvider(LocalOverscrollFactory provides null) {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .nestedScroll(nestedScrollConnection)
-                                .customOverscroll(listState) { overscrollAmount = it }
-                                .offset { IntOffset(0, overscrollAmount.roundToInt()) }
+                                // Верхнюю «резинку» отключаем — верхний пулл целиком у pull-to-refresh.
+                                .customOverscroll(listState, topEnabled = { false }) { overscrollAmount = it }
+                                // Сдвиг контента = overscroll + раскрытие pull-to-refresh. Тот же
+                                // СУЩЕСТВУЮЩИЙ offset-узел (не новая нода над layerBackdrop) — стекло
+                                // дока остаётся целым.
+                                .offset {
+                                    val reveal = (refreshController.revealFraction() * refreshRevealMax.toPx()).roundToInt()
+                                    IntOffset(0, overscrollAmount.roundToInt() + reveal)
+                                }
                         ) {
                             PullToRefreshBox(
                                 isRefreshing = isRefreshing,
                                 onRefresh = {
                                     dismissCloudSyncPill()
+                                    // Жест сработал → индикатор фиксируется в оттянутом положении
+                                    // минимум на 2с (см. PullRefreshController).
+                                    refreshController.notifyRefreshInvoked()
                                     viewModel.refreshList()
                                 },
+                                state = refreshPullState,
+                                // Свой визуал рисуем сами, стоковый индикатор выключаем.
+                                indicator = {},
                                 modifier = Modifier.fillMaxSize()
                             ) {
+                                key(layerBackdropResetKey) {
                                 LazyColumn(
                                     state = listState,
                                     contentPadding = PaddingValues(top = 0.dp, bottom = 0.dp, start = 0.dp, end = 0.dp),
@@ -447,6 +503,22 @@ fun HomeScreen(
                                         VetroWorkspaceTopBar(
                                             strings = getStrings(currentLanguage),
                                         )
+                                    }
+
+                                    val recsReady = recsState as? RecommendationsUiState.Ready
+                                    if (recsReady != null && recsReady.items.isNotEmpty() && uiState.searchQuery.isEmpty()) {
+                                        item(key = "discovery_card", contentType = "discovery_card") {
+                                            DiscoveryCard(
+                                                state = recsReady,
+                                                strings = recsStrings,
+                                                onClick = {
+                                                    performHaptic(view, "light")
+                                                    dismissCloudSyncPill()
+                                                    showRecsSheet = true
+                                                },
+                                                modifier = Modifier.padding(horizontal = 16.dp),
+                                            )
+                                        }
                                     }
 
                                     val showApiFirst = list.isEmpty() && uiState.searchQuery.isNotEmpty()
@@ -524,9 +596,16 @@ fun HomeScreen(
                                                 modifier = Modifier.padding(horizontal = 16.dp) // .animateItem() убран: конфликт с SharedTransition при возврате
                                             ) {
                                                 val cardState = remember(anime, currentLanguage) {
+                                                    // Название по выбранному языку: EN → английское, RU → русское.
+                                                    // Замена, а не вторая строка; при отсутствии перевода — исходный title.
+                                                    val displayTitle = when (currentLanguage) {
+                                                        AppLanguage.EN -> anime.titleEn?.takeIf { it.isNotBlank() } ?: anime.title
+                                                        AppLanguage.RU -> anime.titleRu?.takeIf { it.isNotBlank() } ?: anime.title
+                                                    }
                                                     AnimeCardState(
                                                         id = anime.id,
-                                                        title = anime.title,
+                                                        title = displayTitle,
+                                                        titleEn = null,
                                                         rating = anime.rating,
                                                         genres = persistentListOf(
                                                             *anime.tags.take(3)
@@ -587,6 +666,7 @@ fun HomeScreen(
                                         Spacer(Modifier.height(220.dp))
                                     }
                                 }
+                                } // key(layerBackdropResetKey)
                             }
                         }
                     }
@@ -605,7 +685,10 @@ fun HomeScreen(
             if (!isSearchVisible && animeToDelete == null && animeToFavorite == null && !showCSheet) {
                 Box(modifier = Modifier.align(Alignment.BottomCenter).zIndex(3f).navigationBarsPadding()) {
                     AnimatedVisibility(
-                        visible = finalDockVisible,
+                        // !showRecsSheet — внутри visible, НЕ в структурном if выше: иначе
+                        // размонтирование ветки инвалидирует layerBackdrop без перезаписи,
+                        // и всё стекло заливается сплошным цветом (см. homeScrollBlur).
+                        visible = finalDockVisible && !showRecsSheet,
                         enter = slideInVertically(
                             initialOffsetY = { it },
                             animationSpec = MotionTokens.sheetPresent()
@@ -854,6 +937,27 @@ fun HomeScreen(
                 }
             }
         }
+
+        if (showRecsSheet) {
+            RecommendationsSheet(
+                state = recsState,
+                strings = recsStrings,
+                language = currentLanguage,
+                genreRepository = genreRepository,
+                onAdd = { item -> recommendationsViewModel.addToCollection(item) },
+                onDismiss = { showRecsSheet = false },
+            )
+        }
+
+        // Единое восстановление стекла после закрытия ЛЮБОГО оверлея над доком (не только
+        // рекомендаций): новое меню покрывается автоматически, если добавлено в этот признак.
+        // См. GlassBackdropRecovery.
+        GlassBackdropRecovery(
+            overlayActive = shouldBlur || anyHomeSheetOpen || showRecsSheet ||
+                animeToDelete != null || animeToFavorite != null || isSearchVisible,
+            listState = listState,
+            onRemount = { layerBackdropResetKey++ },
+        )
 
         if (showCSheet) {
             LaunchedEffect(showCSheet) {

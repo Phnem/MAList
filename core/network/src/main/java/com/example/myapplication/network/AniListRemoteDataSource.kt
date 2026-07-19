@@ -4,8 +4,12 @@ import android.util.Log
 import com.apollographql.apollo.ApolloClient
 import com.apollographql.apollo.api.ApolloResponse
 import com.apollographql.apollo.api.Optional
+import com.example.myapplication.network.anilist.EnrichTitlesByIdQuery
+import com.example.myapplication.network.anilist.EnrichTitlesSearchQuery
 import com.example.myapplication.network.anilist.MediaByIdQuery
 import com.example.myapplication.network.anilist.MediaListCollectionChunkQuery
+import com.example.myapplication.network.anilist.RecommendationsBatchQuery
+import com.example.myapplication.network.anilist.TrendingMediaQuery
 import com.example.myapplication.network.anilist.SaveMediaListEntryMutation
 import com.example.myapplication.network.anilist.SearchMediaPageQuery
 import com.example.myapplication.network.anilist.SearchMediaQuery
@@ -136,6 +140,56 @@ class AniListRemoteDataSource(
         }
     }
 
+    /**
+     * Явные названия по AniList id и/или MAL id (idMal) — для обогащения EN-названий.
+     * Передай хотя бы один id; AniList игнорирует null-переменную.
+     */
+    suspend fun enrichTitlesByIds(anilistId: Int?, malId: Int?): Result<EnrichedTitles?> = runCatching {
+        if (anilistId == null && malId == null) return@runCatching null
+        withContext(Dispatchers.IO) {
+            rateLimiter.acquire()
+            val response = apolloClient.query(
+                EnrichTitlesByIdQuery(
+                    id = Optional.presentIfNotNull(anilistId),
+                    idMal = Optional.presentIfNotNull(malId),
+                )
+            ).execute()
+            response.throwIfGraphQlErrors("EnrichTitlesById")
+            val media = response.data?.Media ?: return@withContext null
+            EnrichedTitles(
+                anilistId = media.id,
+                malId = media.idMal,
+                romaji = media.title?.romaji,
+                english = media.title?.english,
+                native = media.title?.native,
+            )
+        }
+    }
+
+    /** Явные названия по поиску (для сопоставления, когда id нет). */
+    suspend fun enrichTitlesBySearch(query: String, limit: Int = 8): Result<List<EnrichedTitles>> = runCatching {
+        if (query.isBlank()) return@runCatching emptyList()
+        withContext(Dispatchers.IO) {
+            rateLimiter.acquire()
+            val response = apolloClient.query(
+                EnrichTitlesSearchQuery(
+                    q = Optional.present(query),
+                    perPage = Optional.present(limit),
+                )
+            ).execute()
+            response.throwIfGraphQlErrors("EnrichTitlesSearch")
+            response.data?.Page?.media?.filterNotNull()?.map { media ->
+                EnrichedTitles(
+                    anilistId = media.id,
+                    malId = media.idMal,
+                    romaji = media.title?.romaji,
+                    english = media.title?.english,
+                    native = media.title?.native,
+                )
+            }.orEmpty()
+        }
+    }
+
     suspend fun findTotalEpisodes(query: String): Result<Pair<Int, String>?> = runCatching {
         withContext(Dispatchers.IO) {
             rateLimiter.acquire()
@@ -235,6 +289,87 @@ class AniListRemoteDataSource(
                 error("SaveMediaListEntry returned null data")
             }
         }
+    }
+
+    /**
+     * Related-рекомендации для всех сидов ОДНИМ запросом (id_in батч).
+     * Возвращает map: anilistId сида → его рекомендации.
+     */
+    suspend fun recommendationsForIds(ids: List<Int>, perSeed: Int = 12): Result<Map<Int, List<ApiSearchResult>>> = runCatching {
+        if (ids.isEmpty()) return@runCatching emptyMap()
+        withContext(Dispatchers.IO) {
+            rateLimiter.acquire()
+            val response = apolloClient.query(
+                RecommendationsBatchQuery(
+                    ids = Optional.present(ids),
+                    perSeed = Optional.present(perSeed)
+                )
+            ).execute()
+            response.throwIfGraphQlErrors("RecommendationsBatch")
+            val mediaList = response.data?.Page?.media?.filterNotNull() ?: return@withContext emptyMap()
+            mediaList.mapNotNull { seed ->
+                val seedId = seed.id ?: return@mapNotNull null
+                val recs = seed.recommendations?.nodes
+                    ?.mapNotNull { node -> node?.mediaRecommendation?.toApiSearchResult() }
+                    .orEmpty()
+                seedId to recs
+            }.toMap()
+        }
+    }
+
+    /** Глобальный тренд для cold-start — один запрос. */
+    suspend fun trendingAnime(limit: Int = 20): Result<List<ApiSearchResult>> = runCatching {
+        withContext(Dispatchers.IO) {
+            rateLimiter.acquire()
+            val response = apolloClient.query(
+                TrendingMediaQuery(
+                    page = Optional.present(1),
+                    perPage = Optional.present(limit)
+                )
+            ).execute()
+            response.throwIfGraphQlErrors("TrendingMedia")
+            response.data?.Page?.media?.filterNotNull()
+                ?.mapNotNull { it.toApiSearchResult() }
+                .orEmpty()
+        }
+    }
+
+    private fun RecommendationsBatchQuery.MediaRecommendation.toApiSearchResult(): ApiSearchResult? {
+        val romaji = title?.romaji.orEmpty()
+        val english = title?.english.orEmpty()
+        val displayTitle = english.ifEmpty { romaji }.ifEmpty { return null }
+        return ApiSearchResult(
+            title = displayTitle,
+            altTitle = romaji.takeIf { it.isNotEmpty() && it != displayTitle },
+            posterUrl = coverImage?.large,
+            episodes = episodes ?: 0,
+            description = description?.replace(Regex("<[^>]+>"), "")?.trim().orEmpty(),
+            type = type?.name ?: "ANIME",
+            genres = genres?.filterNotNull().orEmpty(),
+            rating = averageScore,
+            source = "AniList",
+            categoryType = "ANIME",
+            externalId = id?.toString()
+        )
+    }
+
+    private fun TrendingMediaQuery.Medium.toApiSearchResult(): ApiSearchResult? {
+        val romaji = title?.romaji.orEmpty()
+        val english = title?.english.orEmpty()
+        val displayTitle = english.ifEmpty { romaji }.ifEmpty { return null }
+        return ApiSearchResult(
+            title = displayTitle,
+            altTitle = romaji.takeIf { it.isNotEmpty() && it != displayTitle },
+            posterUrl = coverImage?.large,
+            episodes = episodes ?: 0,
+            description = description?.replace(Regex("<[^>]+>"), "")?.trim().orEmpty(),
+            type = type?.name ?: "ANIME",
+            genres = genres?.filterNotNull().orEmpty(),
+            rating = averageScore,
+            source = "AniList",
+            categoryType = "ANIME",
+            externalId = id?.toString()
+        )
     }
 
     private fun <T : com.apollographql.apollo.api.Operation.Data> ApolloResponse<T>.throwIfGraphQlErrors(operation: String) {

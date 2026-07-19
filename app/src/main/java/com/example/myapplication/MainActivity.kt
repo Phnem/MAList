@@ -72,8 +72,8 @@ class MainActivity : ComponentActivity() {
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             window.isNavigationBarContrastEnforced = false
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+            // Иначе система может нарисовать непрозрачный скрим в status bar
+            // поверх edge-to-edge контента при открытых шторках.
             window.disableStatusBarContrastEnforced()
         }
         handleSupabaseAuthDeeplink(intent)

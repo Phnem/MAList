@@ -311,6 +311,8 @@ fun GlassBottomNavigation(
     val navHeight = 74.dp
     val navShape = RoundedCornerShape(navHeight / 2)
     val currentThemeColor = MaterialTheme.colorScheme.onSurface
+    // Иконки дока — ярче/белее: чистый белый на полной непрозрачности в тёмной теме.
+    val dockIconTint = if (isDark) Color.White else currentThemeColor
     val borderStroke = if (isDark) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.8f)
 
     val ru = currentLanguage == AppLanguage.RU
@@ -327,25 +329,25 @@ fun GlassBottomNavigation(
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                // Больше отступ справа → центрированная капсула уезжает левее, дальше от поиск-FAB.
-                .padding(end = 80.dp)
+                // Капсула на всю строку: ~80% ширины экрана, элементы равномерно распределены.
+                .fillMaxWidth(0.80f)
                 .height(navHeight)
-                .wrapContentWidth()
                 .clip(navShape)
                 .adaptiveGlassBackdrop(backdrop = backdrop, shape = navShape, effects = glassEffects)
                 .border(0.5.dp, borderStroke, navShape)
         ) {
             Row(
                 modifier = Modifier
-                    .fillMaxHeight()
-                    .padding(horizontal = 16.dp),
+                    .fillMaxSize()
+                    .padding(horizontal = 12.dp),
+                // Иконка+подпись — единый блок, центрируем его по вертикали в капсуле.
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                horizontalArrangement = Arrangement.SpaceEvenly
             ) {
                 // --- Кадр (inspect) ---
                 Column(
                     modifier = Modifier
-                        .width(52.dp)
+                        .width(60.dp)
                         .clip(RoundedCornerShape(20.dp))
                         .fluidClickable {
                             performHaptic(view, "light")
@@ -357,7 +359,7 @@ fun GlassBottomNavigation(
                     with(sharedTransitionScope) {
                         Box(
                             modifier = Modifier
-                                .size(30.dp)
+                                .size(36.dp)
                                 .sharedBounds(
                                     rememberSharedContentState(key = "inspect_container"),
                                     animatedVisibilityScope = animatedVisibilityScope,
@@ -369,9 +371,9 @@ fun GlassBottomNavigation(
                             Icon(
                                 painter = painterResource(R.drawable.frame_inspect_24),
                                 contentDescription = "Scene search",
-                                tint = currentThemeColor.copy(alpha = 0.7f),
+                                tint = dockIconTint,
                                 modifier = Modifier
-                                    .size(26.dp)
+                                    .size(34.dp)
                                     .sharedElement(
                                         rememberSharedContentState(key = "inspect_icon"),
                                         animatedVisibilityScope = animatedVisibilityScope
@@ -385,7 +387,7 @@ fun GlassBottomNavigation(
                 // --- Статистика ---
                 Column(
                     modifier = Modifier
-                        .width(52.dp)
+                        .width(60.dp)
                         .clip(RoundedCornerShape(20.dp))
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
@@ -397,12 +399,12 @@ fun GlassBottomNavigation(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
-                    Box(modifier = Modifier.size(30.dp), contentAlignment = Alignment.Center) {
+                    Box(modifier = Modifier.size(36.dp), contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = HeroiconsSquaresPlus,
                             contentDescription = "Stats",
-                            tint = currentThemeColor.copy(alpha = 0.7f),
-                            modifier = Modifier.size(26.dp)
+                            tint = dockIconTint,
+                            modifier = Modifier.size(34.dp)
                         )
                     }
                     DockLabel(labelStats, currentThemeColor)
@@ -411,7 +413,7 @@ fun GlassBottomNavigation(
                 // --- Добавить ---
                 Column(
                     modifier = Modifier
-                        .width(52.dp)
+                        .width(60.dp)
                         .clip(RoundedCornerShape(20.dp))
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
@@ -426,7 +428,7 @@ fun GlassBottomNavigation(
                     with(sharedTransitionScope) {
                         Box(
                             modifier = Modifier
-                                .size(30.dp)
+                                .size(36.dp)
                                 .sharedBounds(
                                     rememberSharedContentState(key = "fab_container"),
                                     animatedVisibilityScope = animatedVisibilityScope,
@@ -439,9 +441,9 @@ fun GlassBottomNavigation(
                             Icon(
                                 imageVector = HeroiconsPlus,
                                 contentDescription = "Add",
-                                tint = currentThemeColor.copy(alpha = 0.7f),
+                                tint = dockIconTint,
                                 modifier = Modifier
-                                    .size(28.dp)
+                                    .size(36.dp)
                                     .sharedElement(
                                         rememberSharedContentState(key = "fab_icon"),
                                         animatedVisibilityScope = animatedVisibilityScope
@@ -455,7 +457,7 @@ fun GlassBottomNavigation(
                 // --- Настройки ---
                 Column(
                     modifier = Modifier
-                        .width(52.dp)
+                        .width(60.dp)
                         .clip(RoundedCornerShape(20.dp))
                         .fluidClickable {
                             performHaptic(view, "light")
@@ -467,7 +469,7 @@ fun GlassBottomNavigation(
                     with(sharedTransitionScope) {
                         Box(
                             modifier = Modifier
-                                .size(30.dp)
+                                .size(36.dp)
                                 .sharedBounds(
                                     rememberSharedContentState(key = "settings_container"),
                                     animatedVisibilityScope = animatedVisibilityScope,
@@ -482,9 +484,9 @@ fun GlassBottomNavigation(
                             Icon(
                                 imageVector = Icons.Outlined.Settings,
                                 contentDescription = "Settings",
-                                tint = currentThemeColor.copy(alpha = 0.7f),
+                                tint = dockIconTint,
                                 modifier = Modifier
-                                    .size(26.dp)
+                                    .size(34.dp)
                                     .sharedElement(
                                         rememberSharedContentState(key = "settings_icon"),
                                         animatedVisibilityScope = animatedVisibilityScope
@@ -505,28 +507,31 @@ fun GlassBottomNavigation(
             },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 24.dp),
-            size = 64.dp,
-            iconSize = 32.dp,
+                // Приподнят над доком (референс — Telegram): отступ снизу = высота дока + зазор.
+                .padding(end = 24.dp, bottom = navHeight + 12.dp),
+            size = 52.dp,
+            iconSize = 26.dp,
             backdrop = backdrop,
             backgroundColor = Color.Transparent,
             contentDescription = "Search",
-            tint = if (isSearchActive) BrandBlue else currentThemeColor
+            tint = if (isSearchActive) BrandBlue else dockIconTint
         )
     }
 }
 
-/** Подпись под иконкой дока (референс — Telegram). Компактная, приглушённая. */
+/** Подпись под иконкой дока (референс — Telegram). Компактная, приглушённая.
+ *  8.5sp + колонка 60dp: длинные русские подписи («Статистика», «Настройки»)
+ *  влезают целиком и не обрезаются клипом колонки. */
 @Composable
 private fun DockLabel(text: String, color: Color) {
     Text(
         text = text,
         fontFamily = SnProFamily,
         fontWeight = FontWeight.Medium,
-        fontSize = 9.5.sp,
+        fontSize = 8.5.sp,
         color = color.copy(alpha = 0.75f),
         maxLines = 1,
-        modifier = Modifier.padding(top = 3.dp),
+        modifier = Modifier.padding(top = 1.dp),
     )
 }
 
@@ -678,7 +683,7 @@ val HeroiconsRectangleStack: ImageVector
 // ==========================================
 // ЦВЕТА И РАСШИРЕНИЯ ДЛЯ СТАРОГО ДИЗАЙНА
 // ==========================================
-private val IconFilterColor = Color(0xFFE91E63)
+private val IconFilterColor = Color(0xFFE85002)
 
 private sealed interface SortGridSelection {
     data class Sort(val option: SortOption, val isAscending: Boolean) : SortGridSelection
@@ -692,9 +697,9 @@ fun SortOption.getIcon(): ImageVector = when (this) {
 }
 
 fun SortOption.getAccentColor(): Color = when (this) {
-    SortOption.RATING -> Color(0xFFFFD60A)
-    SortOption.EPISODES -> Color(0xFF3E82F7)
-    SortOption.TITLE -> Color(0xFF5E5CE6)
+    SortOption.RATING -> Color(0xFFE85002)
+    SortOption.EPISODES -> Color(0xFFFFB067)
+    SortOption.TITLE -> Color(0xFFA7A7A7)
 }
 
 // ==========================================
@@ -730,10 +735,10 @@ fun SortFilterOverlay(
     }
 
     val swipe = rememberIosSheetSwipe { onDismiss() }
-    val accentRating = Color(0xFFFFD60A)
-    val accentEpisodes = Color(0xFF3E82F7)
-    val accentTitle = Color(0xFF5E5CE6)
-    val accentGenres = Color(0xFFFF6FB1)
+    val accentRating = Color(0xFFE85002)
+    val accentEpisodes = Color(0xFFFFB067)
+    val accentTitle = Color(0xFFA7A7A7)
+    val accentGenres = Color(0xFFD9C3AB)
     fun sortAccent(o: SortOption) = when (o) {
         SortOption.RATING -> accentRating
         SortOption.EPISODES -> accentEpisodes
