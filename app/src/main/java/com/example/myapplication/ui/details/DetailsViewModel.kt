@@ -55,13 +55,32 @@ class DetailsViewModel(
 
     private fun loadDetails(anime: Anime, language: AppLanguage) {
         viewModelScope.launch {
+            if (
+                language == AppLanguage.EN &&
+                anime.mediaType != com.example.myapplication.data.models.MediaType.MANGA &&
+                anime.anilistId == null &&
+                anime.malId == null &&
+                anime.titleEn.isNullOrBlank()
+            ) {
+                _uiState.value = DetailsUiState.MissingEnglishTitle
+                return@launch
+            }
+
             _uiState.value = DetailsUiState.Loading
             val startTime = System.currentTimeMillis()
 
+            val lookupTitle = when (language) {
+                AppLanguage.RU -> anime.titleRu?.takeIf { it.isNotBlank() } ?: anime.title
+                AppLanguage.EN -> anime.titleEn?.takeIf { it.isNotBlank() } ?: anime.title
+            }
+
             repository.fetchDetails(
-                title = anime.title,
+                title = lookupTitle,
                 language = language,
-                isManga = anime.mediaType == com.example.myapplication.data.models.MediaType.MANGA
+                isManga = anime.mediaType == com.example.myapplication.data.models.MediaType.MANGA,
+                malId = anime.malId,
+                anilistId = anime.anilistId,
+                titleEn = anime.titleEn,
             )
                 .fold(
                     onSuccess = { details ->

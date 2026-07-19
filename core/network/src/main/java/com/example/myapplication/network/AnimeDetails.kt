@@ -15,3 +15,18 @@ data class AnimeDetails(
     val source: String,
     val airedOn: String? = null
 )
+
+fun ApiSearchResult.toAnimeDetails(): AnimeDetails = AnimeDetails(
+    title = title,
+    altTitle = altTitle,
+    description = description,
+    type = type,
+    status = "",
+    episodesAired = episodes,
+    episodesTotal = episodes.takeIf { it > 0 },
+    nextEpisode = null,
+    genres = genres,
+    rating = rating,
+    posterUrl = posterUrl,
+    source = source,
+)

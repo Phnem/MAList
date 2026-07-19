@@ -374,6 +374,29 @@ private fun DetailsBody(
                         }
                     }
 
+                    is DetailsUiState.MissingEnglishTitle -> {
+                        Row(
+                            verticalAlignment = Alignment.Top,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.ErrorOutline,
+                                contentDescription = null,
+                                tint = onCardMuted,
+                                modifier = Modifier.size(20.dp),
+                            )
+                            Text(
+                                text = if (language == AppLanguage.RU) {
+                                    "Описание недоступно. Добавьте английское название или привяжите MAL/AniList id для более точной загрузки."
+                                } else {
+                                    "Description unavailable. Add an English title or link a MAL/AniList id for accurate loading."
+                                },
+                                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = SnProFamily),
+                                color = onCardMuted,
+                            )
+                        }
+                    }
+
                     is DetailsUiState.Success -> {
                         val descText = details?.description?.takeIf { it.isNotBlank() && it != "null" }
                         if (descText != null) {

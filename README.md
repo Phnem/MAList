@@ -7,8 +7,63 @@ Anime · Manga · Manhwa · Movies · TV Shows · Anything structured
 
 Kotlin · Compose · Ktor · Koin · Supabase · SQLDelight
 
-**Latest release: v3.3.2-Beta** · Latest stable: v3.3.1-Stable
+**Latest release: v3.3.2-Beta** · Latest stable: v3.3.1-Stable  
 See [Releases](https://github.com/Phnem/Vetro/releases) for the full changelog history.
+
+> **v3.3.2-Beta** — a major visual overhaul: new color system, redesigned rating mechanics, expanded AI capabilities, and significant improvements to synchronization and the overall user experience.
+
+---
+
+## 🧪 What's New in v3.3.2-Beta
+
+### 🎨 Visual Refresh
+
+- Completely redesigned application color palette with improved contrast and readability
+- More consistent appearance across light and dark themes, aligned with **The Depth of Light**
+- Enhanced liquid glass rendering — refined translucency, lighting, depth, and visual layering
+- Completely redesigned startup splash screen with smoother launch and updated branding
+
+### ⭐ Rating System
+
+- Replaced the previous **1–5** scale with a precise **0.0–10.0** rating system
+- Fully redesigned rating controls in Add and Edit screens for a faster, more intuitive workflow
+
+### 🤖 AI & BYOK
+
+- Completely redesigned **Bring Your Own Key** panel in Settings — choose your provider, keep full control of your API keys
+
+Supported providers and default models:
+
+| Provider | Default model | Vision |
+|---|---|---|
+| **OpenAI** | GPT-5 Mini | ✓ |
+| **Anthropic** | Claude Haiku 4.5 | ✓ |
+| **Google Gemini** | Gemini 3.1 Flash Lite | ✓ |
+| **DeepSeek** | DeepSeek V4 Flash | Text only |
+| **Groq** | GPT-OSS 120B | ✓ |
+| **OpenRouter** | OpenAI GPT-5 Mini | ✓ |
+| **Cohere** | Command A Vision 07-2025 | ✓ |
+
+- **Title Translation Engine** — Settings → Developer Settings; generates localized titles for existing entries (better recommendations, search, and metadata consistency)
+- **AI Statistics Analysis** — redesigned Statistics screen with AI-powered insights based on your collection and viewing history
+
+### 🔄 Synchronization
+
+- Redesigned **Connection Center** for AniList, MyAnimeList, and Shikimori
+- Improved synchronization reliability and optimized database repair system
+- Fixed an issue where genres were not being saved correctly
+
+### ✨ Recommendations & Interaction
+
+- Dedicated **Recommendations** section to discover related content within the app
+- Completely redesigned **pull-to-refresh** — smoother animations, more responsive interaction, improved visual consistency
+
+### 🐛 Fixes & Improvements
+
+- Fixed multiple issues affecting the bottom navigation dock
+- Fixed search button behavior
+- Improved switch animations in Settings
+- General UI polish and stability improvements
 
 ---
 
@@ -30,7 +85,17 @@ Originally built as an anime tracker, it's evolving into a universal media colle
 
 ## 📸 Screenshots
 
-[![Screenshot 1](https://github.com/Phnem/Vetro/raw/main/images/1.png)](https://github.com/Phnem/Vetro/blob/main/images/1.png) [![Screenshot 2](https://github.com/Phnem/Vetro/raw/main/images/2.png)](https://github.com/Phnem/Vetro/blob/main/images/2.png) [![Screenshot 3](https://github.com/Phnem/Vetro/raw/main/images/3.png)](https://github.com/Phnem/Vetro/blob/main/images/3.png) [![Screenshot 4](https://github.com/Phnem/Vetro/raw/main/images/4.png)](https://github.com/Phnem/Vetro/blob/main/images/4.png) [![Screenshot 5](https://github.com/Phnem/Vetro/raw/main/images/5.png)](https://github.com/Phnem/Vetro/blob/main/images/5.png)
+<table>
+  <tr>
+    <td align="center"><a href="https://github.com/Phnem/Vetro/blob/main/images/4.png"><img src="https://github.com/Phnem/Vetro/raw/main/images/4.png" width="280" alt="Screenshot 4"/></a></td>
+    <td align="center"><a href="https://github.com/Phnem/Vetro/blob/main/images/2.png"><img src="https://github.com/Phnem/Vetro/raw/main/images/2.png" width="280" alt="Screenshot 2"/></a></td>
+    <td align="center"><a href="https://github.com/Phnem/Vetro/blob/main/images/3.png"><img src="https://github.com/Phnem/Vetro/raw/main/images/3.png" width="280" alt="Screenshot 3"/></a></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="https://github.com/Phnem/Vetro/blob/main/images/1.png"><img src="https://github.com/Phnem/Vetro/raw/main/images/1.png" width="280" alt="Screenshot 1"/></a></td>
+    <td align="center"><a href="https://github.com/Phnem/Vetro/blob/main/images/5.png"><img src="https://github.com/Phnem/Vetro/raw/main/images/5.png" width="280" alt="Screenshot 5"/></a></td>
+  </tr>
+</table>
 
 *Click any image to view full resolution*
 
@@ -96,12 +161,13 @@ Workflow: upload a frame → detect title → add directly to library → metada
 
 ### 💡 Recommendations
 
-A dedicated Recommendations section surfaces new anime, manga, and shows to discover based on your existing collection.
+A dedicated Recommendations section surfaces new anime, manga, and shows to discover based on your existing collection — directly within the app.
 
-### 🎭 Digital Sarcasm System
+### 🎭 Statistics & AI Insights
 
 - Context-aware sarcasm engine with 600+ dynamic phrases in Statistics
 - Reacts to your taste — judges it, or supports your optimism
+- **AI Statistics Analysis** (v3.3.2+): intelligent insights and personalized observations based on your collection and viewing history
 
 ---
 
@@ -112,7 +178,9 @@ A dedicated Recommendations section surfaces new anime, manga, and shows to disc
 - Optional **Email + Password** login with a permanent password
 - Dedicated account settings screen to view auth status and manage your linked cloud account
 
-No embedded API keys ship with the app — bring your own key for AI-powered features like image recognition, keeping usage transparent and abuse-resistant.
+No embedded API keys ship with the app — bring your own key for AI-powered features.
+
+The redesigned **BYOK panel** in Settings supports OpenAI, Anthropic, Google Gemini, DeepSeek, Groq, OpenRouter, and Cohere — each with sensible default models for vision and text tasks. Usage stays transparent and abuse-resistant because you supply and control your own keys.
 
 ---
 
@@ -132,12 +200,11 @@ Primary providers:
 Fallback provider:
 - Jikan API (automatic fallback improves reliability when a primary provider is unavailable)
 
-- Redesigned connection screens for AniList, MyAnimeList, and Shikimori
+- Redesigned **Connection Center** for AniList, MyAnimeList, and Shikimori
 - Import / Export / Sync workflows to move libraries in and out of Vetro
 - Dynamic sync status badge that updates in real time
 - Unified genre database shared consistently between anime and manga
-
-⚠️ **Known issue:** genre synchronization is currently incomplete. Developer Settings → **Repair Database** restores missing genres, covers, and metadata as a temporary workaround; a full synchronization fix is planned for a future release.
+- Improved synchronization reliability; genre saving issues addressed in v3.3.2-Beta
 
 ---
 
@@ -151,13 +218,17 @@ Fallback provider:
 - Completely redesigned bottom navigation dock
 - New primary typeface for improved readability
 - New color palette with refined accents, consistent across light and dark themes
+- Enhanced liquid glass effects — improved translucency, lighting, and depth
+- Completely redesigned startup splash screen
+- Redesigned pull-to-refresh with smoother animations and more responsive interaction
 - Tile-based genre system, unified across Add / Edit / Sorting
 
 ---
 
 ## 🛠 Developer Tools
 
-- **Repair Database**: recovers missing genres, cover images, metadata, and sync artifacts after an interrupted sync or incomplete import
+- **Repair Database**: recovers missing genres, cover images, metadata, and sync artifacts after an interrupted sync or incomplete import (optimized in v3.3.2-Beta)
+- **Title Translation Engine**: Settings → Developer Settings — auto-generates localized titles for existing media entries
 - Developer option to toggle adaptive blur rendering
 - Database Import
 - PDF export (shareable, readable tables)

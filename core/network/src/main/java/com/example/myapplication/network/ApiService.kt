@@ -4,7 +4,15 @@ package com.example.myapplication.network
  * Network API contract. All methods return Result for idiomatic Kotlin error handling.
  */
 interface ApiService {
-    suspend fun fetchDetails(title: String, language: AppLanguage, isManga: Boolean = false, apiId: String? = null): Result<AnimeDetails?>
+    suspend fun fetchDetails(
+        title: String,
+        language: AppLanguage,
+        isManga: Boolean = false,
+        apiId: String? = null,
+        malId: Int? = null,
+        anilistId: Int? = null,
+        titleEn: String? = null,
+    ): Result<AnimeDetails?>
     suspend fun findTotalEpisodes(
         title: String,
         categoryType: String,

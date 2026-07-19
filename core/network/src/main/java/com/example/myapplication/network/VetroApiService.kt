@@ -30,7 +30,15 @@ class VetroApiService(
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    override suspend fun fetchDetails(title: String, language: AppLanguage, isManga: Boolean, apiId: String?): Result<AnimeDetails?> {
+    override suspend fun fetchDetails(
+        title: String,
+        language: AppLanguage,
+        isManga: Boolean,
+        apiId: String?,
+        malId: Int?,
+        anilistId: Int?,
+        titleEn: String?,
+    ): Result<AnimeDetails?> {
         return runCatching {
             heavyRate.acquire()
             if (isManga) {
@@ -48,16 +56,41 @@ class VetroApiService(
                         ?: aniList.fetchAnimeDetails(query).getOrNull()
                 }
             } else {
-                val query = title.trim()
                 when (language) {
-                    AppLanguage.EN -> aniList.fetchAnimeDetails(query).getOrNull()
-                        ?: shikimori.fetchAnimeDetails(query).getOrNull()
-                    AppLanguage.RU -> shikimori.fetchAnimeDetails(query).getOrNull()
-                        ?: aniList.fetchAnimeDetails(query).getOrNull()
+                    AppLanguage.EN -> fetchAnimeDetailsEn(anilistId, malId, titleEn)
+                    AppLanguage.RU -> fetchAnimeDetailsRu(title.trim())
                 }
             }
         }
     }
+
+    /**
+     * EN-режим: AniList id → MAL id (AniList/Jikan) → английское название.
+     * Без fallback на Shikimori по русскому display-title.
+     */
+    private suspend fun fetchAnimeDetailsEn(
+        anilistId: Int?,
+        malId: Int?,
+        titleEn: String?,
+    ): AnimeDetails? {
+        anilistId?.let { id ->
+            aniList.mediaByAnilistId(id).getOrNull()?.toAnimeDetails()?.let { return it }
+        }
+        malId?.let { id ->
+            enrichTitlesByIds(null, id).getOrNull()?.anilistId?.let { aid ->
+                aniList.mediaByAnilistId(aid).getOrNull()?.toAnimeDetails()?.let { return it }
+            }
+            malById(id, AppLanguage.EN).getOrNull()?.toAnimeDetails()?.let { return it }
+        }
+        titleEn?.trim()?.takeIf { it.isNotEmpty() }?.let { en ->
+            aniList.fetchAnimeDetails(en).getOrNull()?.let { return it }
+        }
+        return null
+    }
+
+    private suspend fun fetchAnimeDetailsRu(query: String): AnimeDetails? =
+        shikimori.fetchAnimeDetails(query).getOrNull()
+            ?: aniList.fetchAnimeDetails(query).getOrNull()
 
     override suspend fun findTotalEpisodes(
         title: String,

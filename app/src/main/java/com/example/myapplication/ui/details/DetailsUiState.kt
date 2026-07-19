@@ -10,4 +10,6 @@ sealed class DetailsUiState {
     object Loading : DetailsUiState()
     data class Success(val details: AnimeDetails) : DetailsUiState()
     object Error : DetailsUiState()
+    /** EN-режим: нет malId/anilistId и нет titleEn — описание не запрашиваем. */
+    object MissingEnglishTitle : DetailsUiState()
 }
