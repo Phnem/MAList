@@ -100,8 +100,9 @@ class AnimeRepository(
         malId: Int? = null,
         anilistId: Int? = null,
         titleEn: String? = null,
+        shikimoriId: Int? = null,
     ): Result<AnimeDetails?> {
-        return apiService.fetchDetails(title, language, isManga, apiId, malId, anilistId, titleEn)
+        return apiService.fetchDetails(title, language, isManga, apiId, malId, anilistId, titleEn, shikimoriId)
     }
 
     suspend fun findTotalEpisodes(

@@ -38,26 +38,24 @@ class VetroApiService(
         malId: Int?,
         anilistId: Int?,
         titleEn: String?,
+        shikimoriId: Int?,
     ): Result<AnimeDetails?> {
         return runCatching {
             heavyRate.acquire()
             if (isManga) {
-                // Try Remanga first if we have the slug
                 if (apiId != null) {
                     val remangaDetails = remanga.getMangaDetails(apiId)
                     if (remangaDetails != null) return@runCatching remangaDetails
                 }
-                // Fallback to Shikimori/Anilist
                 val query = title.trim()
                 when (language) {
-                    AppLanguage.EN -> aniList.fetchAnimeDetails(query).getOrNull()
-                        ?: shikimori.fetchAnimeDetails(query).getOrNull()
+                    AppLanguage.EN -> fetchMangaDetailsEn(query)
                     AppLanguage.RU -> shikimori.fetchAnimeDetails(query).getOrNull()
                         ?: aniList.fetchAnimeDetails(query).getOrNull()
                 }
             } else {
                 when (language) {
-                    AppLanguage.EN -> fetchAnimeDetailsEn(anilistId, malId, titleEn)
+                    AppLanguage.EN -> fetchAnimeDetailsEn(anilistId, malId, shikimoriId, titleEn)
                     AppLanguage.RU -> fetchAnimeDetailsRu(title.trim())
                 }
             }
@@ -65,25 +63,53 @@ class VetroApiService(
     }
 
     /**
-     * EN-режим: AniList id → MAL id (AniList/Jikan) → английское название.
-     * Без fallback на Shikimori по русскому display-title.
+     * EN-режим (аниме): AniList id → MAL id (AniList/Jikan) → английское название (AniList/Jikan).
+     * Shikimori не используется как источник описания; shikimoriId — только для резолва MAL id.
      */
     private suspend fun fetchAnimeDetailsEn(
         anilistId: Int?,
         malId: Int?,
+        shikimoriId: Int?,
         titleEn: String?,
     ): AnimeDetails? {
         anilistId?.let { id ->
-            aniList.mediaByAnilistId(id).getOrNull()?.toAnimeDetails()?.let { return it }
+            acceptEnDescription(aniList.mediaByAnilistId(id).getOrNull())?.let { return it }
         }
-        malId?.let { id ->
-            enrichTitlesByIds(null, id).getOrNull()?.anilistId?.let { aid ->
-                aniList.mediaByAnilistId(aid).getOrNull()?.toAnimeDetails()?.let { return it }
+
+        resolveMalId(malId, shikimoriId)?.let { resolvedMalId ->
+            enrichTitlesByIds(null, resolvedMalId).getOrNull()?.anilistId?.let { aid ->
+                acceptEnDescription(aniList.mediaByAnilistId(aid).getOrNull())?.let { return it }
             }
-            malById(id, AppLanguage.EN).getOrNull()?.toAnimeDetails()?.let { return it }
+            acceptEnDescription(malById(resolvedMalId, AppLanguage.EN).getOrNull())?.let { return it }
         }
+
         titleEn?.trim()?.takeIf { it.isNotEmpty() }?.let { en ->
-            aniList.fetchAnimeDetails(en).getOrNull()?.let { return it }
+            fetchAnimeDetailsEnByTitle(en)?.let { return it }
+        }
+        return null
+    }
+
+    private suspend fun fetchMangaDetailsEn(query: String): AnimeDetails? {
+        acceptEnDescription(aniList.fetchAnimeDetails(query).getOrNull())?.let { return it }
+        searchJikanManga(query, AppLanguage.EN).firstOrNull()?.let { hit ->
+            acceptEnDescription(hit.toAnimeDetails())?.let { return it }
+        }
+        return null
+    }
+
+    private suspend fun fetchAnimeDetailsEnByTitle(title: String): AnimeDetails? {
+        acceptEnDescription(aniList.fetchAnimeDetails(title).getOrNull())?.let { return it }
+        searchJikan(title, AppLanguage.EN).firstOrNull()?.let { hit ->
+            acceptEnDescription(hit.toAnimeDetails())?.let { return it }
+        }
+        return null
+    }
+
+    /** Shikimori — только метаданные (myanimelist_id), не synopsis. */
+    private suspend fun resolveMalId(malId: Int?, shikimoriId: Int?): Int? {
+        malId?.takeIf { it > 0 }?.let { return it }
+        shikimoriId?.takeIf { it > 0 }?.let { id ->
+            shikimori.getAnimeById(id, AppLanguage.EN).getOrNull()?.malId?.takeIf { it > 0 }?.let { return it }
         }
         return null
     }

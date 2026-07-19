@@ -55,12 +55,16 @@ class DetailsViewModel(
 
     private fun loadDetails(anime: Anime, language: AppLanguage) {
         viewModelScope.launch {
+            val canLookupEnDescription =
+                anime.anilistId != null ||
+                    anime.malId != null ||
+                    anime.shikimoriId != null ||
+                    !anime.titleEn.isNullOrBlank()
+
             if (
                 language == AppLanguage.EN &&
                 anime.mediaType != com.example.myapplication.data.models.MediaType.MANGA &&
-                anime.anilistId == null &&
-                anime.malId == null &&
-                anime.titleEn.isNullOrBlank()
+                !canLookupEnDescription
             ) {
                 _uiState.value = DetailsUiState.MissingEnglishTitle
                 return@launch
@@ -81,6 +85,7 @@ class DetailsViewModel(
                 malId = anime.malId,
                 anilistId = anime.anilistId,
                 titleEn = anime.titleEn,
+                shikimoriId = anime.shikimoriId,
             )
                 .fold(
                     onSuccess = { details ->

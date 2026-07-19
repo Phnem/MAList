@@ -12,6 +12,7 @@ interface ApiService {
         malId: Int? = null,
         anilistId: Int? = null,
         titleEn: String? = null,
+        shikimoriId: Int? = null,
     ): Result<AnimeDetails?>
     suspend fun findTotalEpisodes(
         title: String,
