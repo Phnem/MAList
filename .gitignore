@@ -23,3 +23,15 @@ app/release/
 *.jar
 !gradle/wrapper/gradle-wrapper.jar
 *.class
+
+# JVM crash logs & heap dumps
+hs_err_pid*.log
+replay_pid*.log
+*.hprof
+
+# OS / editor junk
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+*.swp
+*~
