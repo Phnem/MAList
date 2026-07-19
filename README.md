@@ -87,7 +87,7 @@ Originally built as an anime tracker, it's evolving into a universal media colle
 
 <table>
   <tr>
-    <td align="center"><a href="https://github.com/Phnem/Vetro/blob/main/images/4.png"><img src="https://github.com/Phnem/Vetro/raw/main/images/4.png" width="280" alt="Screenshot 4"/></a></td>
+    <td align="center"><a href="https://github.com/Phnem/Vetro/blob/main/images/4_n.png"><img src="https://github.com/Phnem/Vetro/raw/main/images/4_n.png" width="280" alt="Screenshot 4"/></a></td>
     <td align="center"><a href="https://github.com/Phnem/Vetro/blob/main/images/2.png"><img src="https://github.com/Phnem/Vetro/raw/main/images/2.png" width="280" alt="Screenshot 2"/></a></td>
     <td align="center"><a href="https://github.com/Phnem/Vetro/blob/main/images/3.png"><img src="https://github.com/Phnem/Vetro/raw/main/images/3.png" width="280" alt="Screenshot 3"/></a></td>
   </tr>
