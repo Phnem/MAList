@@ -1,12 +1,34 @@
 # Vetro Collection 🎬📚
 
-<p align="center">
-  <a href="https://github-store.org/app?repo=Phnem/Vetro"><img src="https://github.com/Phnem/Vetro/raw/main/images/store/github-store_n.png" width="220" alt="Download on GitHub Store"/></a>
-  &nbsp;&nbsp;&nbsp;
-  <a href="https://f-droid.org/packages/com.phnem.vetro"><img src="https://github.com/Phnem/Vetro/raw/main/images/store/fdroid_n.png" width="220" alt="Get it on F-Droid"/></a>
-  &nbsp;&nbsp;&nbsp;
-  <a href="obtainium://app/add?url=https://github.com/Phnem/Vetro"><img src="https://github.com/Phnem/Vetro/raw/main/images/store/obtainium_n2.png" width="220" alt="Add to Obtainium"/></a>
-</p>
+### Установка / Installation
+
+Для удобного отслеживания обновлений и автоматической установки выберите ваш менеджер приложений:
+
+---
+
+<div align="center">
+  <table>
+    <tr>
+      <td align="center" style="border: none;">
+        <a href="https://github-store.org/app?repo=Phnem/Vetro">
+          <img src="https://img.shields.io/badge/Get%20it%20on-Komi%20Store-007ACC?style=for-the-badge&logo=github&logoColor=white" alt="Get it on Komi Store" height="40">
+        </a>
+      </td>
+      <td align="center" style="border: none;">
+        <a href="https://f-droid.org/packages/com.phnem.vetro">
+          <img src="https://img.shields.io/badge/Get%20it%20on-F--Droid-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Get it on F-Droid" height="40">
+        </a>
+      </td>
+      <td align="center" style="border: none;">
+        <a href="obtainium://app/add?url=https://github.com/Phnem/Vetro">
+          <img src="https://img.shields.io/badge/Get%20it%20on-Obtainium-orange?style=for-the-badge" alt="Get it on Obtainium" height="40">
+        </a>
+      </td>
+    </tr>
+  </table>
+</div>
+
+---
 
 [![Vetro Collection](https://github.com/Phnem/Vetro/raw/main/images/hero.png)](https://github.com/Phnem/Vetro/blob/main/images/hero.png)
 
