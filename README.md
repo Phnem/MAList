@@ -1,11 +1,11 @@
 # Vetro Collection 🎬📚
 
 <p align="center">
-  <a href="https://github-store.org/app?repo=Phnem/Vetro"><img src="https://github.com/Phnem/Vetro/raw/main/images/store/github-store.png" width="220" alt="Download on GitHub Store"/></a>
+  <a href="https://github-store.org/app?repo=Phnem/Vetro"><img src="https://github.com/Phnem/Vetro/raw/main/images/store/github-store_n.png" width="220" alt="Download on GitHub Store"/></a>
   &nbsp;&nbsp;&nbsp;
-  <a href="https://f-droid.org/packages/com.phnem.vetro"><img src="https://github.com/Phnem/Vetro/raw/main/images/store/fdroid.png" width="220" alt="Get it on F-Droid"/></a>
+  <a href="https://f-droid.org/packages/com.phnem.vetro"><img src="https://github.com/Phnem/Vetro/raw/main/images/store/fdroid_n.png" width="220" alt="Get it on F-Droid"/></a>
   &nbsp;&nbsp;&nbsp;
-  <a href="obtainium://app/add?url=https://github.com/Phnem/Vetro"><img src="https://github.com/Phnem/Vetro/raw/main/images/store/obtainium.png" width="220" alt="Add to Obtainium"/></a>
+  <a href="obtainium://app/add?url=https://github.com/Phnem/Vetro"><img src="https://github.com/Phnem/Vetro/raw/main/images/store/obtainium_n.png" width="220" alt="Add to Obtainium"/></a>
 </p>
 
 [![Vetro Collection](https://github.com/Phnem/Vetro/raw/main/images/hero.png)](https://github.com/Phnem/Vetro/blob/main/images/hero.png)
