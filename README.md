@@ -1,5 +1,41 @@
 # Vetro Collection 🎬📚
 
+<p align="center">
+  <table>
+    <tr>
+      <td align="center" width="240">
+        <a href="https://github-store.org/app?repo=Phnem/Vetro">
+          <img src="https://img.shields.io/badge/GitHub_Store-⬇_Download-111111?style=for-the-badge&logo=github&logoColor=white" alt="Download from GitHub Store" height="44"/>
+          <br/><br/>
+          <strong>GitHub Store</strong>
+          <br/>
+          <sub>Latest APK builds from GitHub Releases</sub>
+        </a>
+      </td>
+      <td width="16"></td>
+      <td align="center" width="240">
+        <a href="https://f-droid.org/packages/com.phnem.vetro">
+          <img src="https://fdroid.gitlab.io/artwork/badge/get-it-on-en-us.png" alt="Get it on F-Droid" height="44"/>
+          <br/><br/>
+          <strong>F-Droid</strong>
+          <br/>
+          <sub>Open-source builds from the F-Droid repo</sub>
+        </a>
+      </td>
+      <td width="16"></td>
+      <td align="center" width="240">
+        <a href="obtainium://app/add?url=https://github.com/Phnem/Vetro">
+          <img src="https://img.shields.io/badge/Obtainium-Add_App-2ECC71?style=for-the-badge&logo=android&logoColor=white" alt="Add to Obtainium" height="44"/>
+          <br/><br/>
+          <strong>Obtainium</strong>
+          <br/>
+          <sub>Auto-update directly from GitHub</sub>
+        </a>
+      </td>
+    </tr>
+  </table>
+</p>
+
 [![Vetro Collection](https://github.com/Phnem/Vetro/raw/main/images/hero.png)](https://github.com/Phnem/Vetro/blob/main/images/hero.png)
 
 **Offline-first media collection manager built on The Depth of Light design language.**
