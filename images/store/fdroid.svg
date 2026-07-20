@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="220" height="72" viewBox="0 0 220 72" fill="none">
+  <rect x="0.5" y="0.5" width="219" height="71" rx="14" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.14)" stroke-width="1"/>
+  <circle cx="28" cy="36" r="14" fill="#1FA34A"/>
+  <circle cx="24" cy="33" r="2.2" fill="#fff"/>
+  <circle cx="32" cy="33" r="2.2" fill="#fff"/>
+  <path d="M22 41c2.5 3 11.5 3 14 0" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+  <rect x="24" y="47" width="8" height="3" rx="1.5" fill="#fff"/>
+  <text x="54" y="31" fill="#fff" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" font-weight="700">F-Droid</text>
+  <text x="54" y="49" fill="rgba(255,255,255,0.55)" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11">Open-source builds</text>
+  <rect x="18" y="68" width="184" height="2" rx="1" fill="url(#accent)"/>
+  <defs>
+    <linearGradient id="accent" x1="18" y1="69" x2="202" y2="69" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF8A3D"/>
+      <stop offset="1" stop-color="#FF5C5C"/>
+    </linearGradient>
+  </defs>
+</svg>

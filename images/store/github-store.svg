@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="220" height="72" viewBox="0 0 220 72" fill="none">
+  <rect x="0.5" y="0.5" width="219" height="71" rx="14" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.14)" stroke-width="1"/>
+  <g transform="translate(16,24)">
+    <path fill="#fff" d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-3.795-.735-.525-1.335-1.305-1.695-1.305-1.695-1.065-.735.015-.735.015-.735 1.185.015 1.815 1.215 1.815 1.215 1.05 1.805 2.775 1.29 3.45.99.105-.765.405-1.29.735-1.59-2.55-.285-5.235-1.275-5.235-5.685 0-1.26.45-2.295 1.185-3.105-.12-.285-.525-1.425.12-2.965 0 0 .975-.315 3.195 1.185.93-.255 1.92-.39 2.91-.39.99 0 1.98.135 2.91.39 2.22-1.5 3.195-1.185 3.195-1.185.645 1.545.24 2.68.12 2.965.735.81 1.185 1.845 1.185 3.105 0 4.425-2.695 5.4-5.265 5.685.42.36.795 1.08.795 2.19 0 1.59-.015 2.865-.015 3.255 0 .315.225.69.825.57A8.347 8.347 0 0024 12c0-6.63-5.37-12-12-12z"/>
+  </g>
+  <text x="54" y="31" fill="#fff" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" font-weight="700">GitHub Store</text>
+  <text x="54" y="49" fill="rgba(255,255,255,0.55)" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11">Download APK</text>
+  <rect x="18" y="68" width="184" height="2" rx="1" fill="url(#accent)"/>
+  <defs>
+    <linearGradient id="accent" x1="18" y1="69" x2="202" y2="69" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF8A3D"/>
+      <stop offset="1" stop-color="#FF5C5C"/>
+    </linearGradient>
+  </defs>
+</svg>
