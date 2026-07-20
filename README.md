@@ -1,8 +1,8 @@
 # Vetro Collection 🎬📚
 
-### Установка / Installation
+### Installation
 
-Для удобного отслеживания обновлений и автоматической установки выберите ваш менеджер приложений:
+Choose your app manager for easy update tracking and automatic installation:
 
 ---
 
