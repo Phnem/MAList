@@ -187,7 +187,7 @@ Workflow: upload a frame → detect title → add directly to library → metada
 - Swipe to favorite
 - Haptic feedback
 
-[![Swipe gestures](https://github.com/Phnem/Vetro/raw/main/swipe.png)](https://github.com/Phnem/Vetro/blob/main/swipe.png)
+[![Swipe gestures](https://github.com/Phnem/Vetro/raw/main/swipe_n.png)](https://github.com/Phnem/Vetro/blob/main/swipe_n.png)
 
 ### 💡 Recommendations
 
