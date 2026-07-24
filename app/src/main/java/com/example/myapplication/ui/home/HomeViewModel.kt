@@ -5,6 +5,8 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.edit
+import com.example.myapplication.data.local.DevPreferencesKeys
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.data.local.AnimeLocalDataSource
@@ -56,8 +58,19 @@ class HomeViewModel(
     private val settingsDataStore: DataStore<Preferences>,
     private val addFromApiUseCase: AddFromApiUseCase,
     private val statsFooterPhraseUseCase: ResolveStatsFooterPhraseUseCase,
-    private val batchEpisodeCheckUseCase: BatchEpisodeCheckUseCase
+    private val batchEpisodeCheckUseCase: BatchEpisodeCheckUseCase,
+    private val webLinksStore: com.example.myapplication.data.local.WebLinksStore,
 ) : ViewModel() {
+
+    /** Найденные прямые ссылки по одобренным сайтам (animeId → запись). Реактивно для карточек. */
+    val webLinks: StateFlow<Map<String, com.example.myapplication.domain.enrichment.weblinks.WebLinksEntry>> =
+        webLinksStore.flow
+    init { viewModelScope.launch { webLinksStore.ensureLoaded() } }
+
+    /** Выходящие сейчас сезоны (animeId → прогресс) — карточки «в процессе». */
+    val airingProgress: StateFlow<Map<String, com.example.myapplication.data.models.AiringProgress>> =
+        localDataSource.observeAiringProgress()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     private var apiSearchJob: Job? = null
     private var pullToRefreshJob: Job? = null
@@ -82,6 +95,13 @@ class HomeViewModel(
                 .getOrElse { AppLanguage.EN }
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppLanguage.EN)
+    /** TEMP V3.3.3 promo state. Remove with PlayerPowerPromoDialog after the campaign. */
+    val playerPromoDismissed: StateFlow<Boolean> = settingsDataStore.data
+        .map { prefs -> prefs[DevPreferencesKeys.TEMP_PLAYER_PROMO_V333_DISMISSED] ?: false }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    private val _playerPromoDeferredThisSession = MutableStateFlow(false)
+    val playerPromoDeferredThisSession: StateFlow<Boolean> =
+        _playerPromoDeferredThisSession.asStateFlow()
 
     val syncReport = MutableStateFlow(com.example.myapplication.SyncReport())
 
@@ -111,12 +131,10 @@ class HomeViewModel(
         }.toImmutableList()
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), persistentListOf())
 
-    private var ignoredUpdatesMap = mutableMapOf<String, Int>()
     private var hasCheckedForUpdatesThisSession = false
 
     init {
         viewModelScope.launch {
-            ignoredUpdatesMap.putAll(localDataSource.getIgnoredMap())
             localDataSource.observeUpdates().collect { list ->
                 _uiState.update { it.copy(updates = list.toImmutableList()) }
             }
@@ -155,6 +173,9 @@ class HomeViewModel(
             ExistingPeriodicWorkPolicy.KEEP,
             updateRequest
         )
+        // Серии по сезонам: разовый прогон прямо сейчас — периодик выше может
+        // сработать только через часы, а данные нужны в Details сразу.
+        com.example.myapplication.worker.SeasonEpisodesWorker.enqueueOnce(context)
     }
 
     fun updateSearchQuery(query: String) {
@@ -298,26 +319,27 @@ class HomeViewModel(
         _uiState.update { it.copy(isCheckingUpdates = true) }
         viewModelScope.launch {
             runCatching {
-                ignoredUpdatesMap.clear()
-                ignoredUpdatesMap.putAll(localDataSource.getIgnoredMap())
                 val language = readLanguageFromSettings()
-                val rawUpdates = batchEpisodeCheckUseCase(
-                    animeList = localDataSource.getAllAnimeList(),
-                    language = language
-                )
-                val newUpdates = rawUpdates.filter { update ->
-                    ignoredUpdatesMap[update.animeId] != update.newEpisodes
-                }.distinctBy { it.animeId to it.newEpisodes }
-                localDataSource.setUpdates(newUpdates)
+                batchEpisodeCheckUseCase.detectAndStore(language)
                 _uiState.update { it.copy(isCheckingUpdates = false) }
-                if (newUpdates.isNotEmpty()) {
-                    newUpdates.forEach { update -> notifier.showUpdateNotification(update) }
-                }
+                // Приложение открыто → системные пуши не показываем: обновления живут
+                // in-app стопкой сверху. Убираем из шторки всё, что мог оставить
+                // фоновый воркер, чтобы уведомления не дублировали интерфейс.
+                clearSystemUpdateNotifications()
             }.onFailure {
                 it.printStackTrace()
                 _uiState.update { it.copy(isCheckingUpdates = false) }
             }
         }
+    }
+
+    /**
+     * Снять из системной шторки все пуши обновлений серий. Вызывается при выходе
+     * приложения на передний план (ON_START) и после проверки обновлений: пока
+     * приложение открыто, обновления показываются in-app стопкой, а не в шторке.
+     */
+    fun clearSystemUpdateNotifications() {
+        notifier.cancelAllUpdateNotifications(localDataSource.getUpdates().map { it.animeId })
     }
 
     private suspend fun readLanguageFromSettings(): AppLanguage {
@@ -338,17 +360,30 @@ class HomeViewModel(
     fun dismissUpdate(update: AnimeUpdate, ctx: Context) {
         viewModelScope.launch {
             localDataSource.addIgnored(update.animeId, update.newEpisodes)
-            ignoredUpdatesMap[update.animeId] = update.newEpisodes
             localDataSource.removeUpdate(update.animeId)
             cancelAnimeUpdateNotification(ctx, update.animeId)
         }
     }
 
     private fun cancelAnimeUpdateNotification(ctx: Context, animeId: String) {
+        // Только снимаем пуш этого тайтла из шторки. Сводку НЕ переотправляем —
+        // при открытом приложении системные уведомления не показываем вовсе.
         val nm = ctx.applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.cancel(animeUpdateNotificationId(animeId))
     }
 
+    /** Hides the temporary promo until this app process/session is recreated. */
+    fun deferPlayerPromoForSession() {
+        _playerPromoDeferredThisSession.value = true
+    }
+    /** Permanently dismisses only the temporary V3.3.3 player promo. */
+    fun dismissPlayerPromoPermanently() {
+        viewModelScope.launch {
+            settingsDataStore.edit { prefs ->
+                prefs[DevPreferencesKeys.TEMP_PLAYER_PROMO_V333_DISMISSED] = true
+            }
+        }
+    }
     fun getAnimeById(id: String): Anime? {
         return localDataSource.getAnimeById(id)
     }

@@ -10,18 +10,21 @@ import io.ktor.http.appendPathSegments
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
 
 /**
- * Ktor 3.x–based API facade. Uses Shikimori + AniList remote data sources,
+ * Ktor 3.x–based API facade. Uses Shikimori + AniList + Kitsu + AniLibria remote data sources,
  * returns Result everywhere.
  */
 class VetroApiService(
     private val httpClient: HttpClient,
     private val shikimori: ShikimoriRemoteDataSource,
     private val aniList: AniListRemoteDataSource,
+    private val kitsu: KitsuRemoteDataSource,
+    private val anilibria: AnilibriaRemoteDataSource,
     private val remanga: com.example.myapplication.network.remanga.RemangaRemoteDataSource,
     private val heavyRate: TokenBucketRateLimiter,
     private val searchRate: TokenBucketRateLimiter,
@@ -102,6 +105,8 @@ class VetroApiService(
         searchJikan(title, AppLanguage.EN).firstOrNull()?.let { hit ->
             acceptEnDescription(hit.toAnimeDetails())?.let { return it }
         }
+        // Kitsu — EN endpoint 3: стабильный JSON:API, закрывает пробелы AniList/Jikan.
+        acceptEnDescription(kitsu.fetchAnimeDetails(title).getOrNull())?.let { return it }
         return null
     }
 
@@ -114,9 +119,23 @@ class VetroApiService(
         return null
     }
 
-    private suspend fun fetchAnimeDetailsRu(query: String): AnimeDetails? =
-        shikimori.fetchAnimeDetails(query).getOrNull()
-            ?: aniList.fetchAnimeDetails(query).getOrNull()
+    /**
+     * RU-режим: Shikimori (русский synopsis) → AniLibria (русское описание) → AniList
+     * (EN-описание как последний шанс). Если у Shikimori карточка есть, но описание пустое,
+     * берём текст AniLibria, а метаданные (постер/эпизоды/жанры) оставляем шикиморские.
+     */
+    private suspend fun fetchAnimeDetailsRu(query: String): AnimeDetails? {
+        val shiki = shikimori.fetchAnimeDetails(query).getOrNull()
+        if (shiki != null && shiki.description.isNotBlank()) return shiki
+
+        anilibria.fetchAnimeDetails(query).getOrNull()
+            ?.takeIf { it.description.isNotBlank() }
+            ?.let { libria ->
+                return if (shiki != null) shiki.copy(description = libria.description) else libria
+            }
+
+        return shiki ?: aniList.fetchAnimeDetails(query).getOrNull()
+    }
 
     override suspend fun findTotalEpisodes(
         title: String,
@@ -224,6 +243,16 @@ class VetroApiService(
         fetchJikanById(id, language)
     }
 
+    override suspend fun episodeCheckByAnilistIds(ids: List<Int>): Result<List<EpisodeCheckMedia>> = runCatching {
+        searchRate.acquire()
+        aniList.episodeCheckByAnilistIds(ids).getOrThrow()
+    }
+
+    override suspend fun episodeCheckByMalIds(malIds: List<Int>): Result<List<EpisodeCheckMedia>> = runCatching {
+        searchRate.acquire()
+        aniList.episodeCheckByMalIds(malIds).getOrThrow()
+    }
+
     override suspend fun searchAnimeMalOnly(
         query: String,
         language: AppLanguage,
@@ -231,6 +260,16 @@ class VetroApiService(
     ): Result<List<ApiSearchResult>> = runCatching {
         searchRate.acquire()
         searchJikan(query.trim(), language).take(limit)
+    }
+
+    override suspend fun searchAnimeKitsuOnly(query: String, limit: Int): Result<List<ApiSearchResult>> = runCatching {
+        searchRate.acquire()
+        kitsu.searchAnime(query.trim(), limit).getOrThrow()
+    }
+
+    override suspend fun searchAnimeAnilibriaOnly(query: String, limit: Int): Result<List<ApiSearchResult>> = runCatching {
+        searchRate.acquire()
+        anilibria.searchAnime(query.trim(), limit).getOrThrow()
     }
 
     override suspend fun enrichTitlesByIds(anilistId: Int?, malId: Int?): Result<EnrichedTitles?> = runCatching {
@@ -374,6 +413,11 @@ class VetroApiService(
         aniList.searchAnime(query, 20, language).getOrNull()?.forEach { addIfNew(it) }
         burstRate.acquire()
         searchJikan(query, language).forEach { addIfNew(it) }
+        // Языковые endpoint'ы: AniLibria — русские описания/постеры, Kitsu — стабильный EN JSON:API.
+        when (language) {
+            AppLanguage.RU -> anilibria.searchAnime(query, 10).getOrNull()?.forEach { addIfNew(it) }
+            AppLanguage.EN -> kitsu.searchAnime(query, 10).getOrNull()?.forEach { addIfNew(it) }
+        }
         val ranked = filterAndRankByQuery(query, raw)
         // Stage 12: при RU-запросе без сильного Shikimori — мост через EN-название → Shikimori.
         val withBridge = if (language == AppLanguage.RU) {
@@ -482,7 +526,10 @@ class VetroApiService(
                 source = "Jikan",
                 categoryType = "ANIME",
                 externalId = obj["mal_id"]?.jsonPrimitive?.intOrNull?.toString()
-                    ?: obj["mal_id"]?.jsonPrimitive?.content
+                    ?: obj["mal_id"]?.jsonPrimitive?.content,
+                // Jikan знает статус и план серий, но не «сколько вышло сейчас».
+                isOngoing = obj["airing"]?.jsonPrimitive?.booleanOrNull,
+                totalEpisodes = episodes.takeIf { it > 0 },
             )
         }
     }.getOrElse { emptyList() }
@@ -616,7 +663,9 @@ class VetroApiService(
             source = "MAL",
             categoryType = "ANIME",
             externalId = obj["mal_id"]?.jsonPrimitive?.intOrNull?.toString()
-                ?: obj["mal_id"]?.jsonPrimitive?.content
+                ?: obj["mal_id"]?.jsonPrimitive?.content,
+            isOngoing = obj["airing"]?.jsonPrimitive?.booleanOrNull,
+            totalEpisodes = episodes.takeIf { it > 0 },
         )
     }.getOrNull()
 

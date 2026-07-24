@@ -37,6 +37,7 @@ import com.example.myapplication.domain.settings.RepairDbCoordinator
 import com.example.myapplication.domain.settings.RepairDbState
 import com.example.myapplication.domain.titles.TitleDubbingCoordinator
 import com.example.myapplication.domain.titles.TitleDubbingState
+import com.example.myapplication.domain.enrichment.CollectionEnrichmentCoordinator
 import com.example.myapplication.data.ai.AiCredentialsStore
 import com.example.myapplication.utils.getDevRepairDbStrings
 import com.example.myapplication.utils.getStrings
@@ -84,6 +85,7 @@ private data class SettingsTransientState(
     val titleDubbingTotal: Int = 0,
     val titleDubbingMessage: String? = null,
     val showTitleDubbingNoAiDialog: Boolean = false,
+    val fullEnrichmentPromptGapCount: Int? = null,
     val isApkDownloading: Boolean = false,
     val apkDownloadProgress: Float = 0f,
     val pendingApkPathForInstall: String? = null,
@@ -121,6 +123,8 @@ private fun mergeSettingsUi(
         titleDubbingTotal = t.titleDubbingTotal,
         titleDubbingMessage = t.titleDubbingMessage,
         showTitleDubbingNoAiDialog = t.showTitleDubbingNoAiDialog,
+        liveMaintenanceEnabled = prefs[DevPreferencesKeys.LIVE_MAINTENANCE_ENABLED] ?: true,
+        fullEnrichmentPromptGapCount = t.fullEnrichmentPromptGapCount,
         updateStatus = updateStatus,
         currentVersion = t.currentVersionDisplay,
         latestVersion = snap.latestTag,
@@ -145,6 +149,7 @@ class SettingsViewModel(
     private val repairDbCoordinator: RepairDbCoordinator,
     private val collectionPdfGenerator: CollectionPdfGenerator,
     private val titleDubbingCoordinator: TitleDubbingCoordinator,
+    private val enrichmentCoordinator: CollectionEnrichmentCoordinator,
     private val aiCredentialsStore: AiCredentialsStore,
     private val app: Application
 ) : ViewModel() {
@@ -210,15 +215,19 @@ class SettingsViewModel(
                     is RepairDbState.Running -> _transient.update {
                         it.copy(isRepairingDb = true, repairDbMessage = null)
                     }
+                    // Фаза «поля» завершилась — просто гасим индикатор; в слитом «Полном обогащении»
+                    // сразу стартует фаза «названия» (лог-диалог дев-режима больше не показываем).
                     is RepairDbState.Finished -> _transient.update {
-                        it.copy(
-                            isRepairingDb = false,
-                            repairDbMessage = state.message,
-                            showRepairDbLogDialog = true,
-                            pendingRepairDbLog = state.log,
-                        )
+                        it.copy(isRepairingDb = false)
                     }
                 }
+            }
+        }
+
+        // Порог перегрузки: фоновый скан просит запустить полное обогащение (незакрываемый диалог).
+        viewModelScope.launch {
+            enrichmentCoordinator.prompt.collect { prompt ->
+                _transient.update { it.copy(fullEnrichmentPromptGapCount = prompt?.gapCount) }
             }
         }
 
@@ -722,6 +731,40 @@ class SettingsViewModel(
     fun clearTitleDubbingMessage() {
         titleDubbingCoordinator.acknowledgeResult()
         _transient.update { it.copy(titleDubbingMessage = null) }
+    }
+
+    // ==========================================================
+    // Обогащение коллекции (Collection Enrichment)
+    // ==========================================================
+
+    /** Модуль 1: полный прогон (поля → названия). Прогресс отражают isRepairingDb / isTitleDubbing. */
+    fun runFullEnrichment() {
+        if (_transient.value.isRepairingDb || _transient.value.isTitleDubbing) return
+        enrichmentCoordinator.startFullEnrichment(
+            language = uiState.value.language,
+            contentType = uiState.value.contentType,
+        )
+    }
+
+    /** Модуль 2: тумблер Live Maintenance (вкл/выкл + планирование). */
+    fun setLiveMaintenance(enabled: Boolean) {
+        enrichmentCoordinator.setLiveMaintenanceEnabled(enabled)
+    }
+
+    /** Незакрываемый диалог «слишком много пропусков» → «Начать»: запускаем полное обогащение. */
+    fun confirmFullEnrichmentPrompt() {
+        _transient.update { it.copy(fullEnrichmentPromptGapCount = null) }
+        enrichmentCoordinator.startFullEnrichment(
+            language = uiState.value.language,
+            contentType = uiState.value.contentType,
+        )
+    }
+
+    /** Диалог → «Отмена»: скрываем и выключаем Live Maintenance. */
+    fun cancelFullEnrichmentPrompt() {
+        _transient.update { it.copy(fullEnrichmentPromptGapCount = null) }
+        enrichmentCoordinator.dismissFullEnrichmentPrompt()
+        enrichmentCoordinator.setLiveMaintenanceEnabled(false)
     }
 
     fun exportRepairDbLog(context: Context) {

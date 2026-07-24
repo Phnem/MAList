@@ -19,7 +19,7 @@ val BrandOrangeBright = Color(0xFFF16001)
 /** Глубокий красный из брендового градиента (#C10801) — destructive / ошибки / низкие оценки. */
 val BrandDeepRed = Color(0xFFC10801)
 /** Тёплый песочный из хвоста градиента (#D9C3AB) — мягкий тёплый акцент. */
-val BrandTan = Color(0xFFD9C3AB)
+val BrandTan = Color(0xFFE85002)
 
 // Легаси-алиасы: имена сохранены, значения перенесены на бренд-палитру,
 // чтобы не трогать все точки использования.
@@ -34,14 +34,14 @@ val SettingsAccentLangDarkBlue = BrandOrange
 val SettingsAccentThemeDarkGreen = BrandOrangeBright
 val SettingsAccentCloudLightBlue = BrandTan
 /** Контент — приглушённая обожжённая глина */
-val SettingsAccentContentOrange = Color(0xFFB0562A)
+val SettingsAccentContentOrange = Color(0xFFE85002)
 val SettingsAccentContactLightGreen = Color(0xFFA7A7A7)
 /** Акцент плитки доната (кофейный / тёплый) */
-val SettingsAccentDonationCoffee = Color(0xFF8C6E5D)
+val SettingsAccentDonationCoffee = Color(0xFFE85002)
 
 // M3 Accent — тёплый тонально-оранжевый контейнер (заменил mauve),
 // как у FilledTonalButton / secondaryContainer
-val AccentMauveDark = Color(0xFF4A2B18)
+val AccentMauveDark = Color(0xFFE85002)
 val AccentOnMauveDark = Color(0xFFFFD9C4)
 val AccentMauveLight = Color(0xFFFFDCC7)
 val AccentOnMauveLight = Color(0xFF3A1800)
@@ -52,7 +52,7 @@ val RateColor1 = Color(0xFF646464) // Gray — слабо
 val RateColor2 = Color(0xFFC10801) // Deep red
 val RateColor3 = Color(0xFFE85002) // Branding orange
 val RateColor4 = Color(0xFFFF8A3D) // Light orange
-val RateColor5 = Color(0xFFD9C3AB) // Tan — вершина градиента
+val RateColor5 = Color(0xFFE85002) // Tan — вершина градиента
 
 val RateColorEmpty = Color(0xFFE0E0E0)
 val EpisodesColor = BrandOrangeBright

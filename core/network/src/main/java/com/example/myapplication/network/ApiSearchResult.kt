@@ -18,4 +18,10 @@ data class ApiSearchResult(
     val externalId: String?,
     /** MAL id, если источник отдал его дополнительно к [externalId] (напр. Shikimori detail → myanimelist_id). */
     val malId: Int? = null,
+    /** Тайтл сейчас выходит (онгоинг)? null = источник статус не сообщил. */
+    val isOngoing: Boolean? = null,
+    /** Серий вышло на данный момент (для онгоингов); null = источник не сообщил. */
+    val airedEpisodes: Int? = null,
+    /** Заявленное общее число серий; null = не анонсировано / источник не сообщил. */
+    val totalEpisodes: Int? = null,
 )

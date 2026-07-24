@@ -1,13 +1,22 @@
 package com.example.myapplication.ui.details
 
-import androidx.activity.compose.PredictiveBackHandler
+import android.graphics.BitmapFactory
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.*
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,19 +24,26 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Star
-import androidx.compose.material3.*
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur as blurCompose
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.Hyphens
 import androidx.compose.ui.text.style.LineBreak
@@ -35,115 +51,248 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.palette.graphics.Palette
 import androidx.navigation.NavController
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
-import java.io.File
 import com.example.myapplication.data.models.Anime
+import com.example.myapplication.data.models.RatingScale
 import com.example.myapplication.isAppInDarkTheme
 import com.example.myapplication.network.AppLanguage
-import com.example.myapplication.ui.shared.theme.IosDesign
+import com.example.myapplication.ui.shared.GlassPreset
+import com.example.myapplication.ui.shared.adaptiveGlassBackdrop
+import com.example.myapplication.ui.shared.rememberAdaptiveGlassEffects
 import com.example.myapplication.ui.shared.theme.MotionTokens
 import com.example.myapplication.ui.shared.theme.SnProFamily
+import com.example.myapplication.utils.performHaptic
+import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy
-import kotlin.coroutines.cancellation.CancellationException
+import java.io.File
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
 /**
- * DetailsScreen is a NavHost destination — predictive back is handled
- * entirely by Navigation Compose 2.8+ via seekable transitions.
- * No PredictiveBackHandler or custom back animation needed here.
- */
-
-/**
- * Содержимое шторки деталей. Открывается из Home как bottom sheet (см. [IosSheetScaffold] в AppNavGraph),
- * а не как отдельный экран навигации. ViewModel создаётся под конкретный [animeId] через Koin-параметр.
+ * Полноэкранные детали тайтла — NavHost destination (DetailsRoute). Две страницы в
+ * [HorizontalPager] со свайпом влево/вправо: «Детали» (постер-hero, мета, описание) и
+ * «Серии» (локальная библиотека скачанных эпизодов, см. [DetailsEpisodesPage]).
+ * Внизу — стеклянный мини-док в духе главного дока, но компактный: активная вкладка
+ * раскрывается с подписью, неактивная сворачивается до иконки.
  */
 @Composable
-fun DetailsSheetContent(
+fun DetailsScreen(
+    navController: NavController,
     animeId: String,
-    onDismiss: () -> Unit,
+    openEpisodes: Boolean = false,
+    modifier: Modifier = Modifier,
     viewModel: DetailsViewModel = koinViewModel(key = animeId) { parametersOf(animeId) },
 ) {
     val anime by viewModel.currentAnime.collectAsStateWithLifecycle()
     val language by viewModel.currentLanguage.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val webLinks by viewModel.webLinks.collectAsStateWithLifecycle()
+    val seasons by viewModel.seasons.collectAsStateWithLifecycle()
     val isDark = isAppInDarkTheme()
 
-    anime?.let { currentAnime ->
-        DetailsBody(
-            anime = currentAnime,
-            uiState = uiState,
-            language = language,
-            isDark = isDark,
-            getImgPath = { viewModel.getImgPath(it) },
-            onBack = onDismiss,
-            inSheet = true,
-        )
-    } ?: run {
-        LaunchedEffect(Unit) { onDismiss() }
+    val current = anime
+    if (current == null) {
+        LaunchedEffect(Unit) { navController.popBackStack() }
+        return
     }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun DetailsBody(
-    anime: Anime,
-    uiState: DetailsUiState,
-    language: AppLanguage,
-    isDark: Boolean,
-    getImgPath: (String?) -> String?,
-    onBack: () -> Unit,
-    inSheet: Boolean = false,
-) {
-    val details = (uiState as? DetailsUiState.Success)?.details
-    var descriptionExpanded by remember { mutableStateOf(false) }
 
     val screenBg = MaterialTheme.colorScheme.background
     val backdrop = rememberLayerBackdrop {
         drawRect(screenBg)
         drawContent()
     }
-    val heroBlur = 14.dp
-    val scrimAlpha = if (isDark) 0.30f else 0.12f
+    val scope = rememberCoroutineScope()
+    val view = LocalView.current
+    val pagerState = rememberPagerState(
+        initialPage = if (openEpisodes) 1 else 0,
+        pageCount = { 2 },
+    )
 
-    val cardFill = MaterialTheme.colorScheme.background.copy(alpha = 0.85f)
-    val onCard = MaterialTheme.colorScheme.onBackground
-    val onCardMuted = MaterialTheme.colorScheme.onSurfaceVariant
-    val chipBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f)
-    val chipFg = MaterialTheme.colorScheme.onSurfaceVariant
+    val displayTitle = when (language) {
+        AppLanguage.EN -> current.titleEn?.takeIf { it.isNotBlank() } ?: current.title
+        AppLanguage.RU -> current.titleRu?.takeIf { it.isNotBlank() } ?: current.title
+    }
+    val episodeAnime = remember(current, displayTitle) {
+        current.copy(title = displayTitle)
+    }
+    val episodeMenuViewModel: EpisodeMenuViewModel =
+        koinViewModel(key = "episode_menu_${current.id}") { parametersOf(episodeAnime) }
 
-    val detailsTitle = if (language == AppLanguage.RU) "Детали" else "Details"
-    val barTint = if (isDark) Color.White.copy(alpha = 0.10f) else Color.White.copy(alpha = 0.14f)
-    val barBorder = Color.White.copy(alpha = if (isDark) 0.22f else 0.28f)
-    val barContent = Color.White
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(if (inSheet) Modifier.wrapContentHeight() else Modifier.fillMaxSize())
-            .background(screenBg),
-    ) {
-        val imgPath = getImgPath(anime.imageFileName)
-        val context = LocalContext.current
+    fun openEpisodes() {
+        scope.launch {
+            pagerState.animateScrollToPage(1, animationSpec = MotionTokens.sheetPresent())
+        }
+    }
 
-        // Узкая полоса размытого hero — только за стеклянной шапкой; ниже сразу растворяется
-        // в сплошной фон, чтобы блок постера шёл сразу под шапкой (без пустого поля).
-        val heroHeight = 96.dp
+    Box(modifier = modifier.fillMaxSize().background(screenBg)) {
+        // Обе страницы лежат под layerBackdrop — стеклянные кнопка «назад» и мини-док
+        // преломляют живой контент. Узел с layerBackdrop никогда не размонтируется.
+        Box(modifier = Modifier.fillMaxSize().layerBackdrop(backdrop)) {
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize(),
+                beyondViewportPageCount = 1,
+            ) { page ->
+                when (page) {
+                    0 -> DetailsInfoPage(
+                        anime = current,
+                        displayTitle = displayTitle,
+                        uiState = uiState,
+                        language = language,
+                        isDark = isDark,
+                        imgPath = viewModel.getImgPath(current.imageFileName),
+                        webLinks = webLinks,
+                        seasons = seasons,
+                        onWatch = {
+                            performHaptic(view, "light")
+                            openEpisodes()
+                        },
+                        onDownload = {
+                            performHaptic(view, "light")
+                            openEpisodes()
+                        },
+                    )
+
+                    else -> ModernDetailsEpisodesPage(
+                        animeId = current.id,
+                        animeTitle = displayTitle,
+                        animeTitleRu = current.titleRu,
+                        animeTitleEn = current.titleEn,
+                        malId = current.malId,
+                        anilistId = current.anilistId,
+                        language = language,
+                        isDark = isDark,
+                        seasons = seasons,
+                        fallbackEpisodes = current.episodes,
+                        posterPath = viewModel.getImgPath(current.imageFileName),
+                        viewModel = episodeMenuViewModel,
+                    )
+                }
+            }
+        }
+
+        DetailsGlassBackButton(
+            backdrop = backdrop,
+            isDark = isDark,
+            onClick = { navController.popBackStack() },
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .statusBarsPadding()
+                .padding(top = 12.dp, start = 16.dp)
+                .zIndex(4f),
+        )
+
+        DetailsMiniDock(
+            backdrop = backdrop,
+            isDark = isDark,
+            language = language,
+            activePage = pagerState.targetPage,
+            onSelect = { page ->
+                performHaptic(view, "light")
+                scope.launch {
+                    pagerState.animateScrollToPage(page, animationSpec = MotionTokens.sheetPresent())
+                }
+            },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(bottom = 16.dp)
+                .zIndex(4f),
+        )
+
+        if (pagerState.targetPage == 1) {
+            DetailsGlassStartButton(
+                backdrop = backdrop,
+                onClick = {
+                    performHaptic(view, "light")
+                    episodeMenuViewModel.startWatching()
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(bottom = 16.dp)
+                    .offset(x = 124.dp)
+                    .zIndex(4f),
+            )
+        }
+    }
+}
+
+// ==========================================
+// Страница 1: инфо о тайтле
+// ==========================================
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DetailsInfoPage(
+    anime: Anime,
+    displayTitle: String,
+    uiState: DetailsUiState,
+    language: AppLanguage,
+    isDark: Boolean,
+    imgPath: String?,
+    webLinks: List<com.example.myapplication.domain.enrichment.weblinks.ResolvedWebLink>,
+    seasons: List<com.example.myapplication.domain.seasons.SeasonInfo>,
+    onWatch: () -> Unit,
+    onDownload: () -> Unit,
+) {
+    val context = LocalContext.current
+    val details = (uiState as? DetailsUiState.Success)?.details
+    var descriptionExpanded by remember { mutableStateOf(false) }
+
+    val screenBg = MaterialTheme.colorScheme.background
+    val onBg = MaterialTheme.colorScheme.onBackground
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val chipBg = if (isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.05f)
+    val ru = language == AppLanguage.RU
+    val posterAccent = rememberPosterAccent(imgPath)
+    val detailsBackground = remember(posterAccent, screenBg, isDark) {
+        val leading = if (isDark) {
+            lerp(posterAccent, Color.Black, 0.48f)
+        } else {
+            lerp(posterAccent, Color.White, 0.68f)
+        }
+        Brush.verticalGradient(
+            colorStops = arrayOf(
+                0f to leading,
+                0.30f to leading.copy(alpha = if (isDark) 0.82f else 0.72f),
+                0.68f to screenBg,
+                1f to screenBg,
+            ),
+        )
+    }
+
+    // Две зоны: hero-арт («К») закреплён за контентом, а лист контента («Ж») со скруглённым
+    // верхом лежит поверх и при скролле наезжает на арт (и съезжает обратно). Сам арт при
+    // этом чуть уезжает вверх с параллаксом — наезд читается объёмнее.
+    val heroHeight = 400.dp
+    val sheetOverlap = 28.dp
+    val sheetCorner = 30.dp
+    val scrollState = rememberScrollState()
+
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val viewportHeight = maxHeight
+
+        // ——— «К»: закреплённый hero-арт под листом ———
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(heroHeight)
-                .align(Alignment.TopCenter)
-                .layerBackdrop(backdrop),
+                .graphicsLayer { translationY = -scrollState.value * 0.35f },
         ) {
             if (imgPath != null) {
                 AsyncImage(
@@ -151,392 +300,639 @@ private fun DetailsBody(
                         .data(File(imgPath))
                         .crossfade(true)
                         .build(),
-                    contentDescription = null,
+                    contentDescription = displayTitle,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .blurCompose(heroBlur),
+                    modifier = Modifier.fillMaxSize(),
                 )
             } else {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(if (isDark) Color(0xFF1A1A2E) else Color(0xFFD8D8E0)),
+                        .background(if (isDark) Color(0xFF161616) else Color(0xFFE4E4E8)),
                 )
             }
+            // Скрим сверху — под статус-баром и кнопкой «назад» арт всегда читается.
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = scrimAlpha)),
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
+                    .fillMaxWidth()
+                    .height(140.dp)
                     .background(
-                        androidx.compose.ui.graphics.Brush.verticalGradient(
-                            0f to Color.Transparent,
-                            1f to screenBg,
+                        Brush.verticalGradient(
+                            0f to Color.Black.copy(alpha = 0.38f),
+                            1f to Color.Transparent,
                         ),
                     ),
             )
         }
 
+        // ——— «Ж»: лист контента со скруглённым верхом, скользит поверх арта ———
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .then(if (inSheet) Modifier else Modifier.fillMaxSize().statusBarsPadding())
-                .navigationBarsPadding()
-                .verticalScroll(rememberScrollState()),
+                .fillMaxSize()
+                .verticalScroll(scrollState),
         ) {
-            // Резервируем только высоту шапки — блок постера идёт сразу под ней.
-            Spacer(Modifier.height(if (inSheet) 84.dp else heroHeight + 24.dp))
+            // Прозрачное окно, сквозь которое виден hero; дальше начинается сам лист.
+            Spacer(Modifier.height(heroHeight - sheetOverlap))
 
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
-                // ——— Постер + инфо (референс — фото 2) ———
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    Box(
-                        modifier = Modifier
-                            .width(112.dp)
-                            .height(168.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(
-                                if (isDark) Color.White.copy(alpha = 0.06f)
-                                else Color.Black.copy(alpha = 0.06f),
-                            ),
-                    ) {
-                        if (imgPath != null) {
-                            AsyncImage(
-                                model = ImageRequest.Builder(context)
-                                    .data(File(imgPath))
-                                    .crossfade(true)
-                                    .build(),
-                                contentDescription = anime.title,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize(),
-                            )
-                        }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    // Лист не короче вьюпорта: даже при пустом описании он может
+                    // полностью наехать на hero при прокрутке.
+                    .heightIn(min = viewportHeight)
+                    .clip(RoundedCornerShape(topStart = sheetCorner, topEnd = sheetCorner))
+                    .background(detailsBackground)
+                    .padding(horizontal = 20.dp)
+                    .padding(top = 24.dp),
+            ) {
+            Text(
+                text = displayTitle,
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontFamily = SnProFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 28.sp,
+                    lineHeight = 34.sp,
+                    lineBreak = LineBreak.Heading,
+                    hyphens = Hyphens.Auto,
+                ),
+                color = onBg,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+            )
+
+            Spacer(Modifier.height(14.dp))
+
+            // ——— Мета-чипы: дата · рейтинг · тип/серии ———
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                details?.airedOn?.let { MetaChip(text = it, chipBg = chipBg, fg = onBg) }
+
+                val apiRating = details?.rating?.takeIf { it > 0 }
+                val userRating = anime.rating.takeIf { it > 0f }
+                if (apiRating != null || userRating != null) {
+                    val ratingText = when {
+                        apiRating != null && apiRating > 10 -> "$apiRating/100"
+                        apiRating != null -> "$apiRating/10"
+                        else -> "${RatingScale.format(userRating!!)}/10"
                     }
-
-                    Spacer(Modifier.width(16.dp))
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        val genres = details?.genres?.takeIf { it.isNotEmpty() }
-                            ?: anime.tags.takeIf { it.isNotEmpty() }
-                        if (!genres.isNullOrEmpty()) {
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                genres.take(4).forEach { genre ->
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(CircleShape)
-                                            .background(chipBg)
-                                            .padding(horizontal = 12.dp, vertical = 5.dp),
-                                    ) {
-                                        Text(
-                                            text = genre,
-                                            style = MaterialTheme.typography.labelMedium.copy(
-                                                fontFamily = SnProFamily,
-                                                fontWeight = FontWeight.Medium,
-                                            ),
-                                            color = chipFg,
-                                        )
-                                    }
-                                }
-                            }
-                            Spacer(Modifier.height(12.dp))
-                        }
-
-                        // Название по выбранному языку (замена, а не вторая строка).
-                        val displayTitle = when (language) {
-                            AppLanguage.EN -> anime.titleEn?.takeIf { it.isNotBlank() } ?: anime.title
-                            AppLanguage.RU -> anime.titleRu?.takeIf { it.isNotBlank() } ?: anime.title
-                        }
+                    Row(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(chipBg)
+                            .padding(horizontal = 12.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Rounded.Star,
+                            contentDescription = null,
+                            tint = Color(0xFFFFCC4D),
+                            modifier = Modifier.size(14.dp),
+                        )
+                        Spacer(Modifier.width(5.dp))
                         Text(
-                            text = displayTitle,
-                            style = MaterialTheme.typography.headlineSmall.copy(
-                                fontWeight = FontWeight.Bold,
+                            text = ratingText,
+                            style = MaterialTheme.typography.labelLarge.copy(
                                 fontFamily = SnProFamily,
-                                lineBreak = LineBreak.Heading,
-                                hyphens = Hyphens.Auto,
+                                fontWeight = FontWeight.Bold,
                             ),
-                            color = onCard,
-                            maxLines = 3,
-                            overflow = TextOverflow.Ellipsis,
+                            color = onBg,
                         )
                     }
                 }
 
-                Spacer(Modifier.height(18.dp))
+                if (anime.episodes > 0) {
+                    MetaChip(
+                        text = if (ru) "${anime.episodes} эп." else "${anime.episodes} ep.",
+                        chipBg = chipBg,
+                        fg = onBg,
+                    )
+                }
+            }
 
-                // ——— Рейтинг-пилюля • дата ———
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    val apiRating = details?.rating?.takeIf { it > 0 }
-                    val userRating = anime.rating.takeIf { it > 0f }
-                    if (apiRating != null || userRating != null) {
-                        val ratingText = when {
-                            apiRating != null && apiRating > 10 -> "$apiRating / 100"
-                            apiRating != null -> "$apiRating / 10"
-                            else -> "${com.example.myapplication.data.models.RatingScale.format(userRating!!)} / 10"
-                        }
+            Spacer(Modifier.height(18.dp))
+
+            // ——— Действия: Смотреть / Скачать → обе ведут на страницу серий ———
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                ActionButton(
+                    label = if (ru) "Смотреть" else "Watch",
+                    icon = Icons.Rounded.PlayArrow,
+                    bg = MaterialTheme.colorScheme.primary,
+                    fg = Color.White,
+                    onClick = onWatch,
+                    modifier = Modifier.weight(1f),
+                )
+                ActionButton(
+                    label = if (ru) "Скачать" else "Download",
+                    icon = Icons.Rounded.Download,
+                    bg = if (isDark) Color.White else Color.Black,
+                    fg = if (isDark) Color.Black else Color.White,
+                    onClick = onDownload,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+
+            // ——— Где смотреть: стопка иконок найденных сайтов ———
+            if (webLinks.isNotEmpty()) {
+                Spacer(Modifier.height(16.dp))
+                com.example.myapplication.ui.shared.components.WebLinkChipStack(
+                    links = webLinks,
+                    language = language,
+                    chipSize = 34.dp,
+                    maxVisible = 6,
+                    ringColor = screenBg,
+                )
+            }
+
+            Spacer(Modifier.height(24.dp))
+
+            // ——— Жанры ———
+            val genres = details?.genres?.takeIf { it.isNotEmpty() }
+                ?: anime.tags.takeIf { it.isNotEmpty() }
+            if (!genres.isNullOrEmpty()) {
+                SectionHeader(text = if (ru) "Жанры" else "Genres", color = onBg)
+                Spacer(Modifier.height(12.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    genres.forEach { genre ->
+                        MetaChip(text = genre, chipBg = chipBg, fg = muted)
+                    }
+                }
+                Spacer(Modifier.height(24.dp))
+            }
+
+            // ——— Сезоны: число серий каждого сезона (фоновый резолв AniList→Shikimori→MAL) ———
+            if (seasons.isNotEmpty()) {
+                SectionHeader(text = if (ru) "Сезоны" else "Seasons", color = onBg)
+                Spacer(Modifier.height(12.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    seasons.forEach { season ->
+                        SeasonChip(
+                            season = season,
+                            chipBg = chipBg,
+                            numberColor = onBg,
+                            epsColor = muted,
+                            ru = ru,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(24.dp))
+            }
+
+            // ——— Описание ———
+            when (uiState) {
+                is DetailsUiState.Idle, DetailsUiState.Loading -> {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            strokeWidth = 2.dp,
+                        )
+                        Text(
+                            text = if (ru) "Загрузка..." else "Loading...",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = SnProFamily),
+                            color = muted,
+                        )
+                    }
+                }
+
+                is DetailsUiState.Error -> {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(
+                            Icons.Default.ErrorOutline,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Text(
+                            text = if (ru) "Не удалось загрузить" else "Could not load details",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = SnProFamily),
+                            color = muted,
+                        )
+                    }
+                }
+
+                is DetailsUiState.MissingEnglishTitle -> {
+                    Row(
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(
+                            Icons.Default.ErrorOutline,
+                            contentDescription = null,
+                            tint = muted,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Text(
+                            text = if (ru) {
+                                "Описание недоступно. Добавьте английское название или привяжите MAL/AniList id для более точной загрузки."
+                            } else {
+                                "Description unavailable. Add an English title or link a MAL/AniList id for accurate loading."
+                            },
+                            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = SnProFamily),
+                            color = muted,
+                        )
+                    }
+                }
+
+                is DetailsUiState.Success -> {
+                    val descText = details?.description?.takeIf { it.isNotBlank() && it != "null" }
+                    if (descText != null) {
+                        SectionHeader(text = if (ru) "Описание" else "Description", color = onBg)
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            text = descText,
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontFamily = SnProFamily,
+                                lineHeight = 22.sp,
+                                lineBreak = LineBreak.Paragraph,
+                                hyphens = Hyphens.Auto,
+                            ),
+                            color = muted,
+                            maxLines = if (descriptionExpanded) Int.MAX_VALUE else 5,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.animateContentSize(animationSpec = MotionTokens.standard()),
+                        )
+                        Spacer(Modifier.height(14.dp))
+
+                        val pillBg = if (isDark) Color.White.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.06f)
+                        val chevronRotation by animateFloatAsState(
+                            targetValue = if (descriptionExpanded) 180f else 0f,
+                            animationSpec = MotionTokens.standard(),
+                            label = "descExpandChevron",
+                        )
                         Row(
                             modifier = Modifier
                                 .clip(CircleShape)
-                                .background(chipBg)
-                                .padding(horizontal = 12.dp, vertical = 7.dp),
+                                .background(pillBg)
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                ) { descriptionExpanded = !descriptionExpanded }
+                                .padding(horizontal = 18.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Icon(
-                                Icons.Rounded.Star,
-                                contentDescription = null,
-                                tint = Color(0xFFFFCC4D),
-                                modifier = Modifier.size(16.dp),
-                            )
-                            Spacer(Modifier.width(5.dp))
                             Text(
-                                text = ratingText,
-                                style = MaterialTheme.typography.labelLarge.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = SnProFamily,
-                                ),
-                                color = onCard,
-                            )
-                        }
-                    }
-
-                    val airedOn = details?.airedOn
-                    if (airedOn != null) {
-                        Spacer(Modifier.width(14.dp))
-                        Box(
-                            Modifier
-                                .width(1.dp)
-                                .height(22.dp)
-                                .background(IosDesign.separator(isDark)),
-                        )
-                        Spacer(Modifier.width(14.dp))
-                        Text(
-                            text = airedOn,
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                fontFamily = SnProFamily,
-                                fontWeight = FontWeight.Medium,
-                            ),
-                            color = onCardMuted,
-                        )
-                    }
-                }
-
-                Spacer(Modifier.height(22.dp))
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(1.dp)
-                        .background(IosDesign.separator(isDark)),
-                )
-                Spacer(Modifier.height(22.dp))
-
-                // ——— Описание ———
-                when (uiState) {
-                    is DetailsUiState.Idle, DetailsUiState.Loading -> {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                color = MaterialTheme.colorScheme.primary,
-                                strokeWidth = 2.dp,
-                            )
-                            Text(
-                                text = if (language == AppLanguage.RU) "Загрузка..." else "Loading...",
-                                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = SnProFamily),
-                                color = onCardMuted,
-                            )
-                        }
-                    }
-
-                    is DetailsUiState.Error -> {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Icon(
-                                Icons.Default.ErrorOutline,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(20.dp),
-                            )
-                            Text(
-                                text = if (language == AppLanguage.RU) "Не удалось загрузить" else "Could not load details",
-                                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = SnProFamily),
-                                color = onCardMuted,
-                            )
-                        }
-                    }
-
-                    is DetailsUiState.MissingEnglishTitle -> {
-                        Row(
-                            verticalAlignment = Alignment.Top,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Icon(
-                                Icons.Default.ErrorOutline,
-                                contentDescription = null,
-                                tint = onCardMuted,
-                                modifier = Modifier.size(20.dp),
-                            )
-                            Text(
-                                text = if (language == AppLanguage.RU) {
-                                    "Описание недоступно. Добавьте английское название или привяжите MAL/AniList id для более точной загрузки."
+                                text = if (descriptionExpanded) {
+                                    if (ru) "Свернуть" else "Show less"
                                 } else {
-                                    "Description unavailable. Add an English title or link a MAL/AniList id for accurate loading."
+                                    if (ru) "Подробнее" else "Show more"
                                 },
-                                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = SnProFamily),
-                                color = onCardMuted,
-                            )
-                        }
-                    }
-
-                    is DetailsUiState.Success -> {
-                        val descText = details?.description?.takeIf { it.isNotBlank() && it != "null" }
-                        if (descText != null) {
-                            Text(
-                                text = if (language == AppLanguage.RU) "Описание" else "Description",
-                                style = MaterialTheme.typography.titleMedium.copy(
+                                style = MaterialTheme.typography.labelLarge.copy(
                                     fontFamily = SnProFamily,
-                                    fontWeight = FontWeight.Bold,
+                                    fontWeight = FontWeight.SemiBold,
                                 ),
-                                color = onCard,
+                                color = onBg,
                             )
-                            Spacer(Modifier.height(10.dp))
-                            Text(
-                                text = descText,
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontFamily = SnProFamily,
-                                    lineHeight = 22.sp,
-                                    lineBreak = LineBreak.Paragraph,
-                                    hyphens = Hyphens.Auto,
-                                ),
-                                color = onCardMuted,
-                                maxLines = if (descriptionExpanded) Int.MAX_VALUE else 4,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.animateContentSize(animationSpec = MotionTokens.standard()),
-                            )
-                            Spacer(Modifier.height(14.dp))
-
-                            // Нейтральная пилюля со светлым контентом — читается лучше фиолетового.
-                            val pillBg = if (isDark) Color.White.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.06f)
-                            val pillContent = onCard
-                            val chevronRotation by animateFloatAsState(
-                                targetValue = if (descriptionExpanded) 180f else 0f,
-                                animationSpec = MotionTokens.standard(),
-                                label = "descExpandChevron",
-                            )
-                            Row(
+                            Spacer(Modifier.width(6.dp))
+                            Icon(
+                                Icons.Rounded.KeyboardArrowDown,
+                                contentDescription = null,
+                                tint = onBg,
                                 modifier = Modifier
-                                    .clip(CircleShape)
-                                    .background(pillBg)
-                                    .clickable(
-                                        interactionSource = remember { MutableInteractionSource() },
-                                        indication = null,
-                                    ) { descriptionExpanded = !descriptionExpanded }
-                                    .padding(horizontal = 18.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    text = if (descriptionExpanded) {
-                                        if (language == AppLanguage.RU) "Свернуть" else "Show less"
-                                    } else {
-                                        if (language == AppLanguage.RU) "Подробнее" else "Show more"
-                                    },
-                                    style = MaterialTheme.typography.labelLarge.copy(
-                                        fontFamily = SnProFamily,
-                                        fontWeight = FontWeight.SemiBold,
-                                    ),
-                                    color = pillContent,
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                Icon(
-                                    Icons.Rounded.KeyboardArrowDown,
-                                    contentDescription = null,
-                                    tint = pillContent,
-                                    modifier = Modifier
-                                        .size(18.dp)
-                                        .graphicsLayer { rotationZ = chevronRotation },
-                                )
-                            }
+                                    .size(18.dp)
+                                    .graphicsLayer { rotationZ = chevronRotation },
+                            )
                         }
                     }
                 }
+            }
 
-                Spacer(Modifier.height(28.dp))
+                // Запас под мини-док.
+                Spacer(Modifier.height(140.dp))
             }
         }
+    }
+}
 
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
-                .then(if (inSheet) Modifier else Modifier.statusBarsPadding())
-                .padding(top = if (inSheet) 22.dp else 12.dp, start = 16.dp, end = 16.dp)
-                .zIndex(4f),
-        ) {
+@Composable
+private fun SectionHeader(text: String, color: Color) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleMedium.copy(
+            fontFamily = SnProFamily,
+            fontWeight = FontWeight.Bold,
+        ),
+        color = color,
+    )
+}
+
+/**
+ * Чип сезона: «S2 · 12 эп.», у выходящего сезона — оранжевая точка-пульс статуса.
+ * Номер жирный, счётчик приглушён — сканируется взглядом как таблица.
+ */
+@Composable
+private fun SeasonChip(
+    season: com.example.myapplication.domain.seasons.SeasonInfo,
+    chipBg: Color,
+    numberColor: Color,
+    epsColor: Color,
+    ru: Boolean,
+) {
+    Row(
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(chipBg)
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (season.ongoing) {
             Box(
                 modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .size(48.dp)
-                    .drawBackdrop(
-                        backdrop = backdrop,
-                        shape = { CircleShape },
-                        effects = {
-                            vibrancy()
-                            blur(24f.dp.toPx())
-                            lens(8f.dp.toPx(), 48f.dp.toPx())
-                        },
-                        onDrawSurface = { drawRect(barTint) },
-                    )
+                    .size(6.dp)
                     .clip(CircleShape)
-                    .border(0.5.dp, barBorder, CircleShape)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onBack,
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                    tint = barContent,
-                    modifier = Modifier.size(22.dp),
-                )
-            }
+                    .background(MaterialTheme.colorScheme.primary),
+            )
+            Spacer(Modifier.width(6.dp))
+        }
+        Text(
+            text = "S${season.seasonNumber}",
+            style = MaterialTheme.typography.labelLarge.copy(
+                fontFamily = SnProFamily,
+                fontWeight = FontWeight.Bold,
+            ),
+            color = numberColor,
+        )
+        Spacer(Modifier.width(5.dp))
+        Text(
+            text = if (ru) "· ${season.episodes} эп." else "· ${season.episodes} ep.",
+            style = MaterialTheme.typography.labelLarge.copy(
+                fontFamily = SnProFamily,
+                fontWeight = FontWeight.Medium,
+            ),
+            color = epsColor,
+        )
+    }
+}
 
-            Box(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .height(48.dp)
-                    .drawBackdrop(
-                        backdrop = backdrop,
-                        shape = { RoundedCornerShape(100.dp) },
-                        effects = {
-                            vibrancy()
-                            blur(24f.dp.toPx())
-                            lens(8f.dp.toPx(), 48f.dp.toPx())
-                        },
-                        onDrawSurface = { drawRect(barTint) },
-                    )
-                    .clip(RoundedCornerShape(100.dp))
-                    .border(0.5.dp, barBorder, RoundedCornerShape(100.dp))
-                    .padding(horizontal = 28.dp),
-                contentAlignment = Alignment.Center,
-            ) {
+/**
+ * Poster-derived accent for the details sheet. Kept local to this screen so the Palette feature can
+ * be removed without touching the image repository or the shared theme.
+ */
+@Composable
+private fun rememberPosterAccent(imgPath: String?): Color {
+    val fallback = MaterialTheme.colorScheme.primary
+    var accent by remember(imgPath) { mutableStateOf(fallback) }
+
+    LaunchedEffect(imgPath, fallback) {
+        val path = imgPath ?: run {
+            accent = fallback
+            return@LaunchedEffect
+        }
+        accent = withContext(Dispatchers.IO) {
+            runCatching {
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeFile(path, bounds)
+                var sample = 1
+                while (bounds.outWidth / sample > 320 || bounds.outHeight / sample > 320) {
+                    sample *= 2
+                }
+                val bitmap = BitmapFactory.decodeFile(
+                    path,
+                    BitmapFactory.Options().apply {
+                        inSampleSize = sample.coerceAtLeast(1)
+                        inPreferredConfig = android.graphics.Bitmap.Config.RGB_565
+                    },
+                ) ?: return@runCatching fallback
+                try {
+                    val palette = Palette.from(bitmap).maximumColorCount(16).generate()
+                    val rgb = palette.vibrantSwatch?.rgb
+                        ?: palette.mutedSwatch?.rgb
+                        ?: palette.dominantSwatch?.rgb
+                    rgb?.let(::Color) ?: fallback
+                } finally {
+                    bitmap.recycle()
+                }
+            }.getOrDefault(fallback)
+        }
+    }
+    return accent
+}
+@Composable
+private fun MetaChip(text: String, chipBg: Color, fg: Color) {
+    Box(
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(chipBg)
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge.copy(
+                fontFamily = SnProFamily,
+                fontWeight = FontWeight.Medium,
+            ),
+            color = fg,
+        )
+    }
+}
+
+/** Крупная пилюля-действие («Смотреть» / «Скачать») — референс-стиль, высота 52dp. */
+@Composable
+private fun ActionButton(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    bg: Color,
+    fg: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .height(52.dp)
+            .clip(CircleShape)
+            .background(bg)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = fg,
+            modifier = Modifier.size(22.dp),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.titleMedium.copy(
+                fontFamily = SnProFamily,
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp,
+            ),
+            color = fg,
+        )
+    }
+}
+
+// ==========================================
+// Стеклянная кнопка «назад»
+// ==========================================
+
+@Composable
+private fun DetailsGlassBackButton(
+    backdrop: Backdrop,
+    isDark: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val barTint = if (isDark) Color.White.copy(alpha = 0.10f) else Color.White.copy(alpha = 0.14f)
+    val barBorder = Color.White.copy(alpha = if (isDark) 0.22f else 0.28f)
+    Box(
+        modifier = modifier
+            .size(48.dp)
+            .drawBackdrop(
+                backdrop = backdrop,
+                shape = { CircleShape },
+                effects = {
+                    vibrancy()
+                    blur(24f.dp.toPx())
+                    lens(8f.dp.toPx(), 48f.dp.toPx())
+                },
+                onDrawSurface = { drawRect(barTint) },
+            )
+            .clip(CircleShape)
+            .border(0.5.dp, barBorder, CircleShape)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = "Back",
+            tint = Color.White,
+            modifier = Modifier.size(22.dp),
+        )
+    }
+}
+
+// ==========================================
+// Мини-док: 2 вкладки, активная раскрывается с подписью
+// ==========================================
+
+@Composable
+private fun DetailsMiniDock(
+    backdrop: Backdrop,
+    isDark: Boolean,
+    language: AppLanguage,
+    activePage: Int,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val glassEffects = rememberAdaptiveGlassEffects(GlassPreset.CompactNav)
+    val dockShape = CircleShape
+    val borderStroke = if (isDark) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.8f)
+    val ru = language == AppLanguage.RU
+    Row(
+        modifier = modifier
+            .height(56.dp)
+            .clip(dockShape)
+            .adaptiveGlassBackdrop(backdrop = backdrop, shape = dockShape, effects = glassEffects)
+            .border(0.5.dp, borderStroke, dockShape)
+            .padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        MiniDockItem(
+            icon = Icons.Rounded.Info,
+            label = if (ru) "Детали" else "Details",
+            selected = activePage == 0,
+            isDark = isDark,
+            onClick = { onSelect(0) },
+        )
+        MiniDockItem(
+            icon = Icons.Rounded.PlayArrow,
+            label = if (ru) "Серии" else "Episodes",
+            selected = activePage == 1,
+            isDark = isDark,
+            onClick = { onSelect(1) },
+        )
+    }
+}
+
+/**
+ * Вкладка мини-дока. Активная — светлая пилюля + подпись (подпись выезжает по ширине,
+ * expandHorizontally); неактивная — только приглушённая иконка. Всё на пружинах MotionTokens.
+ */
+@Composable
+private fun MiniDockItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    selected: Boolean,
+    isDark: Boolean,
+    onClick: () -> Unit,
+) {
+    val contentColor = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
+    val pillBg by animateColorAsState(
+        targetValue = if (selected) {
+            if (isDark) Color.White.copy(alpha = 0.14f) else Color.Black.copy(alpha = 0.07f)
+        } else {
+            Color.Transparent
+        },
+        animationSpec = MotionTokens.standard(),
+        label = "miniDockPillBg",
+    )
+    val tint by animateColorAsState(
+        targetValue = if (selected) contentColor else contentColor.copy(alpha = 0.55f),
+        animationSpec = MotionTokens.standard(),
+        label = "miniDockTint",
+    )
+
+    Row(
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(pillBg)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            )
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = tint,
+            modifier = Modifier.size(22.dp),
+        )
+        AnimatedVisibility(
+            visible = selected,
+            enter = expandHorizontally(animationSpec = MotionTokens.standard()) +
+                fadeIn(animationSpec = androidx.compose.animation.core.tween(180)),
+            exit = shrinkHorizontally(animationSpec = MotionTokens.sheetDismissForced()) +
+                fadeOut(animationSpec = androidx.compose.animation.core.tween(120)),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Spacer(Modifier.width(7.dp))
                 Text(
-                    text = detailsTitle,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = SnProFamily,
-                    color = barContent,
+                    text = label,
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        fontFamily = SnProFamily,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 13.sp,
+                    ),
+                    color = contentColor,
+                    maxLines = 1,
                 )
             }
         }

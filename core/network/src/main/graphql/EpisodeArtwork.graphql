@@ -1,0 +1,15 @@
+query EpisodeArtwork($id: Int, $idMal: Int) {
+  Media(id: $id, idMal: $idMal, type: ANIME) {
+    id
+    coverImage {
+      extraLarge
+      large
+    }
+    streamingEpisodes {
+      title
+      thumbnail
+      url
+      site
+    }
+  }
+}

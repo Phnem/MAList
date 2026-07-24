@@ -1,0 +1,55 @@
+# Батч-проверка новых серий: все тайтлы одним запросом на страницу (id_in / idMal_in),
+# вместо N одиночных запросов. relations нужны для суммирования серий по сезонам
+# (цепочка PREQUEL/SEQUEL), nextAiringEpisode — для онгоингов (episodes у них null).
+fragment EpisodeCheckFields on Media {
+  id
+  idMal
+  title {
+    romaji
+    english
+  }
+  type
+  format
+  status
+  episodes
+  nextAiringEpisode {
+    episode
+  }
+  relations {
+    edges {
+      relationType(version: 2)
+      node {
+        id
+        type
+        format
+        status
+        episodes
+        nextAiringEpisode {
+          episode
+        }
+      }
+    }
+  }
+}
+
+query EpisodeCheckByIds($ids: [Int], $page: Int, $perPage: Int) {
+  Page(page: $page, perPage: $perPage) {
+    pageInfo {
+      hasNextPage
+    }
+    media(id_in: $ids, type: ANIME) {
+      ...EpisodeCheckFields
+    }
+  }
+}
+
+query EpisodeCheckByMalIds($idsMal: [Int], $page: Int, $perPage: Int) {
+  Page(page: $page, perPage: $perPage) {
+    pageInfo {
+      hasNextPage
+    }
+    media(idMal_in: $idsMal, type: ANIME) {
+      ...EpisodeCheckFields
+    }
+  }
+}

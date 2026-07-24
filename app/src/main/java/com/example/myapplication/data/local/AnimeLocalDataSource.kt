@@ -385,6 +385,55 @@ class AnimeLocalDataSource(
         mirrorCoordinator.requestExportIfEnabled()
     }
 
+    /** Прогресс выходящих сезонов (карточки «в процессе»): anime_id → снимок. */
+    fun observeAiringProgress(): Flow<Map<String, com.example.myapplication.data.models.AiringProgress>> =
+        factory.dbConnectionTrigger.flatMapLatest {
+            db().airingProgressQueries.getAllAiringProgress()
+                .asFlow()
+                .mapToList(Dispatchers.IO)
+                .map { rows ->
+                    rows.associate { row ->
+                        row.anime_id to com.example.myapplication.data.models.AiringProgress(
+                            animeId = row.anime_id,
+                            seasonNumber = row.season_number?.toInt(),
+                            airedEpisodes = row.aired_episodes.toInt(),
+                            totalEpisodes = row.total_episodes?.toInt(),
+                            updatedAt = row.updated_at,
+                        )
+                    }
+                }
+        }
+
+    /** Разовый снимок прогресса сезонов (прошлый проход) — для закрытия завершённых. */
+    fun getAiringProgressSnapshot(): Map<String, com.example.myapplication.data.models.AiringProgress> =
+        db().airingProgressQueries.getAllAiringProgress()
+            .executeAsList()
+            .associate { row ->
+                row.anime_id to com.example.myapplication.data.models.AiringProgress(
+                    animeId = row.anime_id,
+                    seasonNumber = row.season_number?.toInt(),
+                    airedEpisodes = row.aired_episodes.toInt(),
+                    totalEpisodes = row.total_episodes?.toInt(),
+                    updatedAt = row.updated_at,
+                )
+            }
+
+    /** Полная перезапись снимка прогресса сезонов (каждый проход проверки авторитетен). */
+    suspend fun setAiringProgress(items: List<com.example.myapplication.data.models.AiringProgress>) {
+        db().airingProgressQueries.transaction {
+            db().airingProgressQueries.deleteAllAiringProgress()
+            items.forEach { p ->
+                db().airingProgressQueries.upsertAiringProgress(
+                    anime_id = p.animeId,
+                    season_number = p.seasonNumber?.toLong(),
+                    aired_episodes = p.airedEpisodes.toLong(),
+                    total_episodes = p.totalEpisodes?.toLong(),
+                    updated_at = p.updatedAt,
+                )
+            }
+        }
+    }
+
     suspend fun addIgnored(animeId: String, newEpisodes: Int) {
         db().animeQueries.setIgnored(
             anime_id = animeId,

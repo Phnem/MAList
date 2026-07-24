@@ -33,7 +33,7 @@ internal object OverlayThemeTokens {
     /** Алиас акцента синх-панели (не путать с мягкими токенами кнопки сортировки). */
     val AccentSyncBlue: Color get() = IconSyncBlue
     /** Статус/статистика — тёплый песочный из брендового градиента. Имя легаси. */
-    val IconSignalGreen = Color(0xFFD9C3AB)
+    val IconSignalGreen = Color(0xFFE85002)
     /** Аккаунт — светлый персиковый оттенок бренд-оранжевого. Имя легаси. */
     val IconAccountYellow = Color(0xFFFFB067)
     val OnSyncBlueButton = Color.White
@@ -122,7 +122,7 @@ internal object OverlayThemeTokens {
     /** Тёплый коралловый тинт бренд-оранжевого (favorites, ошибки в инфо-плитках). */
     val AccentNeonPink = Color(0xFFEF7B54)
     /** Кнопка подтверждения «В избранное» в шите списка — брендовый песочный. */
-    val FavoriteConfirmGold = Color(0xFFD9C3AB)
+    val FavoriteConfirmGold = Color(0xFFE85002)
     val OnFavoriteConfirmGold = Color(0xFF2B2014)
     /** Алый (logout, destructive). */
     val AccentNeonRed: Color = LogoutIconTint

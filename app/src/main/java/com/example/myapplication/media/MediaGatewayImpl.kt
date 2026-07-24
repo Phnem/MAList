@@ -1,0 +1,123 @@
+package com.example.myapplication.media
+
+import android.content.Context
+import android.util.Log
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.OutOfQuotaPolicy
+import androidx.work.WorkManager
+import androidx.work.workDataOf
+import com.example.myapplication.data.local.DevPreferencesKeys
+import com.example.myapplication.data.models.Anime
+import com.example.myapplication.domain.seasons.SeasonInfo
+import com.example.myapplication.download.FileIpcManager
+import com.example.myapplication.download.InputTask
+import com.example.myapplication.media.download.MediaDownloadWorker
+import com.example.myapplication.media.download.MediaJobBus
+import com.example.myapplication.media.source.SourceEngine
+import com.example.myapplication.media.source.VetroHoster
+import com.example.myapplication.media.source.VetroVideo
+import com.example.myapplication.network.AppLanguage
+import com.example.myapplication.ui.details.DownloadQuality
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import androidx.datastore.preferences.core.stringPreferencesKey
+import java.io.File
+import java.util.UUID
+
+class MediaGatewayImpl(
+    private val context: Context,
+    private val sourceEngine: SourceEngine,
+    private val fileIpcManager: FileIpcManager,
+    private val settingsDataStore: DataStore<Preferences>,
+) : MediaGateway {
+
+    private val json = Json { encodeDefaults = true }
+
+    override suspend fun resolveHosters(
+        anime: Anime,
+        episodeNumber: Int,
+        seasonInfo: SeasonInfo?,
+    ): List<VetroHoster> {
+        return if (useNativeEngine()) {
+            val language = currentLanguage()
+            runCatching {
+                sourceEngine.resolveHosters(anime, episodeNumber, seasonInfo, language)
+            }
+                .onFailure { Log.w(TAG, "native resolve failed, empty: ${it.message}") }
+                .getOrElse { emptyList() }
+        } else {
+            emptyList()
+        }
+    }
+
+    override suspend fun resolveBestVideo(hosters: List<VetroHoster>): VetroVideo? =
+        sourceEngine.resolveBestVideo(hosters)
+
+    override suspend fun enqueueDownload(
+        video: VetroVideo,
+        fallbackVideos: List<VetroVideo>,
+        quality: DownloadQuality,
+        outDir: File,
+        animeId: String,
+        episodeNumber: Int,
+        durationSec: Int?,
+    ): JobId {
+        outDir.mkdirs()
+        val jobId = UUID.randomUUID().toString()
+        MediaJobBus.update(
+            com.example.myapplication.media.download.MediaJobProgress(jobId, "queued")
+        )
+
+        val candidates = (listOf(video) + fallbackVideos).distinctBy { it.url }
+        val data = workDataOf(
+            MediaDownloadWorker.KEY_JOB_ID to jobId,
+            MediaDownloadWorker.KEY_URL to video.url,
+            MediaDownloadWorker.KEY_LABEL to video.label,
+            MediaDownloadWorker.KEY_OUT_DIR to outDir.absolutePath,
+            MediaDownloadWorker.KEY_EPISODE to episodeNumber,
+            MediaDownloadWorker.KEY_ANIME_ID to animeId,
+            MediaDownloadWorker.KEY_QUALITY to quality.label,
+            MediaDownloadWorker.KEY_DURATION_SEC to (durationSec ?: -1),
+            MediaDownloadWorker.KEY_HEADERS_JSON to json.encodeToString(video.headers),
+            MediaDownloadWorker.KEY_CANDIDATES_JSON to json.encodeToString(candidates),
+        )
+        val req = OneTimeWorkRequestBuilder<MediaDownloadWorker>()
+            .setInputData(data)
+            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+            .addTag(MediaDownloadWorker.WORK_NAME)
+            .addTag(jobId)
+            .build()
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            "${MediaDownloadWorker.WORK_NAME}_$jobId",
+            ExistingWorkPolicy.REPLACE,
+            req,
+        )
+        return JobId(jobId)
+    }
+
+    /** Legacy multi-episode Python path used by DownloadWizard. */
+    suspend fun enqueueLegacyPythonDownload(task: InputTask) {
+        fileIpcManager.submitTask(task)
+    }
+
+    private suspend fun useNativeEngine(): Boolean =
+        settingsDataStore.data.map { prefs ->
+            prefs[DevPreferencesKeys.USE_NATIVE_MEDIA_ENGINE] ?: true
+        }.first()
+
+    private suspend fun currentLanguage(): AppLanguage =
+        settingsDataStore.data.map { prefs ->
+            runCatching { AppLanguage.valueOf(prefs[KEY_LANG] ?: "EN") }
+                .getOrElse { AppLanguage.EN }
+        }.first()
+
+    companion object {
+        private const val TAG = "MediaGateway"
+        private val KEY_LANG = stringPreferencesKey("lang")
+    }
+}

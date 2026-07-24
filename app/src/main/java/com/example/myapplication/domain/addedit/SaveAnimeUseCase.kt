@@ -2,25 +2,21 @@ package com.example.myapplication.domain.addedit
 
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.stringPreferencesKey
 import com.example.myapplication.data.local.AnimeLocalDataSource
 import com.example.myapplication.data.local.DevPreferencesKeys
 import com.example.myapplication.data.models.Anime
 import com.example.myapplication.data.repository.ImageStorageRepository
 import com.example.myapplication.domain.IdGenerator
-import com.example.myapplication.domain.titles.TitleDubbingCoordinator
-import com.example.myapplication.network.AppLanguage
+import com.example.myapplication.domain.enrichment.CollectionEnrichmentCoordinator
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.first
-
-private val KEY_LANG = stringPreferencesKey("lang")
 
 class SaveAnimeUseCase(
     private val localDataSource: AnimeLocalDataSource,
     private val imageStorage: ImageStorageRepository,
     private val idGenerator: IdGenerator,
     private val settingsDataStore: DataStore<Preferences>,
-    private val titleDubbingCoordinator: TitleDubbingCoordinator,
+    private val enrichmentCoordinator: CollectionEnrichmentCoordinator,
 ) {
     suspend operator fun invoke(params: SaveAnimeParams): Result<Unit> = runCatching {
         val animeId = params.animeId ?: idGenerator.generateUuid()
@@ -53,19 +49,18 @@ class SaveAnimeUseCase(
 
         if (isNew) {
             localDataSource.insertAnime(anime)
-            maybeAutoDubTitles()
+            maybeScheduleLiveMaintenance()
         } else {
             localDataSource.updateAnime(anime)
         }
     }
 
-    /** Авто-дубляж: если пользователь когда-либо включал «Дубляж названий», новые записи
-     *  обогащаются в фоне (WorkManager, идемпотентно — KEEP). */
-    private suspend fun maybeAutoDubTitles() {
-        val prefs = runCatching { settingsDataStore.data.first() }.getOrNull() ?: return
-        if (prefs[DevPreferencesKeys.TITLE_DUBBING_EVER_ENABLED] != true) return
-        val language = runCatching { AppLanguage.valueOf(prefs[KEY_LANG] ?: "EN") }
-            .getOrDefault(AppLanguage.EN)
-        titleDubbingCoordinator.start(language, fullRescan = false)
+    /** Мгновенный догон Live Maintenance при добавлении записи: фоновый воркер подтянет
+     *  недостающие поля/названия (идемпотентно — KEEP). Включено по умолчанию. */
+    private suspend fun maybeScheduleLiveMaintenance() {
+        val prefs = runCatching { settingsDataStore.data.first() }.getOrNull()
+        // Отсутствие ключа = ВКЛ по умолчанию.
+        if (prefs?.get(DevPreferencesKeys.LIVE_MAINTENANCE_ENABLED) == false) return
+        enrichmentCoordinator.enqueueImmediateScan()
     }
 }

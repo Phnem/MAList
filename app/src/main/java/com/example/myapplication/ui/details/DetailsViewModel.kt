@@ -9,18 +9,30 @@ import com.example.myapplication.network.AppLanguage
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.example.myapplication.data.local.SeasonEpisodesStore
+import com.example.myapplication.data.local.WebLinksStore
+import com.example.myapplication.domain.enrichment.weblinks.ResolvedWebLink
+import com.example.myapplication.domain.seasons.SeasonEpisodesResolver
+import com.example.myapplication.domain.seasons.SeasonInfo
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class DetailsViewModel(
     private val animeId: String,
     private val repository: AnimeRepository,
     private val settingsDataStore: DataStore<Preferences>,
-    private val imageStorage: ImageStorageRepository
+    private val imageStorage: ImageStorageRepository,
+    private val webLinksStore: WebLinksStore,
+    private val seasonEpisodesStore: SeasonEpisodesStore,
+    private val seasonEpisodesResolver: SeasonEpisodesResolver,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<DetailsUiState>(DetailsUiState.Idle)
@@ -33,7 +45,27 @@ class DetailsViewModel(
     private val _currentLanguage = MutableStateFlow(AppLanguage.EN)
     val currentLanguage: StateFlow<AppLanguage> = _currentLanguage.asStateFlow()
 
+    /** Найденные ссылки этого тайтла для текущего языка (реактивно из [WebLinksStore]). */
+    val webLinks: StateFlow<List<ResolvedWebLink>> =
+        combine(webLinksStore.flow, _currentLanguage) { map, lang ->
+            val e = map[animeId]
+            if (lang == AppLanguage.RU) e?.ruLinks.orEmpty() else e?.enLinks.orEmpty()
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Серии по сезонам (фоновый резолв, см. SeasonEpisodesResolver) — реактивно из стора. */
+    val seasons: StateFlow<List<SeasonInfo>> =
+        seasonEpisodesStore.flow
+            .map { it[animeId]?.seasons.orEmpty() }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     init {
+        viewModelScope.launch { webLinksStore.ensureLoaded() }
+        // Открытые детали — вне очереди: если сезонов нет или протухли, резолвим сразу
+        // (внутри IO + isFresh-гейт), секция появится реактивно.
+        viewModelScope.launch {
+            seasonEpisodesStore.ensureLoaded()
+            runCatching { seasonEpisodesResolver.ensureResolved(animeId) }
+        }
         viewModelScope.launch {
             val prefs = settingsDataStore.data.first()
             val langKey = stringPreferencesKey("lang")

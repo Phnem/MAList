@@ -1,25 +1,30 @@
 package com.example.myapplication.ui.navigation
 
+import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDp
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.dp
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
-import com.example.myapplication.ui.details.DetailsSheetContent
-import com.example.myapplication.ui.shared.components.IosSheetScaffold
+import com.example.myapplication.ui.details.DetailsScreen
+import com.example.myapplication.ui.shared.theme.MotionTokens
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import androidx.navigation.NavHostController
@@ -78,30 +83,7 @@ fun AppNavGraph(
         homeViewModel.scheduleBackgroundWork(context)
     }
 
-    // Детали открываются как iOS bottom sheet поверх всего навстека (фон «вдавливается»),
-    // а не как отдельный экран навигации.
-    var detailsAnimeId by rememberSaveable { mutableStateOf<String?>(null) }
-
-    // Жест/кнопка «назад» при открытой шторке деталей должны закрывать шторку с фирменной
-    // анимацией scaffold'а, а не проваливаться в Activity (иначе — выход из приложения).
-    androidx.activity.compose.BackHandler(enabled = detailsAnimeId != null) {
-        detailsAnimeId = null
-    }
-
     SharedTransitionLayout {
-      IosSheetScaffold(
-        sheetVisible = detailsAnimeId != null,
-        onDismiss = { detailsAnimeId = null },
-        // Панель по высоте контента (medium-детент ~60%), а не фикс. 92% — шапка сразу над
-        // блоком постера, без пустого поля сверху.
-        sheetHeightFraction = null,
-        sheetContainerColor = androidx.compose.ui.graphics.Color.Transparent,
-        sheetContent = {
-            detailsAnimeId?.let { id ->
-                DetailsSheetContent(animeId = id, onDismiss = { detailsAnimeId = null })
-            }
-        },
-        content = {
         NavHost(
             navController = navController,
             startDestination = startDestination
@@ -233,13 +215,64 @@ fun AppNavGraph(
                     if (initialState.destination.isSplashDestination()) splashEnterZoom()
                     else fadeIn(animationSpec = tween(300))
                 },
+                // «Вдавливание» под деталями (физика IosSheetScaffold): фон уезжает назад
+                // и слегка гаснет, при закрытии деталей — физично возвращается. Predictive
+                // back сикает popEnter — возврат следует за пальцем.
+                exitTransition = {
+                    if (targetState.destination.isDetailsDestination()) {
+                        scaleOut(
+                            targetScale = 0.92f,
+                            animationSpec = MotionTokens.sheetPresent(),
+                        ) + fadeOut(animationSpec = tween(300), targetAlpha = 0.55f)
+                    } else null
+                },
+                popEnterTransition = {
+                    if (initialState.destination.isDetailsDestination()) {
+                        scaleIn(
+                            initialScale = 0.92f,
+                            animationSpec = MotionTokens.sheetDismissForced(),
+                        ) + fadeIn(animationSpec = tween(220), initialAlpha = 0.55f)
+                    } else if (initialState.destination.isSplashDestination()) {
+                        splashEnterZoom()
+                    } else {
+                        fadeIn(animationSpec = tween(300))
+                    }
+                },
             ) {
                 HomeScreen(
                     navController = navController,
                     viewModel = homeViewModel,
                     sharedTransitionScope = this@SharedTransitionLayout,
                     animatedVisibilityScope = this,
-                    onOpenDetails = { detailsAnimeId = it },
+                )
+            }
+
+            // Полноэкранные детали (iOS push): въезжают справа, назад — уезжают вправо.
+            composable<DetailsRoute>(
+                enterTransition = {
+                    slideInHorizontally(
+                        initialOffsetX = { it },
+                        animationSpec = MotionTokens.sheetOffset,
+                    ) + fadeIn(animationSpec = tween(220))
+                },
+                popExitTransition = {
+                    slideOutHorizontally(
+                        targetOffsetX = { it },
+                        animationSpec = MotionTokens.dismissOffset,
+                    ) + fadeOut(animationSpec = tween(220))
+                },
+            ) { backStackEntry ->
+                val route = backStackEntry.toRoute<DetailsRoute>()
+                // Скругление краёв уезжающего окна (референс — Telegram): радиус растёт
+                // по прогрессу перехода, predictive back сикает его вместе с жестом.
+                val windowCorner by transition.animateDp(label = "detailsWindowCorner") { state ->
+                    if (state == EnterExitState.Visible) 0.dp else 42.dp
+                }
+                DetailsScreen(
+                    navController = navController,
+                    animeId = route.animeId,
+                    openEpisodes = route.openEpisodes,
+                    modifier = Modifier.clip(RoundedCornerShape(windowCorner)),
                 )
             }
 
@@ -273,7 +306,5 @@ fun AppNavGraph(
             }
 
         }
-        },
-      )
     }
 }

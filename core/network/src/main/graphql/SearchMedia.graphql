@@ -5,6 +5,10 @@ query SearchMedia($q: String) {
       english
     }
     description
+    coverImage {
+      extraLarge
+      large
+    }
     type
     status
     episodes

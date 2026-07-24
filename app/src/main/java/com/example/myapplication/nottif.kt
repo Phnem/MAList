@@ -43,7 +43,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -109,7 +108,6 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
-import kotlin.math.max
 
 /** Activity для OAuth: [LocalActivity] в overlay часто null — обходим через цепочку Context. */
 private tailrec fun Context.findActivity(): Activity? = when (this) {
@@ -360,41 +358,8 @@ fun NotificationSyncOverlay(
                             }
                         )
 
-                        // —— Episode updates —— //
-                        if (updates.isNotEmpty()) {
-                            Spacer(Modifier.height(18.dp))
-                            HorizontalDivider(color = rim, thickness = 1.dp)
-                            Spacer(Modifier.height(14.dp))
-                            Text(
-                                text = strings.updatesTitle.uppercase(Locale.getDefault()),
-                                style = OverlayThemeTokens.SectionLabel,
-                                color = muted
-                            )
-                            Spacer(Modifier.height(10.dp))
-                            updates.forEach { update ->
-                                val delta = max(0, update.newEpisodes - update.currentEpisodes)
-                                val epLine = String.format(Locale.getDefault(), strings.nottifNewEpisodesFormat, delta)
-                                NottifUpdateRow(
-                                    isDark = isDark,
-                                    cardBg = cardBg,
-                                    darkTileBase = darkTileBase,
-                                    onCard = onCard,
-                                    accentColor = OverlayThemeTokens.AccentNeonBlue,
-                                    onAccentColor = OverlayThemeTokens.OnSyncBlueButton,
-                                    title = update.title,
-                                    subtitle = epLine,
-                                    onAccept = {
-                                        performHaptic(view, "success")
-                                        onAcceptUpdate(update)
-                                    },
-                                    onDismissRow = {
-                                        performHaptic(view, "light")
-                                        onDismissUpdate(update)
-                                    }
-                                )
-                                Spacer(Modifier.height(10.dp))
-                            }
-                        }
+                        // Обновления серий больше не рендерятся здесь: они показываются
+                        // iOS-стопкой сверху главного экрана ([EpisodeUpdateStack] в HomeScreen).
                         Spacer(Modifier.height(12.dp))
                     }
             }
@@ -449,118 +414,6 @@ fun NotificationSyncOverlay(
             )
         }
 
-    }
-}
-
-@Composable
-private fun NottifUpdateRow(
-    isDark: Boolean,
-    cardBg: Color,
-    darkTileBase: Color,
-    onCard: Color,
-    accentColor: Color,
-    onAccentColor: Color,
-    title: String,
-    subtitle: String,
-    onAccept: () -> Unit,
-    onDismissRow: () -> Unit
-) {
-    val tileShape = RoundedCornerShape(OverlayThemeTokens.TileCornerRadius)
-    val tileBg = if (isDark) darkTileBase else cardBg
-    val accentRim = accentColor.copy(alpha = if (isDark) 0.4f else 0.55f)
-    val accentGlow = accentColor.copy(
-        alpha = if (isDark) 0.16f else OverlayThemeTokens.TileGlowAlphaLight
-    )
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(tileShape)
-            .background(tileBg)
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(accentGlow, Color.Transparent),
-                    center = Offset(0f, 0f),
-                    radius = 360f
-                )
-            )
-            .glassFill(isDark)
-            .glassEdge(OverlayThemeTokens.TileCornerRadius, isDark)
-            .border(1.dp, accentRim, tileShape)
-            .padding(horizontal = 12.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(nottifOverlayIconBoxBg(isDark)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.PlayArrow,
-                contentDescription = null,
-                tint = accentColor,
-                modifier = Modifier.size(26.dp)
-            )
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = onCard,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.SemiBold,
-                color = accentColor
-            )
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(accentColor)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { onAccept() },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Check,
-                    contentDescription = null,
-                    tint = onAccentColor,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(if (isDark) Color(0xFF262626) else Color.White.copy(alpha = 0.7f))
-                    .border(1.dp, OverlayThemeTokens.AccentNeonRed.copy(alpha = 0.45f), CircleShape)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { onDismissRow() },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = null,
-                    tint = OverlayThemeTokens.AccentNeonRed,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        }
     }
 }
 

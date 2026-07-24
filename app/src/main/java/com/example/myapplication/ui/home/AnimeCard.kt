@@ -24,7 +24,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Icon
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
@@ -57,6 +57,16 @@ import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
 import java.io.File
 
+/** Выходящий сейчас сезон: карточка показывает прогресс-бар «S3 2/12». */
+@Immutable
+data class AiringCardInfo(
+    /** null — источник без графа франшизы (Shikimori/AniLibria): префикс «S{n}» не показываем. */
+    val seasonNumber: Int?,
+    val airedEpisodes: Int,
+    /** null — число серий сезона ещё не анонсировано (бар не рисуем, только текст). */
+    val totalEpisodes: Int?,
+)
+
 @Immutable
 data class AnimeCardState(
     val id: String,
@@ -67,10 +77,88 @@ data class AnimeCardState(
     val rating: Float,
     val genres: PersistentList<String>,
     val episodesCount: Int,
-    val categoryLabel: String?,
     val imagePath: String?,
-    val mediaTypeLabel: String
+    val mediaTypeLabel: String,
+    /** Найденные прямые ссылки по одобренным сайтам (для языка [language]). */
+    val webLinks: List<com.example.myapplication.domain.enrichment.weblinks.ResolvedWebLink> = emptyList(),
+    val language: com.example.myapplication.network.AppLanguage = com.example.myapplication.network.AppLanguage.EN,
+    /** Не-null = тайтл «в процессе»: прямо сейчас выходит сезон. */
+    val airing: AiringCardInfo? = null,
 )
+
+/** Цвет заполнения бара прогресса сезона (фиолетовый, как на референсе). */
+private val AiringBarColor = Color(0xFF6C4BF4)
+
+/**
+ * Секция «в процессе»: слева подпись, справа «S3 2 / 12 ep.», ниже — бар прогресса
+ * выходящего сезона. Если источники не знают, сколько серий будет всего, оцениваем
+ * по курам (кратно 12): вышло ≤12 → «n / 12», 13–24 → «n / 24», дальше 36, 48 и т.д.
+ */
+@Composable
+private fun AiringProgressSection(
+    airing: AiringCardInfo,
+    language: com.example.myapplication.network.AppLanguage,
+    labelColor: Color,
+    trackColor: Color,
+) {
+    val label = when (language) {
+        com.example.myapplication.network.AppLanguage.RU -> "Прогресс"
+        com.example.myapplication.network.AppLanguage.EN -> "Progress"
+    }
+    val total = airing.totalEpisodes?.takeIf { it > 0 } ?: courEstimatedTotal(airing.airedEpisodes)
+    val counter = buildString {
+        airing.seasonNumber?.let { append("S").append(it).append(" ") }
+        append(airing.airedEpisodes).append(" / ").append(total).append(" ep.")
+    }
+    // Компактно: секция живёт внутри фиксированных 180dp карточки, каждый dp на счету.
+    Column(modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                fontSize = 11.sp,
+                lineHeight = 13.sp,
+                fontWeight = FontWeight.Medium,
+                fontFamily = SnProFamily,
+                color = labelColor,
+            )
+            Text(
+                text = counter,
+                fontSize = 11.sp,
+                lineHeight = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = SnProFamily,
+                color = labelColor,
+            )
+        }
+        val fraction = (airing.airedEpisodes.toFloat() / total).coerceIn(0f, 1f)
+        Box(
+            modifier = Modifier
+                .padding(top = 4.dp)
+                .fillMaxWidth()
+                .height(4.dp)
+                .clip(CircleShape)
+                .background(trackColor)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(fraction)
+                    .clip(CircleShape)
+                    .background(AiringBarColor)
+            )
+        }
+    }
+}
+
+/** Оценка серий сезона по курам: ближайшее кратное 12 сверху (минимум 12). */
+private fun courEstimatedTotal(aired: Int): Int {
+    val cours = ((aired - 1).coerceAtLeast(0) / 12) + 1
+    return cours * 12
+}
 
 @OptIn(ExperimentalSharedTransitionApi::class, ExperimentalLayoutApi::class)
 @Composable
@@ -78,7 +166,7 @@ fun SharedTransitionScope.OneUiAnimeCard(
     state: AnimeCardState,
     animatedVisibilityScope: AnimatedVisibilityScope,
     onClick: () -> Unit,
-    onDetailsClick: () -> Unit,
+    onEditClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val isDark = isAppInDarkTheme()
@@ -239,7 +327,10 @@ fun SharedTransitionScope.OneUiAnimeCard(
                     FlowRow(
                         modifier = Modifier.padding(top = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        // С прогресс-секцией второй ряд жанров скрываем (только визуально:
+                        // сами теги остаются в данных/сортировке) — иначе низ карточки не влезает.
+                        maxLines = if (state.airing != null) 1 else 2,
                     ) {
                         state.genres.forEach { genre ->
                             Box(
@@ -262,16 +353,22 @@ fun SharedTransitionScope.OneUiAnimeCard(
 
                 Spacer(modifier = Modifier.weight(1f))
 
+                state.airing?.let { airing ->
+                    AiringProgressSection(
+                        airing = airing,
+                        language = state.language,
+                        labelColor = subtitleColor,
+                        trackColor = if (isDark) Color.White.copy(alpha = 0.12f) else Color.Black.copy(alpha = 0.08f),
+                    )
+                }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = buildString {
-                            append("${state.episodesCount} eps.")
-                            state.categoryLabel?.let { append(" · $it") }
-                        },
+                        text = "${state.episodesCount} eps.",
                         style = MaterialTheme.typography.labelLarge.copy(
                             fontSize = 13.sp,
                             fontFamily = SnProFamily
@@ -280,8 +377,22 @@ fun SharedTransitionScope.OneUiAnimeCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    // Стопка сайтов занимает гибкую середину ряда и сама сокращается до «+N»,
+                    // если места мало — кнопку Details не двигает никогда.
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 8.dp),
+                        contentAlignment = Alignment.CenterEnd
+                    ) {
+                        com.example.myapplication.ui.shared.components.WebLinkChipStack(
+                            links = state.webLinks,
+                            language = state.language,
+                            ringColor = cardBg,
+                        )
+                    }
                     FilledTonalButton(
-                        onClick = onDetailsClick,
+                        onClick = onEditClick,
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(
                             horizontal = 16.dp,
                             vertical = 0.dp
@@ -293,12 +404,15 @@ fun SharedTransitionScope.OneUiAnimeCard(
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Info,
-                                contentDescription = "Details",
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "Edit",
                                 modifier = Modifier.size(16.dp)
                             )
                             Text(
-                                text = "Details",
+                                text = when (state.language) {
+                                    com.example.myapplication.network.AppLanguage.RU -> "Edit"
+                                    com.example.myapplication.network.AppLanguage.EN -> "Edit"
+                                },
                                 style = MaterialTheme.typography.labelLarge.copy(
                                     fontWeight = FontWeight.Bold,
                                     fontFamily = SnProFamily,

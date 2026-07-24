@@ -35,6 +35,10 @@ class VetroApplication : Application(), SingletonImageLoader.Factory {
         org.koin.core.context.GlobalContext.get()
             .get<com.example.myapplication.domain.stats.StatsExplanationCoordinator>()
             .start()
+        // Live Maintenance (обогащение коллекции): периодика раз в 6 ч, если фича включена (по умолчанию — да)
+        org.koin.core.context.GlobalContext.get()
+            .get<com.example.myapplication.domain.enrichment.CollectionEnrichmentCoordinator>()
+            .ensureScheduled()
     }
 
     override fun newImageLoader(context: PlatformContext): ImageLoader {

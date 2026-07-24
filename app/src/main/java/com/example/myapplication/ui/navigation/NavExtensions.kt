@@ -27,7 +27,7 @@ fun NavController.navigateToInspect() {
     navigate(InspectRoute)
 }
 
-fun NavController.navigateToDetails(animeId: String) {
-    navigate(DetailsRoute(animeId = animeId))
+fun NavController.navigateToDetails(animeId: String, openEpisodes: Boolean = false) {
+    navigate(DetailsRoute(animeId = animeId, openEpisodes = openEpisodes))
 }
 

@@ -1,8 +1,11 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
@@ -23,7 +26,8 @@
         android:theme="@style/Theme.MyApplication"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
-        android:enableOnBackInvokedCallback="true">
+        android:enableOnBackInvokedCallback="true"
+        android:extractNativeLibs="true">
         <activity
         android:name="com.example.myapplication.MainActivity"
         android:exported="true"
@@ -53,6 +57,29 @@
         </intent-filter>
     </activity>
 
+        <!-- Local player (isolated feature: com.example.myapplication.localplayer).
+             To remove the feature entirely, delete this activity + the localplayer package. -->
+        <activity
+            android:name="com.example.myapplication.localplayer.ui.LocalPlayerActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|smallestScreenSize|keyboardHidden|screenLayout"
+            android:supportsPictureInPicture="true"
+            android:theme="@style/Theme.MyApplication" />
+
+        <activity
+            android:name="com.example.myapplication.localplayer.ui.DownloadedPlayerActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|smallestScreenSize|keyboardHidden|screenLayout"
+            android:supportsPictureInPicture="true"
+            android:theme="@style/Theme.MyApplication" />
+
+        <activity
+            android:name="com.example.myapplication.media.ui.StreamPlayerActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|smallestScreenSize|keyboardHidden|screenLayout"
+            android:supportsPictureInPicture="true"
+            android:theme="@style/Theme.MyApplication" />
+
         <receiver
             android:name="com.example.myapplication.receiver.AnimeUpdateReceiver"
             android:exported="false" />
@@ -66,6 +93,12 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- WorkManager setForegroundAsync → dataSync (MediaDownloadWorker) -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
     </application>
 
 </manifest>

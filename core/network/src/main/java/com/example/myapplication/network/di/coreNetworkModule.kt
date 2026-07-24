@@ -3,14 +3,20 @@ package com.example.myapplication.network.di
 import android.util.Log
 import com.apollographql.apollo.ApolloClient
 import com.example.myapplication.network.AniListRemoteDataSource
+import com.example.myapplication.network.AnilibriaRemoteDataSource
 import com.example.myapplication.network.ApiService
+import com.example.myapplication.network.KitsuRemoteDataSource
 import com.example.myapplication.network.ShikimoriRemoteDataSource
 import com.example.myapplication.network.TraceMoeRemoteDataSource
 import com.example.myapplication.network.VetroApiService
+import com.example.myapplication.network.WebLinkResolver
+import com.example.myapplication.network.KtorWebLinkResolver
 import com.example.myapplication.network.remanga.RemangaRemoteDataSource
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.cookies.AcceptAllCookiesStorage
+import io.ktor.client.plugins.cookies.HttpCookies
 import io.ktor.client.plugins.UserAgent
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.logging.LogLevel
@@ -36,6 +42,9 @@ val coreNetworkModule = module {
 
     single {
         HttpClient(OkHttp) {
+            install(HttpCookies) {
+                storage = AcceptAllCookiesStorage()
+            }
             install(ContentNegotiation) {
                 json(Json {
                     ignoreUnknownKeys = true
@@ -70,12 +79,40 @@ val coreNetworkModule = module {
     single { ShikimoriRemoteDataSource(get<HttpClient>(), get(rateBurst)) }
     single { TraceMoeRemoteDataSource(get<HttpClient>()) }
     single { AniListRemoteDataSource(get<ApolloClient>(), get(rateAnilistGraphql)) }
+    single { KitsuRemoteDataSource(get<HttpClient>(), get(rateBurst)) }
+    single { AnilibriaRemoteDataSource(get<HttpClient>(), get(rateBurst)) }
     single { RemangaRemoteDataSource(get<HttpClient>()) }
+    /**
+     * Отдельный клиент для скрапа/резолва одобренных сайтов: браузерный User-Agent (без плагина
+     * UserAgent, чтобы не слать VetroApp/1.0), короткие таймауты, редиректы по умолчанию.
+     * Никакого обхода антибота — просто корректный обычный запрос.
+     */
+    single(named("weblink")) {
+        HttpClient(OkHttp) {
+            install(HttpTimeout) {
+                requestTimeoutMillis = 12_000
+                connectTimeoutMillis = 8_000
+                socketTimeoutMillis = 12_000
+            }
+            install(Logging) {
+                level = LogLevel.INFO
+                logger = object : Logger {
+                    override fun log(message: String) {
+                        Log.d("WebLinkKtor", message)
+                    }
+                }
+            }
+        }
+    }
+    single<WebLinkResolver> { KtorWebLinkResolver(client = get(named("weblink"))) }
+
     single<ApiService> {
         VetroApiService(
             httpClient = get<HttpClient>(),
             shikimori = get(),
             aniList = get(),
+            kitsu = get(),
+            anilibria = get(),
             remanga = get(),
             heavyRate = get(rateHeavy),
             searchRate = get(rateSearch),

@@ -47,9 +47,6 @@ val RussianStrings = UiStrings(
     statsAiUnavailable = "Подключите ИИ в настройках, чтобы получать объяснения статистики.",
     statsAiInsufficient = "Пока недостаточно данных для выводов.",
     rankTitle = "Ваш ранг:",
-    updatesTitle = "Обновления",
-    updatesChecking = "Проверка API (AniList, Shikimori, TMDB)...\nЭто может занять некоторое время.",
-    updatesUpToDate = "У вас все актуально!",
     deleteTitle = "Удалить тайтл?",
     deleteSubtitle = "Это действие нельзя будет отменить.",
     deleteConfirm = "Удалить",
@@ -125,8 +122,6 @@ val RussianStrings = UiStrings(
     nottifAccountSignedIn = "Выполнен вход",
     nottifAccountGuest = "Не в аккаунте",
     nottifCloseCd = "Закрыть",
-    nottifCheckUpdatesCd = "Проверить новые серии",
-    nottifNewEpisodesFormat = "+%d новых серий",
     nottifSectionAccount = "Аккаунт",
     syncModeTitle = "Режим синхронизации",
     syncAuto = "Авто",
@@ -212,9 +207,6 @@ val RussianStrings = UiStrings(
     inspectSegmentMoviesTv = "Фильмы / ТВ",
     inspectImageFormatsHint = "JPEG, PNG ДО 10 МБ",
     inspectPoweredByFooter = "POWERED BY VETRO VISION ENGINE",
-    nottifSyncChipSynced = "ОК",
-    nottifSyncChipErrors = "Ошибки",
-    nottifSyncChipTotal = "Всего",
     sortSheetTitle = "Сортировка",
     sortSheetSubtitle = "Упорядочьте список",
     sortApply = "Применить",
@@ -310,9 +302,6 @@ val EnglishStrings = UiStrings(
     statsAiUnavailable = "Connect AI in settings to get explanations of your stats.",
     statsAiInsufficient = "Not enough data for insights yet.",
     rankTitle = "Your rank:",
-    updatesTitle = "Updates",
-    updatesChecking = "Checking APIs (AniList, Shikimori, TMDB)...\nThis will take a moment.",
-    updatesUpToDate = "You are up to date!",
     deleteTitle = "Delete title?",
     deleteSubtitle = "There is no undo.",
     deleteConfirm = "Delete",
@@ -388,8 +377,6 @@ val EnglishStrings = UiStrings(
     nottifAccountSignedIn = "Signed in",
     nottifAccountGuest = "Not signed in",
     nottifCloseCd = "Close",
-    nottifCheckUpdatesCd = "Check for episode updates",
-    nottifNewEpisodesFormat = "+%d new episodes",
     nottifSectionAccount = "Account",
     syncModeTitle = "Sync Mode",
     syncAuto = "Auto",
@@ -475,9 +462,6 @@ val EnglishStrings = UiStrings(
     inspectSegmentMoviesTv = "Movies/TV",
     inspectImageFormatsHint = "JPEG, PNG UP TO 10MB",
     inspectPoweredByFooter = "POWERED BY VETRO VISION ENGINE",
-    nottifSyncChipSynced = "Synced",
-    nottifSyncChipErrors = "Errors",
-    nottifSyncChipTotal = "Total",
     sortSheetTitle = "Sort by",
     sortSheetSubtitle = "Organize your collection",
     sortApply = "Apply sorting",
@@ -547,6 +531,51 @@ fun formatApkSizeLabel(bytes: Long?, language: AppLanguage, sizeUnit: String): S
 fun getStrings(lang: AppLanguage): UiStrings = when(lang) {
     AppLanguage.RU -> RussianStrings
     AppLanguage.EN -> EnglishStrings
+}
+
+private val RussianNotificationStrings = NotificationStrings(
+    updatesTitle = "Обновления",
+    updatesChecking = "Проверка API (AniList, Shikimori, TMDB)...\nЭто может занять некоторое время.",
+    updatesUpToDate = "У вас все актуально!",
+    nottifCheckUpdatesCd = "Проверить новые серии",
+    nottifNewEpisodesFormat = "+%d новых серий",
+    notifChannelName = "Новые серии",
+    notifChannelDesc = "Уведомления о выходе новых серий",
+    notifUpdateTitleFormat = "Новые серии: %s",
+    notifUpdateBodyFormat = "Доступно: %1\$d → %2\$d эп.",
+    notifAccept = "Принять",
+    notifDecline = "Отклонить",
+    notifGroupSummaryFormat = "Обновления серий: %d",
+    updateCardAcceptCd = "Принять обновление",
+    updateCardDeclineCd = "Отклонить обновление",
+    nottifSyncChipSynced = "ОК",
+    nottifSyncChipErrors = "Ошибки",
+    nottifSyncChipTotal = "Всего",
+)
+
+private val EnglishNotificationStrings = NotificationStrings(
+    updatesTitle = "Updates",
+    updatesChecking = "Checking APIs (AniList, Shikimori, TMDB)...\nThis will take a moment.",
+    updatesUpToDate = "You are up to date!",
+    nottifCheckUpdatesCd = "Check for episode updates",
+    nottifNewEpisodesFormat = "+%d new episodes",
+    notifChannelName = "New episodes",
+    notifChannelDesc = "Notifications about newly aired episodes",
+    notifUpdateTitleFormat = "New episodes: %s",
+    notifUpdateBodyFormat = "Available: %1\$d → %2\$d ep.",
+    notifAccept = "Accept",
+    notifDecline = "Decline",
+    notifGroupSummaryFormat = "Episode updates: %d",
+    updateCardAcceptCd = "Accept update",
+    updateCardDeclineCd = "Decline update",
+    nottifSyncChipSynced = "Synced",
+    nottifSyncChipErrors = "Errors",
+    nottifSyncChipTotal = "Total",
+)
+
+fun getNotificationStrings(lang: AppLanguage): NotificationStrings = when (lang) {
+    AppLanguage.RU -> RussianNotificationStrings
+    AppLanguage.EN -> EnglishNotificationStrings
 }
 
 /** Язык интерфейса по системной локали: ru → RU, иначе EN. */
@@ -655,6 +684,71 @@ private val EnglishTitleDubbingStrings = TitleDubbingStrings(
 fun getTitleDubbingStrings(lang: AppLanguage): TitleDubbingStrings = when (lang) {
     AppLanguage.RU -> RussianTitleDubbingStrings
     AppLanguage.EN -> EnglishTitleDubbingStrings
+}
+
+/** Отдельно от [UiStrings]: лимит JVM — 255 параметров конструктора. Строки «Обогащение коллекции». */
+data class CollectionEnrichmentStrings(
+    val cardTitle: String,
+    val cardSubtitle: String,
+    val sheetTitle: String,
+    val fullTitle: String,
+    val fullSubtitle: String,
+    val fullRunningFields: String,
+    val fullRunningTitlesTemplate: String,
+    val liveTitle: String,
+    val liveSubtitle: String,
+    val overflowTitle: String,
+    val overflowMessageTemplate: String,
+    val overflowCancel: String,
+    val overflowStart: String,
+)
+
+private val RussianCollectionEnrichmentStrings = CollectionEnrichmentStrings(
+    cardTitle = "Обогащение коллекции",
+    cardSubtitle = "Подтянуть недостающие данные и названия",
+    sheetTitle = "Обогащение коллекции",
+    fullTitle = "Полное обогащение",
+    fullSubtitle = "Один заход: проверить всю коллекцию и заполнить пробелы через API и AI",
+    fullRunningFields = "Обогащение: поля…",
+    fullRunningTitlesTemplate = "Названия: %1${'$'}d из %2${'$'}d",
+    liveTitle = "Фоновое обновление",
+    liveSubtitle = "Потихоньку подтягивать недостающее в фоне, даже когда приложение закрыто",
+    overflowTitle = "Слишком много пропусков",
+    overflowMessageTemplate = "Найдено записей с неполными данными: %1${'$'}d. Рекомендуем сначала провести полное обогащение.",
+    overflowCancel = "Отмена",
+    overflowStart = "Начать",
+)
+
+private val EnglishCollectionEnrichmentStrings = CollectionEnrichmentStrings(
+    cardTitle = "Collection Enrichment",
+    cardSubtitle = "Fetch missing data and titles",
+    sheetTitle = "Collection Enrichment",
+    fullTitle = "Full Enrichment",
+    fullSubtitle = "One pass: scan the whole collection and fill gaps via APIs and AI",
+    fullRunningFields = "Enriching: fields…",
+    fullRunningTitlesTemplate = "Titles: %1${'$'}d of %2${'$'}d",
+    liveTitle = "Live Maintenance",
+    liveSubtitle = "Gradually fill in what's missing in the background, even when the app is closed",
+    overflowTitle = "Too many gaps",
+    overflowMessageTemplate = "Entries with incomplete data: %1${'$'}d. We recommend running a full enrichment first.",
+    overflowCancel = "Cancel",
+    overflowStart = "Start",
+)
+
+fun getCollectionEnrichmentStrings(lang: AppLanguage): CollectionEnrichmentStrings = when (lang) {
+    AppLanguage.RU -> RussianCollectionEnrichmentStrings
+    AppLanguage.EN -> EnglishCollectionEnrichmentStrings
+}
+
+/** Строки блока «Где смотреть» (иконки-ссылки на одобренные сайты). */
+data class WebLinksStrings(
+    val sheetTitle: String,
+    val empty: String,
+)
+
+fun getWebLinksStrings(lang: AppLanguage): WebLinksStrings = when (lang) {
+    AppLanguage.RU -> WebLinksStrings(sheetTitle = "Где смотреть", empty = "Ничего не найдено")
+    AppLanguage.EN -> WebLinksStrings(sheetTitle = "Where to watch", empty = "Nothing found")
 }
 
 /** Отдельно от [UiStrings]: лимит JVM — 255 параметров конструктора. Строки экрана AI Connect (BYOK). */

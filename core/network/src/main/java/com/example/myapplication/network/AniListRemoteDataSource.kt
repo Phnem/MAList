@@ -6,7 +6,10 @@ import com.apollographql.apollo.api.ApolloResponse
 import com.apollographql.apollo.api.Optional
 import com.example.myapplication.network.anilist.EnrichTitlesByIdQuery
 import com.example.myapplication.network.anilist.EnrichTitlesSearchQuery
+import com.example.myapplication.network.anilist.EpisodeCheckByIdsQuery
+import com.example.myapplication.network.anilist.EpisodeCheckByMalIdsQuery
 import com.example.myapplication.network.anilist.MediaByIdQuery
+import com.example.myapplication.network.anilist.fragment.EpisodeCheckFields
 import com.example.myapplication.network.anilist.MediaListCollectionChunkQuery
 import com.example.myapplication.network.anilist.RecommendationsBatchQuery
 import com.example.myapplication.network.anilist.TrendingMediaQuery
@@ -19,6 +22,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 private const val TAG = "AniListRemote"
+private const val EPISODE_CHECK_CHUNK = 50
 
 /**
  * AniList GraphQL API via Apollo Kotlin. Type-safe queries from .graphql → generated models.
@@ -67,7 +71,7 @@ class AniListRemoteDataSource(
                 nextEpisode = nextEp,
                 genres = genres,
                 rating = rating,
-                posterUrl = null,
+                posterUrl = media.coverImage?.extraLarge ?: media.coverImage?.large,
                 source = "AniList",
                 airedOn = airedOn
             )
@@ -138,6 +142,89 @@ class AniListRemoteDataSource(
                 externalId = media.id?.toString()
             )
         }
+    }
+
+    /**
+     * Батч-проверка серий: до 50 тайтлов на HTTP-запрос через id_in.
+     * Возвращает все найденные Media (порядок не гарантирован).
+     */
+    suspend fun episodeCheckByAnilistIds(ids: List<Int>): Result<List<EpisodeCheckMedia>> = runCatching {
+        if (ids.isEmpty()) return@runCatching emptyList()
+        withContext(Dispatchers.IO) {
+            ids.distinct().chunked(EPISODE_CHECK_CHUNK).flatMap { chunk ->
+                rateLimiter.acquire()
+                val response = apolloClient.query(
+                    EpisodeCheckByIdsQuery(
+                        ids = Optional.present(chunk),
+                        page = Optional.present(1),
+                        perPage = Optional.present(EPISODE_CHECK_CHUNK)
+                    )
+                ).execute()
+                response.throwIfGraphQlErrors("EpisodeCheckByIds")
+                response.data?.Page?.media?.filterNotNull()
+                    ?.mapNotNull { it.episodeCheckFields.toEpisodeCheckMedia() }
+                    .orEmpty()
+            }
+        }
+    }
+
+    /** То же, но по MAL id (idMal_in) — для записей без anilistId. */
+    suspend fun episodeCheckByMalIds(malIds: List<Int>): Result<List<EpisodeCheckMedia>> = runCatching {
+        if (malIds.isEmpty()) return@runCatching emptyList()
+        withContext(Dispatchers.IO) {
+            malIds.distinct().chunked(EPISODE_CHECK_CHUNK).flatMap { chunk ->
+                rateLimiter.acquire()
+                val response = apolloClient.query(
+                    EpisodeCheckByMalIdsQuery(
+                        idsMal = Optional.present(chunk),
+                        page = Optional.present(1),
+                        perPage = Optional.present(EPISODE_CHECK_CHUNK)
+                    )
+                ).execute()
+                response.throwIfGraphQlErrors("EpisodeCheckByMalIds")
+                response.data?.Page?.media?.filterNotNull()
+                    ?.mapNotNull { it.episodeCheckFields.toEpisodeCheckMedia() }
+                    .orEmpty()
+            }
+        }
+    }
+
+    private fun EpisodeCheckFields.toEpisodeCheckMedia(): EpisodeCheckMedia? {
+        val mediaId = id ?: return null
+        return EpisodeCheckMedia(
+            anilistId = mediaId,
+            malId = idMal,
+            titleRomaji = title?.romaji?.takeIf { it.isNotBlank() },
+            titleEnglish = title?.english?.takeIf { it.isNotBlank() },
+            format = format?.name,
+            status = status?.name,
+            totalEpisodes = episodes,
+            airedEpisodes = airedCount(episodes, nextAiringEpisode?.episode),
+            relations = relations?.edges?.filterNotNull().orEmpty().mapNotNull { edge ->
+                val relType = edge.relationType?.name ?: return@mapNotNull null
+                if (relType != "PREQUEL" && relType != "SEQUEL") return@mapNotNull null
+                val node = edge.node ?: return@mapNotNull null
+                val nodeId = node.id ?: return@mapNotNull null
+                if (node.type?.name != "ANIME") return@mapNotNull null
+                EpisodeCheckRelation(
+                    anilistId = nodeId,
+                    relationType = relType,
+                    format = node.format?.name,
+                    status = node.status?.name,
+                    totalEpisodes = node.episodes,
+                    airedEpisodes = airedCount(node.episodes, node.nextAiringEpisode?.episode),
+                )
+            }
+        )
+    }
+
+    /** Вышедшие серии: у онгоингов episodes=null → берём nextAiring-1. */
+    private fun airedCount(episodes: Int?, nextAiringEpisode: Int?): Int {
+        val declared = episodes ?: 0
+        val airing = nextAiringEpisode?.let { (it - 1).coerceAtLeast(0) } ?: 0
+        // Онгоинг: declared=0/итог, airing — фактический прогресс. Берём максимум надёжного:
+        // если сериал ещё идёт, вышло airing; если закончился — declared.
+        return if (nextAiringEpisode != null) airing else declared
     }
 
     /**

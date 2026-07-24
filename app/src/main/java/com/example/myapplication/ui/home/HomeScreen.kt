@@ -33,6 +33,7 @@ import com.example.myapplication.ui.shared.components.pulltorefresh.PullRefreshI
 import com.example.myapplication.ui.shared.components.pulltorefresh.rememberPullRefreshController
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -98,6 +99,7 @@ import com.example.myapplication.ui.home.recommendations.RecommendationsSheet
 import com.example.myapplication.ui.home.recommendations.RecommendationsUiState
 import com.example.myapplication.ui.home.recommendations.RecommendationsViewModel
 import com.example.myapplication.ui.home.recommendations.getRecommendationsStrings
+import com.example.myapplication.ui.home.updates.EpisodeUpdateStack
 import com.example.myapplication.ui.navigation.navigateToAddEdit
 import com.example.myapplication.ui.navigation.navigateToDetails
 import com.example.myapplication.ui.navigation.navigateToInspect
@@ -119,7 +121,6 @@ fun HomeScreen(
     viewModel: HomeViewModel,
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
-    onOpenDetails: (String) -> Unit = {},
 ) {
     val genreRepository: GenreRepository = koinInject()
     val listSyncCoordinator: ExternalListSyncCoordinator = koinInject()
@@ -134,6 +135,10 @@ fun HomeScreen(
     val syncReport by viewModel.syncReport.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val list by viewModel.animeListFlow.collectAsStateWithLifecycle()
+    val playerPromoDismissed by viewModel.playerPromoDismissed.collectAsStateWithLifecycle()
+    val playerPromoDeferred by viewModel.playerPromoDeferredThisSession.collectAsStateWithLifecycle()
+    val webLinksMap by viewModel.webLinks.collectAsStateWithLifecycle()
+    val airingMap by viewModel.airingProgress.collectAsStateWithLifecycle()
     var cloudSyncPillDismissed by remember { mutableStateOf(false) }
     val showCloudSyncPill =
         uiState.isListLoaded &&
@@ -173,6 +178,31 @@ fun HomeScreen(
     var animeToFavorite by remember { mutableStateOf<Anime?>(null) }
     var pendingSwipeReset by remember { mutableStateOf<(suspend () -> Unit)?>(null) }
     val scope = rememberCoroutineScope()
+    val playerPromoTarget = remember(list) {
+        val playable = list.filter { it.mediaType == MediaType.ANIME && it.episodes > 0 }
+        (playable.ifEmpty { list.filter { it.episodes > 0 } })
+            .maxWithOrNull(compareBy<Anime> { it.rating }.thenBy { it.episodes })
+    }
+    if (
+        uiState.isListLoaded &&
+        playerPromoTarget != null &&
+        !playerPromoDismissed &&
+        !playerPromoDeferred
+    ) {
+        PlayerPowerPromoDialog(
+            language = currentLanguage,
+            onTry = {
+                val target = playerPromoTarget ?: return@PlayerPowerPromoDialog
+                performHaptic(view, "light")
+                viewModel.dismissPlayerPromoPermanently()
+                navController.navigateToDetails(target.id, openEpisodes = true)
+            },
+            onLater = {
+                performHaptic(view, "light")
+                viewModel.deferPlayerPromoForSession()
+            },
+        )
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -189,6 +219,19 @@ fun HomeScreen(
 
     LaunchedEffect(Unit) {
         viewModel.checkForUpdates()
+    }
+
+    // Пока приложение на переднем плане — системные пуши обновлений не нужны
+    // (показываем in-app стопкой). Снимаем их из шторки при каждом ON_START.
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_START) {
+                viewModel.clearSystemUpdateNotifications()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     LaunchedEffect(isSupabaseSyncing, isCloudImageRestoring) {
@@ -595,13 +638,19 @@ fun HomeScreen(
                                                 backgroundContent = { SwipeBackground(dismissState) },
                                                 modifier = Modifier.padding(horizontal = 16.dp) // .animateItem() убран: конфликт с SharedTransition при возврате
                                             ) {
-                                                val cardState = remember(anime, currentLanguage) {
+                                                val webLinksEntry = webLinksMap[anime.id]
+                                                val airingEntry = airingMap[anime.id]
+                                                val cardState = remember(anime, currentLanguage, webLinksEntry, airingEntry) {
                                                     // Название по выбранному языку: EN → английское, RU → русское.
                                                     // Замена, а не вторая строка; при отсутствии перевода — исходный title.
                                                     val displayTitle = when (currentLanguage) {
                                                         AppLanguage.EN -> anime.titleEn?.takeIf { it.isNotBlank() } ?: anime.title
                                                         AppLanguage.RU -> anime.titleRu?.takeIf { it.isNotBlank() } ?: anime.title
                                                     }
+                                                    val links = when (currentLanguage) {
+                                                        AppLanguage.EN -> webLinksEntry?.enLinks
+                                                        AppLanguage.RU -> webLinksEntry?.ruLinks
+                                                    }.orEmpty()
                                                     AnimeCardState(
                                                         id = anime.id,
                                                         title = displayTitle,
@@ -613,12 +662,20 @@ fun HomeScreen(
                                                                 .toTypedArray()
                                                         ),
                                                         episodesCount = anime.episodes,
-                                                        categoryLabel = anime.categoryType.takeIf { it.isNotBlank() },
+                                                        webLinks = links,
+                                                        language = currentLanguage,
                                                         imagePath = viewModel.getImgPath(anime.imageFileName),
                                                         mediaTypeLabel = when (anime.mediaType) {
                                                             com.example.myapplication.data.models.MediaType.ANIME -> strings.typeAnime
                                                             com.example.myapplication.data.models.MediaType.MANGA -> strings.typeManga
                                                             com.example.myapplication.data.models.MediaType.TV_SERIES -> strings.typeSeries
+                                                        },
+                                                        airing = airingEntry?.let {
+                                                            AiringCardInfo(
+                                                                seasonNumber = it.seasonNumber,
+                                                                airedEpisodes = it.airedEpisodes,
+                                                                totalEpisodes = it.totalEpisodes,
+                                                            )
                                                         }
                                                     )
                                                 }
@@ -626,10 +683,14 @@ fun HomeScreen(
                                                     OneUiAnimeCard(
                                                         state = cardState,
                                                         animatedVisibilityScope = animatedVisibilityScope,
-                                                        onClick = { navController.navigateToAddEdit(anime.id) },
-                                                        onDetailsClick = {
+                                                        // Тап по карточке — полноэкранные детали; кнопка справа-внизу — редактирование.
+                                                        onClick = {
                                                             performHaptic(view, "light")
-                                                            onOpenDetails(anime.id)
+                                                            navController.navigateToDetails(anime.id)
+                                                        },
+                                                        onEditClick = {
+                                                            performHaptic(view, "light")
+                                                            navController.navigateToAddEdit(anime.id)
                                                         }
                                                     )
                                                 }
@@ -935,6 +996,30 @@ fun HomeScreen(
                         modifier = Modifier.padding(top = 12.dp)
                     )
                 }
+            }
+
+            // iOS-стиль: пуш-стопка обновлений серий у верхней кромки главного экрана,
+            // поверх всего. Пропадает, когда пользователь разобрал все карточки.
+            if (uiState.updates.isNotEmpty()) {
+                EpisodeUpdateStack(
+                    updates = uiState.updates,
+                    coverPathFor = { animeId ->
+                        viewModel.getImgPath(viewModel.getAnimeById(animeId)?.imageFileName)
+                    },
+                    onAccept = { update ->
+                        performHaptic(view, "success")
+                        viewModel.acceptUpdate(update, ctx)
+                    },
+                    onDecline = { update ->
+                        performHaptic(view, "light")
+                        viewModel.dismissUpdate(update, ctx)
+                    },
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .zIndex(40f)
+                        .statusBarsPadding()
+                        .padding(top = 8.dp, start = 12.dp, end = 12.dp)
+                )
             }
         }
 

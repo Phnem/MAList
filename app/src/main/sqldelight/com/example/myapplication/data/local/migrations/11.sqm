@@ -1,0 +1,9 @@
+-- Прогресс текущего выходящего сезона (батч-проверка серий).
+-- Только новая таблица: аддитивно, данные пользователей прошлых версий не трогаем.
+CREATE TABLE airing_progress (
+    anime_id TEXT PRIMARY KEY NOT NULL,
+    season_number INTEGER,
+    aired_episodes INTEGER NOT NULL,
+    total_episodes INTEGER,
+    updated_at INTEGER NOT NULL
+);

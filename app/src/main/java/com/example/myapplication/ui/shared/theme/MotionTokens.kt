@@ -39,6 +39,10 @@ object MotionTokens {
     /** Дефолт, если нет более специфичного токена. iOS "standard interactive" (response 0.55/0.825). */
     fun <T> standard(): SpringSpec<T> = spring(dampingRatio = 0.825f, stiffness = 130.5f)
 
+    /** Season container expansion: Apple response 0.42 s, damping fraction 0.80. */
+    fun <T> seasonExpansion(): SpringSpec<T> =
+        spring(dampingRatio = 0.80f, stiffness = 223.8f)
+
     /** Крупные величественные раскрытия (response 0.65/0.86). */
     fun <T> modalSlow(): SpringSpec<T> = spring(dampingRatio = 0.86f, stiffness = 93.5f)
 
@@ -51,7 +55,7 @@ object MotionTokens {
     // ---- Практические пружины (§2.2) -----------------------------------------
 
     /** Выпадающие/контекстные меню — лёгкий перелёт (overshoot). */
-    fun <T> menuPop(): SpringSpec<T> = spring(dampingRatio = 0.62f, stiffness = 500f)
+    fun <T> menuPop(): SpringSpec<T> = spring(dampingRatio = 0.72f, stiffness = 503.6f)
 
     /** Появление bottom sheet / дока-окна. */
     fun <T> sheetPresent(): SpringSpec<T> = spring(dampingRatio = 0.86f, stiffness = 380f)

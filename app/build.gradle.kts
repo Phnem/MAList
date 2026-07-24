@@ -35,8 +35,8 @@ android {
         applicationId = "com.phnem.vetro"
         minSdk = 26
         targetSdk = 36
-        versionCode = 332
-        versionName = "v3.3.2-Beta"
+        versionCode = 333
+        versionName = "V3.3.3-Alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "GITHUB_OWNER", "\"Phnem\"")
@@ -161,6 +161,17 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
     implementation(libs.lottie.compose)
+
+    // 3b. Local player (isolated feature: com.example.myapplication.localplayer)
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.exoplayer.hls)
+    implementation(libs.media3.exoplayer.dash)
+    implementation(libs.media3.ui)
+    implementation(libs.media3.session)
+    implementation(libs.media3.datasource.okhttp)
+    implementation(libs.jsoup)
+    implementation(libs.androidx.documentfile)
+    implementation(libs.androidx.palette)
 
     // 4. Навигация, UI, Стейт
     implementation(libs.navigation.compose)

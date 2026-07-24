@@ -27,7 +27,8 @@ data class RepairAnimeDbResult(
  *
  * Иерархия источников для аниме-записей ЕДИНА для картинок, жанров и оценок и не зависит
  * от языка приложения:
- *   основа — AniList, endpoint 1 — Shikimori, endpoint 2 — MAL.
+ *   основа — AniList, endpoint 1 — Shikimori, endpoint 2 — MAL, endpoint 3 — Kitsu,
+ *   endpoint 4 — AniLibria (постеры/серии/RU-жанры в их озвучке; своей оценки нет).
  * Поля сливаются по-отдельности: если у AniList нет постера, но есть жанры — жанры берём
  * у AniList, постер ищем дальше по иерархии. Жанры любых источников (EN от AniList/MAL,
  * RU от Shikimori) конвертируются в канонические ID через [GenreRepository] и корректно
@@ -43,6 +44,7 @@ class RepairAnimeDbUseCase(
     private val saveAnimeUseCase: SaveAnimeUseCase,
     private val imageStorage: ImageStorageRepository,
     private val genreRepository: GenreRepository,
+    private val placeholderPurge: ShikimoriPlaceholderPurge,
 ) {
     suspend operator fun invoke(
         language: AppLanguage,
@@ -54,13 +56,18 @@ class RepairAnimeDbUseCase(
         // (легаси-порча — у части записей malId == shikimoriId, это РАЗНЫЕ id → чужое аниме в MAL/AniList).
         reconcileMalIds(repository.getAllAnimeSnapshot(), sessionLog)
 
+        // Чистка старых постеров-заглушек Shikimori: файл удаляется, запись падает
+        // в missingImage-пробел и в этом же проходе получает нормальный постер.
+        runCatching { placeholderPurge.purge(repository.getAllAnimeSnapshot(), sessionLog) }
+            .onFailure { e -> sessionLog.warn("Placeholder purge failed", e) }
+
         val all = repository.getAllAnimeSnapshot() // перечитываем: malId мог измениться после реконсиляции
         val needing = all.filter { detectGaps(it).needsRepair }
 
         sessionLog.info(
             "Start repair: ${all.size} entries, language=$language, " +
                 "contentType=$contentType, needRepair=${needing.size} " +
-                "(hierarchy: AniList → Shikimori → MAL)",
+                "(hierarchy: AniList → Shikimori → MAL → Kitsu → AniLibria)",
         )
         onProgress(0, needing.size)
 
@@ -121,7 +128,8 @@ class RepairAnimeDbUseCase(
         sessionLog.info("MAL id reconcile done: fixed=$fixed of ${suspects.size}")
     }
 
-    private suspend fun repairOne(
+    /** internal: live-обогащение чинит по одной записи тем же кодом, что и полный проход. */
+    internal suspend fun repairOne(
         anime: Anime,
         language: AppLanguage,
         contentType: AppContentType,
@@ -189,6 +197,8 @@ class RepairAnimeDbUseCase(
                 { fetchFromAniList(anime, language, sessionLog, strict = strict) },
                 { fetchFromShikimori(anime, language, sessionLog, strict = strict) },
                 { fetchFromMal(anime, language, sessionLog, strict = strict) },
+                { fetchFromKitsu(anime, sessionLog, strict = strict) },
+                { fetchFromAnilibria(anime, sessionLog, strict = strict) },
             )
             for (fetch in fetchers) {
                 if (gapsCovered(gaps, collected)) return
@@ -218,7 +228,8 @@ class RepairAnimeDbUseCase(
         return imageOk && tagsOk && ratingOk && episodesOk && idOk && typeOk
     }
 
-    private data class FieldGaps(
+    /** internal: переиспользуется live-обогащением ([com.example.myapplication.domain.enrichment]). */
+    internal data class FieldGaps(
         val missingImage: Boolean,
         val missingTags: Boolean,
         val missingRating: Boolean,
@@ -231,7 +242,7 @@ class RepairAnimeDbUseCase(
                 missingCategoryType || missingEpisodes
     }
 
-    private fun detectGaps(anime: Anime): FieldGaps {
+    internal fun detectGaps(anime: Anime): FieldGaps {
         val hasImage = !anime.imageFileName.isNullOrBlank() &&
             imageStorage.hasLocalImage(anime.imageFileName)
         return FieldGaps(
@@ -342,6 +353,30 @@ class RepairAnimeDbUseCase(
 
         return pickRelaxed(anime.title, results).also {
             if (it != null) sessionLog.debug("MAL relaxed match for \"${anime.title}\"")
+        }
+    }
+
+    private suspend fun fetchFromKitsu(
+        anime: Anime,
+        sessionLog: RepairDbSessionLog,
+        strict: Boolean,
+    ): ApiSearchResult? {
+        val results = repository.searchAnimeKitsuOnly(anime.title).getOrNull().orEmpty()
+        if (strict) return pickBestMatch(anime.title, results)
+        return pickRelaxed(anime.title, results).also {
+            if (it != null) sessionLog.debug("Kitsu relaxed match for \"${anime.title}\"")
+        }
+    }
+
+    private suspend fun fetchFromAnilibria(
+        anime: Anime,
+        sessionLog: RepairDbSessionLog,
+        strict: Boolean,
+    ): ApiSearchResult? {
+        val results = repository.searchAnimeAnilibriaOnly(anime.title).getOrNull().orEmpty()
+        if (strict) return pickBestMatch(anime.title, results)
+        return pickRelaxed(anime.title, results).also {
+            if (it != null) sessionLog.debug("AniLibria relaxed match for \"${anime.title}\"")
         }
     }
 

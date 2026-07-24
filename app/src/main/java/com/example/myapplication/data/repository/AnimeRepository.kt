@@ -149,6 +149,16 @@ class AnimeRepository(
         return apiService.malById(id, language)
     }
 
+    /** Батч-проверка серий: AniList id_in, до 50 тайтлов на запрос. */
+    suspend fun episodeCheckByAnilistIds(ids: List<Int>): Result<List<com.example.myapplication.network.EpisodeCheckMedia>> {
+        return apiService.episodeCheckByAnilistIds(ids)
+    }
+
+    /** Батч-проверка серий по MAL id (idMal_in) — для записей без anilistId. */
+    suspend fun episodeCheckByMalIds(malIds: List<Int>): Result<List<com.example.myapplication.network.EpisodeCheckMedia>> {
+        return apiService.episodeCheckByMalIds(malIds)
+    }
+
     /** Явно проставить MAL id (напр. реконсиляция malId по Shikimori myanimelist_id в «Исправить БД»). */
     suspend fun setMalId(animeId: String, malId: Int) {
         localDataSource.setMalId(animeId, malId)
@@ -160,6 +170,14 @@ class AnimeRepository(
         limit: Int = 20
     ): Result<List<ApiSearchResult>> {
         return apiService.searchAnimeMalOnly(query, language, limit)
+    }
+
+    suspend fun searchAnimeKitsuOnly(query: String, limit: Int = 10): Result<List<ApiSearchResult>> {
+        return apiService.searchAnimeKitsuOnly(query, limit)
+    }
+
+    suspend fun searchAnimeAnilibriaOnly(query: String, limit: Int = 10): Result<List<ApiSearchResult>> {
+        return apiService.searchAnimeAnilibriaOnly(query, limit)
     }
 
     suspend fun enrichTitlesByIds(anilistId: Int?, malId: Int?): Result<EnrichedTitles?> {

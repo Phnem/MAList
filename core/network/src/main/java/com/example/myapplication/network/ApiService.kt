@@ -49,6 +49,20 @@ interface ApiService {
     /** MAL/Jikan title by numeric id. */
     suspend fun malById(id: Int, language: AppLanguage): Result<ApiSearchResult?>
 
+    /** Kitsu-only search (EN endpoint: названия/описания/постеры/оценки). */
+    suspend fun searchAnimeKitsuOnly(query: String, limit: Int = 10): Result<List<ApiSearchResult>>
+
+    /** AniLibria-only search (RU endpoint: русские описания/постеры/серии в озвучке). */
+    suspend fun searchAnimeAnilibriaOnly(query: String, limit: Int = 10): Result<List<ApiSearchResult>>
+
+    // ---- Батч-проверка новых серий (AniList id_in / idMal_in, до 50 тайтлов на запрос) ----
+
+    /** AniList: снимки Media со связями франшизы по списку AniList id. */
+    suspend fun episodeCheckByAnilistIds(ids: List<Int>): Result<List<EpisodeCheckMedia>>
+
+    /** AniList: то же по списку MAL id — для записей без anilistId. */
+    suspend fun episodeCheckByMalIds(malIds: List<Int>): Result<List<EpisodeCheckMedia>>
+
     /** MAL-only search via Jikan (used as EN fallback). */
     suspend fun searchAnimeMalOnly(
         query: String,

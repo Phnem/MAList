@@ -50,9 +50,6 @@ data class UiStrings(
     /** Недостаточно данных для AI-выводов по карточке. */
     val statsAiInsufficient: String,
     val rankTitle: String,
-    val updatesTitle: String,
-    val updatesChecking: String,
-    val updatesUpToDate: String,
     val deleteTitle: String,
     val deleteSubtitle: String,
     val deleteConfirm: String,
@@ -131,8 +128,6 @@ data class UiStrings(
     val nottifAccountSignedIn: String,
     val nottifAccountGuest: String,
     val nottifCloseCd: String,
-    val nottifCheckUpdatesCd: String,
-    val nottifNewEpisodesFormat: String,
     /** Подпись колонки «Аккаунт» на панели синхронизации */
     val nottifSectionAccount: String,
     val syncModeTitle: String,
@@ -223,10 +218,6 @@ data class UiStrings(
     val inspectSegmentMoviesTv: String,
     val inspectImageFormatsHint: String,
     val inspectPoweredByFooter: String,
-    /** Метрика последнего sync: успешные операции (AssistChip). */
-    val nottifSyncChipSynced: String,
-    val nottifSyncChipErrors: String,
-    val nottifSyncChipTotal: String,
     val sortSheetTitle: String,
     val sortSheetSubtitle: String,
     val sortApply: String,
@@ -283,6 +274,40 @@ data class UiStrings(
     val splashLegacyFolderSubtitle: String,
     val splashLegacyFolderAction: String,
     val splashLegacyFolderSkip: String,
+)
+
+/**
+ * Строки уведомлений/обновлений серий и системных пушей.
+ *
+ * Вынесены из [UiStrings] отдельным data class'ом: у [UiStrings] уже ~250 полей, а
+ * лимит Dalvik — 255 регистров аргументов конструктора. Перебор роняет release-сборку
+ * (R8) с `VerifyError` в `<clinit>`, собирающем строковый объект. См. одноимённый приём
+ * у [DevRepairDbStrings], [TitleDubbingStrings] и др.
+ */
+data class NotificationStrings(
+    val updatesTitle: String,
+    val updatesChecking: String,
+    val updatesUpToDate: String,
+    val nottifCheckUpdatesCd: String,
+    val nottifNewEpisodesFormat: String,
+    /** Системные уведомления о новых сериях. */
+    val notifChannelName: String,
+    val notifChannelDesc: String,
+    /** "Новые серии: %s" */
+    val notifUpdateTitleFormat: String,
+    /** "Доступно: %1$d → %2$d эп." */
+    val notifUpdateBodyFormat: String,
+    val notifAccept: String,
+    val notifDecline: String,
+    /** Сводка группы: "%d обновлений серий" */
+    val notifGroupSummaryFormat: String,
+    /** Карточки обновлений в шторке уведомлений. */
+    val updateCardAcceptCd: String,
+    val updateCardDeclineCd: String,
+    /** Метрика последнего sync: успешные операции / ошибки / всего (AssistChip). */
+    val nottifSyncChipSynced: String,
+    val nottifSyncChipErrors: String,
+    val nottifSyncChipTotal: String,
 )
 
 val UiStrings.typeManga: String

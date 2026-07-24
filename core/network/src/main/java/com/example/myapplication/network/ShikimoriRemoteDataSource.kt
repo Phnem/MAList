@@ -1,5 +1,6 @@
 package com.example.myapplication.network
 
+import com.example.myapplication.network.dto.ShikimoriImageDto
 import com.example.myapplication.network.dto.ShikimoriSearchItemDto
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -90,6 +91,20 @@ class ShikimoriRemoteDataSource(
         response.map { it.toEnrichedTitles() }
     }
 
+    /**
+     * Shikimori при отсутствии обложки отдаёт HTTP 200 с картинкой-заглушкой
+     * (путь вида /assets/globals/missing_original.jpg). Технически URL валиден,
+     * поэтому детектим по подстроке и возвращаем null — тогда постер возьмёт
+     * следующий источник в иерархии.
+     */
+    private fun ShikimoriImageDto?.realPosterUrl(): String? {
+        val path = this?.original?.takeIf { it.isNotBlank() } ?: return null
+        if (path.contains("missing", ignoreCase = true) ||
+            path.contains("no-cover", ignoreCase = true)
+        ) return null
+        return if (path.startsWith("http")) path else "https://shikimori.one$path"
+    }
+
     private fun ShikimoriSearchItemDto.toEnrichedTitles(): EnrichedTitles = EnrichedTitles(
         shikimoriId = id,
         malId = malId,
@@ -102,7 +117,7 @@ class ShikimoriRemoteDataSource(
             ?.replace(Regex("\\[.*?\\]"), "")
             ?.replace(Regex("<[^>]+>"), "")
             ?.trim() ?: ""
-        val posterUrl = image?.original?.let { if (it.startsWith("http")) it else "https://shikimori.one$it" }
+        val posterUrl = image.realPosterUrl()
         val nameVal = name ?: "Unknown"
         val russianVal = russian?.takeIf { it.isNotBlank() }
         val (title, altTitle) = when (language) {
@@ -122,6 +137,9 @@ class ShikimoriRemoteDataSource(
             categoryType = "ANIME",
             externalId = id.toString(),
             malId = malId,
+            isOngoing = status?.equals("ongoing", ignoreCase = true),
+            airedEpisodes = episodesAired?.takeIf { it > 0 },
+            totalEpisodes = episodes?.takeIf { it > 0 },
         )
     }
 
@@ -130,7 +148,7 @@ class ShikimoriRemoteDataSource(
             ?.replace(Regex("\\[.*?\\]"), "")
             ?.replace(Regex("<[^>]+>"), "")
             ?.trim() ?: ""
-        val posterUrl = image?.original?.let { if (it.startsWith("http")) it else "https://shikimori.one$it" }
+        val posterUrl = image.realPosterUrl()
         return AnimeDetails(
             title = name ?: "Unknown",
             altTitle = russian?.takeIf { it.isNotBlank() },

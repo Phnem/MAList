@@ -25,6 +25,7 @@ class AnimeUpdateWorker(
     private val localDataSource: AnimeLocalDataSource by inject()
     private val notifier: AnimeNotifier by inject()
     private val batchEpisodeCheckUseCase: BatchEpisodeCheckUseCase by inject()
+    private val seasonEpisodesResolver: com.example.myapplication.domain.seasons.SeasonEpisodesResolver by inject()
     private val settingsDataStore: DataStore<Preferences> by inject(named("settings"))
 
     private val langKey = stringPreferencesKey("lang")
@@ -37,28 +38,30 @@ class AnimeUpdateWorker(
             } catch (e: Exception) {
                 AppLanguage.EN
             }
-            val animeList = localDataSource.getAllAnimeList()
-            if (animeList.isEmpty()) return@withContext Result.success()
-            val ignoredMap = localDataSource.getIgnoredMap()
-            val existingUpdates = localDataSource.getUpdates().toMutableList()
-            val rawUpdates = batchEpisodeCheckUseCase(animeList = animeList, language = language)
-            val candidateUpdates = rawUpdates.filter { ignoredMap[it.animeId] != it.newEpisodes }
-            val newlyDetected = mutableListOf<com.example.myapplication.data.models.AnimeUpdate>()
-            candidateUpdates.forEach { updateObj ->
-                if (existingUpdates.none { it.animeId == updateObj.animeId && it.newEpisodes == updateObj.newEpisodes }) {
-                    existingUpdates.removeAll { it.animeId == updateObj.animeId }
-                    existingUpdates.add(updateObj)
-                    newlyDetected += updateObj
-                }
+            val newlyDetected = batchEpisodeCheckUseCase.detectAndStore(language)
+            // Системные пуши шлём ТОЛЬКО когда приложение в фоне/закрыто. Если оно
+            // открыто — обновления уже показываются in-app стопкой, дублировать шторкой
+            // не нужно (иначе уведомление «мигает» при каждом взаимодействии).
+            if (newlyDetected.isNotEmpty() && !isAppInForeground()) {
+                newlyDetected.forEach { update -> notifier.showUpdateNotification(update, language) }
+                notifier.refreshGroupSummary(localDataSource.getUpdates().size, language)
             }
-            if (newlyDetected.isNotEmpty()) {
-                localDataSource.setUpdates(existingUpdates)
-                newlyDetected.forEach { update -> notifier.showUpdateNotification(update) }
-            }
+            // Серии по сезонам: дорезолвливаем протухшие записи тем же фоновым проходом.
+            // Ошибки не роняют воркер — проверка новых серий важнее.
+            runCatching { seasonEpisodesResolver.refreshStale() }
+                .onFailure { it.printStackTrace() }
             Result.success()
         } catch (e: Exception) {
             e.printStackTrace()
             Result.failure()
         }
+    }
+
+    /** Открыто ли приложение (передний план) — без доп. зависимости lifecycle-process. */
+    private fun isAppInForeground(): Boolean {
+        val state = android.app.ActivityManager.RunningAppProcessInfo()
+        android.app.ActivityManager.getMyMemoryState(state)
+        return state.importance == android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND ||
+            state.importance == android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE
     }
 }

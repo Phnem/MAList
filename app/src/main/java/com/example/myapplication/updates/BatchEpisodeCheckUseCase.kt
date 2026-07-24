@@ -2,206 +2,656 @@ package com.example.myapplication.updates
 
 import android.util.Log
 import com.example.myapplication.data.local.AnimeLocalDataSource
+import com.example.myapplication.data.models.AiringProgress
 import com.example.myapplication.data.models.Anime
 import com.example.myapplication.data.models.AnimeUpdate
+import com.example.myapplication.data.models.MediaType
 import com.example.myapplication.data.repository.AnimeRepository
-import com.example.myapplication.domain.normalizeForSearch
 import com.example.myapplication.network.ApiSearchResult
 import com.example.myapplication.network.AppLanguage
+import com.example.myapplication.network.EpisodeCheckMedia
 import com.example.myapplication.sync.TitleMatcher
 import kotlinx.coroutines.delay
 
+/**
+ * Проверка новых серий по всей коллекции.
+ *
+ * Порядок резолва каждой записи (от дешёвого и надёжного к дорогому):
+ *  1. AniList батч по anilistId (id_in, до 50 тайтлов на HTTP-запрос);
+ *  2. AniList батч по malId/shikimoriId (idMal_in) — Shikimori использует MAL id;
+ *  3. Точечный byId у «родного» для языка источника (RU → Shikimori, EN → Jikan);
+ *  4. Поиск по названиям: сначала основное, затем второе (titleEn/titleRu),
+ *     источники в порядке, зависящем от языка (RU: Shikimori → AniList; EN: AniList → MAL).
+ *
+ * Счётчик серий:
+ *  - у онгоингов AniList отдаёт episodes=null → берём nextAiringEpisode-1 (вышедшие);
+ *  - если локальный счётчик БОЛЬШЕ, чем у найденной записи — пользователь суммирует
+ *    сезоны: обходим цепочку PREQUEL/SEQUEL (франшизу) и сравниваем с суммой по сезонам.
+ *
+ * Найденные внешние id сохраняются в БД — следующая проверка идёт по быстрой батч-ветке.
+ */
 class BatchEpisodeCheckUseCase(
     private val repository: AnimeRepository,
     private val localDataSource: AnimeLocalDataSource
 ) {
 
-    suspend operator fun invoke(
+    /**
+     * Полный проход: детект → фильтр игнора → merge с текущими → персист.
+     * @return только НОВЫЕ предложения (их нужно показать в системных уведомлениях).
+     */
+    suspend fun detectAndStore(language: AppLanguage): List<AnimeUpdate> {
+        val animeOnly = localDataSource.getAllAnimeList()
+            .filter { it.mediaType == MediaType.ANIME }
+        if (animeOnly.isEmpty()) return emptyList()
+
+        val detected = detect(animeOnly, language)
+        // Снимок «выходящих сезонов» авторитетен для всего прохода: полная перезапись.
+        runCatching { localDataSource.setAiringProgress(detected.airing) }
+            .onFailure { Log.w(TAG, "setAiringProgress failed: ${it.message}") }
+
+        val candidates = detected.updates
+        val ignored = localDataSource.getIgnoredMap()
+        val fresh = candidates
+            .filter { ignored[it.animeId] != it.newEpisodes }
+            .distinctBy { it.animeId }
+        val existing = localDataSource.getUpdates()
+        val localById = animeOnly.associateBy { it.id }
+
+        // Свежий результат авторитетен; старые записи держим, только пока они всё ещё
+        // актуальны (серий действительно больше) и не перекрыты свежим детектом/игнором.
+        val freshIds = fresh.map { it.animeId }.toSet()
+        val kept = existing.filter { u ->
+            u.animeId !in freshIds &&
+                ignored[u.animeId] != u.newEpisodes &&
+                (localById[u.animeId]?.episodes ?: Int.MAX_VALUE) < u.newEpisodes
+        }
+        localDataSource.setUpdates(fresh + kept)
+
+        return fresh.filter { f ->
+            existing.none { it.animeId == f.animeId && it.newEpisodes == f.newEpisodes }
+        }
+    }
+
+    // ==========================================================
+    // Детект
+    // ==========================================================
+
+    private suspend fun detect(animeList: List<Anime>, language: AppLanguage): DetectResult {
+        val resolutions = mutableMapOf<String, Resolution>()
+        /** Кэш AniList-снимков для обхода франшизы (anilistId → media). */
+        val mediaCache = mutableMapOf<Int, EpisodeCheckMedia>()
+        /** Плашки прошлого прохода: нужны, чтобы закрыть прогресс завершившихся сезонов. */
+        val prevAiring = runCatching { localDataSource.getAiringProgressSnapshot() }
+            .getOrElse { emptyMap() }
+
+        resolveByAnilistBatch(animeList, resolutions, mediaCache)
+        resolveByMalBatch(animeList, resolutions, mediaCache)
+        resolveByNativeSourceById(animeList, resolutions, language)
+        resolveByTitleSearch(animeList, resolutions, language)
+
+        // Записи, отрезолвленные поиском, имеют anilistId без снимка в кэше —
+        // дотягиваем одним батчем, чтобы видеть их статус и связи франшизы.
+        backfillMediaCache(resolutions.values.mapNotNull { it.anilistId }, mediaCache)
+
+        val updates = mutableListOf<AnimeUpdate>()
+        val franchiseSeeds = mutableMapOf<String, Int>() // animeId → anilistId сида
+        val airingSeeds = mutableMapOf<String, Int>()    // animeId → anilistId (виден RELEASING-сезон)
+
+        for (anime in animeList) {
+            val res = resolutions[anime.id] ?: continue
+            when {
+                res.aired > anime.episodes -> {
+                    Log.d(TAG, "Update: \"${anime.title}\" ${anime.episodes} -> ${res.aired} via ${res.source}")
+                    updates += AnimeUpdate(
+                        animeId = anime.id,
+                        title = anime.title,
+                        currentEpisodes = anime.episodes,
+                        newEpisodes = res.aired,
+                        source = res.source
+                    )
+                }
+                anime.episodes > (res.total ?: res.aired) && res.anilistId != null -> {
+                    // Локально серий больше, чем у одного сезона — пользователь
+                    // суммирует сезоны: сравниваем с суммой по франшизе.
+                    franchiseSeeds[anime.id] = res.anilistId
+                }
+            }
+            // Онгоинг в поле зрения (сам тайтл или прямой сосед по франшизе) —
+            // разворачиваем компоненту, чтобы посчитать номер сезона и прогресс.
+            // Записи с плашкой прошлого прохода тоже: их сезон мог завершиться,
+            // и компонента нужна, чтобы закрыть прогресс финальным счётом.
+            val anilistId = res.anilistId ?: continue
+            val media = mediaCache[anilistId] ?: continue
+            val releasingInSight = isReleasingSeason(media.status, media.format) ||
+                media.relations.any { isReleasingSeason(it.status, it.format) }
+            if (releasingInSight || anime.id in prevAiring) airingSeeds[anime.id] = anilistId
+        }
+
+        // Одна волна расширения на объединение сидов: франшизным нужна сумма серий,
+        // airing-сидам — полная цепочка для номера сезона.
+        val components = expandFranchiseComponents(franchiseSeeds + airingSeeds, mediaCache)
+
+        for (anime in animeList) {
+            if (anime.id !in franchiseSeeds) continue
+            val component = components[anime.id] ?: continue
+            val total = component.sumOf { id -> mediaCache[id]?.airedEpisodes ?: 0 }
+            if (total > anime.episodes) {
+                Log.d(TAG, "Franchise update: \"${anime.title}\" ${anime.episodes} -> $total")
+                updates += AnimeUpdate(
+                    animeId = anime.id,
+                    title = anime.title,
+                    currentEpisodes = anime.episodes,
+                    newEpisodes = total,
+                    source = "AniList"
+                )
+            }
+        }
+
+        val now = System.currentTimeMillis()
+        val airingById = components.mapNotNull { (animeId, component) ->
+            airingProgressOf(animeId, component, mediaCache, prevAiring[animeId], now)
+        }.associateBy { it.animeId }.toMutableMap()
+
+        // Фолбэк без AniList: Shikimori (и поисковые совпадения) сами знают
+        // «вышло/всего» онгоинга — номер сезона неизвестен (нет графа франшизы).
+        for (anime in animeList) {
+            if (anime.id in airingById) continue
+            val res = resolutions[anime.id] ?: continue
+            val prev = prevAiring[anime.id]
+            when {
+                res.ongoing == true -> {
+                    val aired = res.airedNow ?: continue
+                    airingById[anime.id] = AiringProgress(
+                        animeId = anime.id,
+                        seasonNumber = null,
+                        airedEpisodes = aired,
+                        totalEpisodes = res.totalPlanned,
+                        updatedAt = now,
+                    )
+                }
+                // Сезон, который мы вели, завершился (Shikimori/MAL сказали «не онгоинг») —
+                // закрываем прогресс финальным счётом. AniLibria тут не участвует:
+                // её статус завершённости регулярно врёт.
+                res.ongoing == false && prev != null -> {
+                    val finalCount = res.airedNow ?: res.aired
+                    closedRow(prev, anime.id, prev.seasonNumber, finalCount, now)
+                        ?.let { airingById[anime.id] = it }
+                }
+            }
+        }
+
+        fillAiringFromAnilibria(animeList, resolutions, airingById, now)
+
+        return DetectResult(updates, airingById.values.toList())
+    }
+
+    /**
+     * AniLibria-дозаполнение (бюджет [ANILIBRIA_MAX_LOOKUPS] запросов на проход):
+     *  - записи совсем без резолва: их онгоинг-статус и «озвучено/заявлено» берём у AniLibria;
+     *  - найденные онгоинги без анонса total: дотягиваем заявленное число серий
+     *    (только когда номер сезона неизвестен — франшизным AniList-веткам чужой
+     *    total подмешивать нельзя: релиз AniLibria может оказаться другим сезоном).
+     */
+    private suspend fun fillAiringFromAnilibria(
         animeList: List<Anime>,
-        language: AppLanguage
-    ): List<AnimeUpdate> {
-        return when (language) {
-            AppLanguage.RU -> buildUpdatesRu(animeList)
-            AppLanguage.EN -> buildUpdatesEn(animeList)
-        }
-    }
+        resolutions: Map<String, Resolution>,
+        airingById: MutableMap<String, AiringProgress>,
+        now: Long,
+    ) {
+        var lookups = 0
+        for (anime in animeList) {
+            if (lookups >= ANILIBRIA_MAX_LOOKUPS) break
+            val existing = airingById[anime.id]
+            val unresolved = existing == null && resolutions[anime.id] == null
+            val needsTotal = existing != null && existing.totalEpisodes == null && existing.seasonNumber == null
+            if (!unresolved && !needsTotal) continue
 
-    private suspend fun buildUpdatesRu(animeList: List<Anime>): List<AnimeUpdate> {
-        val updates = mutableListOf<AnimeUpdate>()
-        for (chunk in animeList.chunked(CHUNK_SIZE)) {
-            for (anime in chunk) {
-                val remote = resolveShikimori(anime) ?: continue
-                if (remote.episodes > anime.episodes) {
-                    Log.d(TAG, "Update detected [RU]: ${anime.title} ${anime.episodes} -> ${remote.episodes} via ${remote.source}")
-                    updates += AnimeUpdate(
-                        animeId = anime.id,
-                        title = anime.title,
-                        currentEpisodes = anime.episodes,
-                        newEpisodes = remote.episodes,
-                        source = remote.source
-                    )
-                }
+            val query = anime.titleRu?.takeIf { it.isNotBlank() } ?: anime.title
+            lookups++
+            val results = retry429 { repository.searchAnimeAnilibriaOnly(query, 5) }.getOrNull().orEmpty()
+            val match = pickMatchedResult(anime, results)?.result
+            if (match == null) {
+                delay(FALLBACK_ITEM_DELAY_MS)
+                continue
             }
-            delay(CHUNK_DELAY_MS)
-        }
-        return updates
-    }
-
-    private suspend fun buildUpdatesEn(animeList: List<Anime>): List<AnimeUpdate> {
-        val updates = mutableListOf<AnimeUpdate>()
-        val unresolved = mutableListOf<Anime>()
-
-        for (chunk in animeList.chunked(CHUNK_SIZE)) {
-            for (anime in chunk) {
-                when (val result = resolveAniList(anime)) {
-                    is ResolveResult.Found -> {
-                        if (result.remote.episodes > anime.episodes) {
-                            Log.d(TAG, "Update detected [EN]: ${anime.title} ${anime.episodes} -> ${result.remote.episodes} via ${result.remote.source}")
-                            updates += AnimeUpdate(
-                                animeId = anime.id,
-                                title = anime.title,
-                                currentEpisodes = anime.episodes,
-                                newEpisodes = result.remote.episodes,
-                                source = result.remote.source
-                            )
-                        }
+            when {
+                needsTotal -> match.totalEpisodes?.let { total ->
+                    airingById[anime.id] = existing!!.copy(totalEpisodes = total)
+                    Log.d(TAG, "AniLibria total for \"${anime.title}\": $total")
+                }
+                match.isOngoing == true -> {
+                    val aired = match.airedEpisodes
+                    if (aired != null && aired > 0) {
+                        airingById[anime.id] = AiringProgress(
+                            animeId = anime.id,
+                            seasonNumber = null,
+                            airedEpisodes = aired,
+                            totalEpisodes = match.totalEpisodes,
+                            updatedAt = now,
+                        )
+                        Log.d(TAG, "AniLibria airing for \"${anime.title}\": $aired/${match.totalEpisodes}")
                     }
-                    ResolveResult.NotFound -> unresolved += anime
-                    ResolveResult.Skipped -> Unit
                 }
             }
-            delay(CHUNK_DELAY_MS)
+            delay(FALLBACK_ITEM_DELAY_MS)
         }
+    }
 
-        for (chunk in unresolved.chunked(MAL_CHUNK_SIZE)) {
-            for (anime in chunk) {
-                val remote = resolveMalFallback(anime) ?: continue
-                if (remote.episodes > anime.episodes) {
-                    Log.d(TAG, "Update detected [EN fallback]: ${anime.title} ${anime.episodes} -> ${remote.episodes} via ${remote.source}")
-                    updates += AnimeUpdate(
-                        animeId = anime.id,
-                        title = anime.title,
-                        currentEpisodes = anime.episodes,
-                        newEpisodes = remote.episodes,
-                        source = remote.source
+    /** Батч-дозагрузка снимков для anilistId, которых ещё нет в кэше. */
+    private suspend fun backfillMediaCache(ids: List<Int>, mediaCache: MutableMap<Int, EpisodeCheckMedia>) {
+        val missing = ids.toSet() - mediaCache.keys
+        if (missing.isEmpty()) return
+        repository.episodeCheckByAnilistIds(missing.toList())
+            .onSuccess { fetched -> fetched.forEach { mediaCache[it.anilistId] = it } }
+            .onFailure { Log.w(TAG, "Media cache backfill failed: ${it.message}") }
+    }
+
+    // ==========================================================
+    // Этап 1–2: AniList батчи (id_in / idMal_in)
+    // ==========================================================
+
+    private suspend fun resolveByAnilistBatch(
+        animeList: List<Anime>,
+        resolutions: MutableMap<String, Resolution>,
+        mediaCache: MutableMap<Int, EpisodeCheckMedia>
+    ) {
+        val withId = animeList.filter { it.anilistId != null }
+        if (withId.isEmpty()) return
+        val fetched = repository.episodeCheckByAnilistIds(withId.mapNotNull { it.anilistId })
+            .getOrElse { e ->
+                Log.w(TAG, "AniList id batch failed: ${e.message}")
+                return
+            }
+        fetched.forEach { mediaCache[it.anilistId] = it }
+        for (anime in withId) {
+            val media = mediaCache[anime.anilistId] ?: continue
+            if (!trustIdMatch(anime, media)) {
+                Log.d(TAG, "byId distrusted: \"${anime.title}\" vs \"${media.titleRomaji}\"")
+                continue
+            }
+            resolutions[anime.id] = media.toResolution()
+            backfillIds(anime, media)
+        }
+    }
+
+    private suspend fun resolveByMalBatch(
+        animeList: List<Anime>,
+        resolutions: MutableMap<String, Resolution>,
+        mediaCache: MutableMap<Int, EpisodeCheckMedia>
+    ) {
+        // Shikimori id ≈ MAL id: у Shikimori аниме нумеруются идентификаторами MAL.
+        val pending = animeList.filter { it.id !in resolutions && effectiveMalId(it) != null }
+        if (pending.isEmpty()) return
+        val fetched = repository.episodeCheckByMalIds(pending.mapNotNull(::effectiveMalId))
+            .getOrElse { e ->
+                Log.w(TAG, "AniList idMal batch failed: ${e.message}")
+                return
+            }
+        val byMal = fetched.filter { it.malId != null }.associateBy { it.malId!! }
+        fetched.forEach { mediaCache[it.anilistId] = it }
+        for (anime in pending) {
+            val media = byMal[effectiveMalId(anime)] ?: continue
+            if (!trustIdMatch(anime, media)) continue
+            resolutions[anime.id] = media.toResolution()
+            backfillIds(anime, media)
+        }
+    }
+
+    private fun effectiveMalId(anime: Anime): Int? = anime.malId ?: anime.shikimoriId
+
+    /** Дозаписываем найденные внешние id — следующий прогон пойдёт быстрой веткой. */
+    private suspend fun backfillIds(anime: Anime, media: EpisodeCheckMedia) {
+        runCatching {
+            if (anime.anilistId == null) localDataSource.setAnilistId(anime.id, media.anilistId)
+            val mal = media.malId
+            if (anime.malId == null && mal != null) localDataSource.setMalId(anime.id, mal)
+        }
+    }
+
+    // ==========================================================
+    // Этап 3: точечный byId у «родного» источника языка
+    // ==========================================================
+
+    private suspend fun resolveByNativeSourceById(
+        animeList: List<Anime>,
+        resolutions: MutableMap<String, Resolution>,
+        language: AppLanguage
+    ) {
+        val pending = animeList.filter { it.id !in resolutions }
+        for (anime in pending) {
+            when (language) {
+                AppLanguage.RU -> {
+                    val id = anime.shikimoriId ?: anime.malId ?: continue
+                    val remote = retry429 { repository.shikimoriById(id, AppLanguage.RU) }
+                        .getOrNull() ?: continue
+                    if (remote.episodes <= 0) continue
+                    if (!isTitleMatch(anime, remote)) continue
+                    resolutions[anime.id] = Resolution(
+                        source = "Shikimori",
+                        aired = remote.episodes,
+                        total = null,
+                        anilistId = anime.anilistId,
+                        ongoing = remote.isOngoing,
+                        airedNow = remote.airedEpisodes,
+                        totalPlanned = remote.totalEpisodes,
                     )
                 }
-                delay(MAL_ITEM_DELAY_MS)
+                AppLanguage.EN -> {
+                    val id = anime.malId ?: continue
+                    val remote = retry429 { repository.malById(id, AppLanguage.EN) }
+                        .getOrNull() ?: continue
+                    if (remote.episodes <= 0) continue
+                    if (!isTitleMatch(anime, remote)) continue
+                    resolutions[anime.id] = Resolution(
+                        source = "MAL",
+                        aired = remote.episodes,
+                        total = null,
+                        anilistId = anime.anilistId,
+                        ongoing = remote.isOngoing,
+                        totalPlanned = remote.totalEpisodes,
+                    )
+                }
             }
-            delay(MAL_CHUNK_DELAY_MS)
-        }
-
-        return updates
-    }
-
-    private suspend fun resolveAniList(anime: Anime): ResolveResult {
-        anime.anilistId?.let { id ->
-            val byIdResult = retry429 { repository.mediaByAnilistId(id) }
-            byIdResult.getOrNull()?.let { remote ->
-                val matched = remote.episodes > 0 && isTitleMatch(anime.title, remote)
-                Log.d(TAG, "AniList byId: local=\"${anime.title}\" remote=\"${remote.title}\" eps=${remote.episodes} matched=$matched")
-                if (matched) return ResolveResult.Found(RemoteEpisodes(remote.episodes, "AniList"))
-            }
-
-            if (byIdResult.isFailure && isTransientFailure(byIdResult.exceptionOrNull())) {
-                return ResolveResult.Skipped
-            }
-        }
-
-        if (!shouldRetryNotFound(anime.anilistNotFoundAt)) return ResolveResult.NotFound
-
-        val foundResult = retry429 {
-            repository.searchAnimeAniListOnly(query = anime.title, language = AppLanguage.EN, limit = 5)
-        }
-        val found = pickMatchedResult(anime.title, foundResult.getOrNull())
-            ?.takeIf { it.result.episodes > 0 }
-
-        return if (found != null) {
-            found.result.externalId?.toIntOrNull()?.let { localDataSource.setAnilistId(anime.id, it) }
-            if (found.score >= DIRECT_NOTIFY_FROM_SEARCH_SCORE) {
-                ResolveResult.Found(RemoteEpisodes(found.result.episodes, "AniList"))
-            } else {
-                ResolveResult.Skipped
-            }
-        } else if (foundResult.isFailure && isTransientFailure(foundResult.exceptionOrNull())) {
-            ResolveResult.Skipped
-        } else {
-            localDataSource.markAnilistNotFound(anime.id, System.currentTimeMillis())
-            ResolveResult.NotFound
+            delay(FALLBACK_ITEM_DELAY_MS)
         }
     }
 
-    private suspend fun resolveShikimori(anime: Anime): RemoteEpisodes? {
-        anime.shikimoriId?.let { id ->
-            val byIdResult = retry429 { repository.shikimoriById(id, AppLanguage.RU) }
-            byIdResult.getOrNull()?.let { remote ->
-                val matched = remote.episodes > 0 && isTitleMatch(anime.title, remote)
-                Log.d(TAG, "Shikimori byId: local=\"${anime.title}\" remote=\"${remote.title}\" eps=${remote.episodes} matched=$matched")
-                if (matched) return RemoteEpisodes(remote.episodes, "Shikimori")
+    // ==========================================================
+    // Этап 4: поиск по названиям (основное → второе), источники по языку
+    // ==========================================================
+
+    private suspend fun resolveByTitleSearch(
+        animeList: List<Anime>,
+        resolutions: MutableMap<String, Resolution>,
+        language: AppLanguage
+    ) {
+        val pending = animeList.filter { it.id !in resolutions }
+        for (anime in pending) {
+            // Основное название первым, затем альтернативы на других языках.
+            val queries = listOfNotNull(
+                anime.title.takeIf { it.isNotBlank() },
+                anime.titleEn?.takeIf { it.isNotBlank() },
+                anime.titleRu?.takeIf { it.isNotBlank() }
+            ).distinctBy { it.lowercase() }
+            if (queries.isEmpty()) continue
+
+            val sources = when (language) {
+                AppLanguage.RU -> listOf(SearchSource.SHIKIMORI, SearchSource.ANILIST)
+                AppLanguage.EN -> listOf(SearchSource.ANILIST, SearchSource.MAL)
             }
-            if (byIdResult.isFailure && isTransientFailure(byIdResult.exceptionOrNull())) {
-                return null
+
+            outer@ for (source in sources) {
+                if (!shouldRetryNotFound(notFoundAt(anime, source))) continue
+                var sawTransientFailure = false
+                var searched = false
+                for (query in queries) {
+                    // Кириллический запрос имеет смысл только на Shikimori.
+                    if (source != SearchSource.SHIKIMORI && !query.hasLatin()) continue
+                    searched = true
+                    val result = retry429 { search(source, query) }
+                    if (result.isFailure) {
+                        if (isTransientFailure(result.exceptionOrNull())) sawTransientFailure = true
+                        continue
+                    }
+                    val found = pickMatchedResult(anime, result.getOrNull())
+                        ?.takeIf { it.result.episodes > 0 && it.score >= DIRECT_NOTIFY_FROM_SEARCH_SCORE }
+                        ?: continue
+
+                    persistDiscoveredId(anime, source, found.result)
+                    resolutions[anime.id] = Resolution(
+                        source = source.label,
+                        aired = found.result.episodes,
+                        total = null,
+                        anilistId = if (source == SearchSource.ANILIST) {
+                            found.result.externalId?.toIntOrNull()
+                        } else anime.anilistId,
+                        ongoing = found.result.isOngoing,
+                        airedNow = found.result.airedEpisodes,
+                        totalPlanned = found.result.totalEpisodes,
+                    )
+                    break@outer
+                }
+                // Помечаем not-found только при завершённом поиске без сетевых сбоев.
+                if (searched && !sawTransientFailure) markNotFound(anime, source)
+                delay(FALLBACK_ITEM_DELAY_MS)
             }
         }
+    }
 
-        if (!shouldRetryNotFound(anime.shikimoriNotFoundAt)) return null
+    private enum class SearchSource(val label: String) {
+        ANILIST("AniList"),
+        SHIKIMORI("Shikimori"),
+        MAL("MAL")
+    }
 
-        val foundResult = retry429 {
-            repository.searchAnimeShikimoriOnly(query = anime.title, language = AppLanguage.RU, allowZeroEpisodes = true)
+    private suspend fun search(source: SearchSource, query: String): Result<List<ApiSearchResult>> =
+        when (source) {
+            SearchSource.ANILIST -> repository.searchAnimeAniListOnly(query, AppLanguage.EN, limit = 5)
+            SearchSource.SHIKIMORI -> repository.searchAnimeShikimoriOnly(query, AppLanguage.RU, allowZeroEpisodes = true)
+            SearchSource.MAL -> repository.searchAnimeMalOnly(query, AppLanguage.EN, limit = 5)
         }
-        val found = pickMatchedResult(anime.title, foundResult.getOrNull())
-            ?.takeIf { it.result.episodes > 0 }
 
-        return if (found != null) {
-            found.result.externalId?.toIntOrNull()?.let { localDataSource.setShikimoriId(anime.id, it) }
-            if (found.score >= DIRECT_NOTIFY_FROM_SEARCH_SCORE) {
-                RemoteEpisodes(found.result.episodes, "Shikimori")
-            } else {
-                null
+    private fun notFoundAt(anime: Anime, source: SearchSource): Long? = when (source) {
+        SearchSource.ANILIST -> anime.anilistNotFoundAt
+        SearchSource.SHIKIMORI -> anime.shikimoriNotFoundAt
+        SearchSource.MAL -> anime.malNotFoundAt
+    }
+
+    private suspend fun markNotFound(anime: Anime, source: SearchSource) {
+        val now = System.currentTimeMillis()
+        runCatching {
+            when (source) {
+                SearchSource.ANILIST -> localDataSource.markAnilistNotFound(anime.id, now)
+                SearchSource.SHIKIMORI -> localDataSource.markShikimoriNotFound(anime.id, now)
+                SearchSource.MAL -> localDataSource.markMalNotFound(anime.id, now)
             }
-        } else if (foundResult.isFailure && isTransientFailure(foundResult.exceptionOrNull())) {
-            null
-        } else {
-            localDataSource.markShikimoriNotFound(anime.id, System.currentTimeMillis())
-            null
         }
     }
 
-    private suspend fun resolveMalFallback(anime: Anime): RemoteEpisodes? {
-        anime.malId?.let { id ->
-            val byIdResult = retry429 { repository.malById(id, AppLanguage.EN) }
-            byIdResult.getOrNull()?.let { remote ->
-                val matched = remote.episodes > 0 && isTitleMatch(anime.title, remote)
-                Log.d(TAG, "MAL byId: local=\"${anime.title}\" remote=\"${remote.title}\" eps=${remote.episodes} matched=$matched")
-                if (matched) return RemoteEpisodes(remote.episodes, "MAL")
+    private suspend fun persistDiscoveredId(anime: Anime, source: SearchSource, result: ApiSearchResult) {
+        val extId = result.externalId?.toIntOrNull() ?: return
+        runCatching {
+            when (source) {
+                SearchSource.ANILIST -> if (anime.anilistId == null) localDataSource.setAnilistId(anime.id, extId)
+                SearchSource.SHIKIMORI -> {
+                    if (anime.shikimoriId == null) localDataSource.setShikimoriId(anime.id, extId)
+                    val mal = result.malId
+                    if (anime.malId == null && mal != null) localDataSource.setMalId(anime.id, mal)
+                }
+                SearchSource.MAL -> if (anime.malId == null) localDataSource.setMalId(anime.id, extId)
             }
-            if (byIdResult.isFailure && isTransientFailure(byIdResult.exceptionOrNull())) {
-                return null
-            }
-        }
-
-        if (!shouldRetryNotFound(anime.malNotFoundAt)) return null
-
-        val foundResult = retry429 {
-            repository.searchAnimeMalOnly(query = anime.title, language = AppLanguage.EN, limit = 5)
-        }
-        val found = pickMatchedResult(anime.title, foundResult.getOrNull())
-            ?.takeIf { it.result.episodes > 0 }
-
-        return if (found != null) {
-            found.result.externalId?.toIntOrNull()?.let { localDataSource.setMalId(anime.id, it) }
-            if (found.score >= DIRECT_NOTIFY_FROM_SEARCH_SCORE) {
-                RemoteEpisodes(found.result.episodes, "MAL")
-            } else {
-                null
-            }
-        } else if (foundResult.isFailure && isTransientFailure(foundResult.exceptionOrNull())) {
-            null
-        } else {
-            localDataSource.markMalNotFound(anime.id, System.currentTimeMillis())
-            null
         }
     }
+
+    // ==========================================================
+    // Франшиза: сумма вышедших серий по цепочке PREQUEL/SEQUEL
+    // ==========================================================
+
+    private suspend fun expandFranchiseComponents(
+        seeds: Map<String, Int>,
+        mediaCache: MutableMap<Int, EpisodeCheckMedia>
+    ): Map<String, Set<Int>> {
+        if (seeds.isEmpty()) return emptyMap()
+        // Компонента связности каждой записи; фронтиры всех сидов расширяем
+        // синхронно — недостающие узлы дотягиваем ОДНИМ батчем на уровень.
+        val components = seeds.mapValues { (_, seedId) -> linkedSetOf(seedId) }
+        var frontiers: Map<String, Set<Int>> = seeds.mapValues { (_, seedId) -> setOf(seedId) }
+
+        var depth = 0
+        while (frontiers.isNotEmpty() && depth < FRANCHISE_MAX_DEPTH) {
+            depth++
+            val needed = frontiers.values.flatten().toSet() - mediaCache.keys
+            if (needed.isNotEmpty()) {
+                val fetched = repository.episodeCheckByAnilistIds(needed.toList())
+                    .getOrElse { e ->
+                        Log.w(TAG, "Franchise batch failed: ${e.message}")
+                        emptyList()
+                    }
+                fetched.forEach { mediaCache[it.anilistId] = it }
+            }
+            val nextFrontiers = mutableMapOf<String, Set<Int>>()
+            for ((animeId, frontier) in frontiers) {
+                val component = components.getValue(animeId)
+                val next = mutableSetOf<Int>()
+                for (nodeId in frontier) {
+                    val media = mediaCache[nodeId] ?: continue
+                    for (rel in media.relations) {
+                        if (!isSeasonFormat(rel.format)) continue
+                        if (rel.anilistId in component) continue
+                        if (component.size >= FRANCHISE_MAX_NODES) break
+                        component += rel.anilistId
+                        next += rel.anilistId
+                    }
+                }
+                if (next.isNotEmpty()) nextFrontiers[animeId] = next
+            }
+            frontiers = nextFrontiers
+        }
+        return components
+    }
+
+    // ==========================================================
+    // Выходящий сезон: RELEASING-узел компоненты + номер сезона
+    // ==========================================================
+
+    private fun isReleasingSeason(status: String?, format: String?): Boolean =
+        status == "RELEASING" && isSeasonFormat(format)
+
+    /**
+     * Прогресс выходящего сезона внутри компоненты франшизы: находим RELEASING-узел
+     * (при нескольких берём самый поздний по цепочке), номер сезона — длина
+     * PREQUEL-цепочки от него до корня.
+     *
+     * Если RELEASING-узла больше нет, а плашка с прошлого прохода была — сезон
+     * завершился: закрываем прогресс финальным счётом (FINISHED-узел, aired == total).
+     */
+    private fun airingProgressOf(
+        animeId: String,
+        component: Set<Int>,
+        mediaCache: Map<Int, EpisodeCheckMedia>,
+        prev: AiringProgress?,
+        now: Long,
+    ): AiringProgress? {
+        val releasing = component
+            .mapNotNull { mediaCache[it] }
+            .filter { isReleasingSeason(it.status, it.format) }
+        val node = releasing.maxByOrNull { seasonNumberOf(it, mediaCache) }
+        if (node != null) {
+            val aired = node.airedEpisodes
+            if (aired <= 0 && node.totalEpisodes == null) return null
+            return AiringProgress(
+                animeId = animeId,
+                seasonNumber = seasonNumberOf(node, mediaCache),
+                airedEpisodes = aired.coerceAtLeast(0),
+                totalEpisodes = node.totalEpisodes?.takeIf { it > 0 },
+                updatedAt = now,
+            )
+        }
+
+        if (prev == null) return null
+        val finished = component
+            .mapNotNull { mediaCache[it] }
+            .filter { it.status == "FINISHED" && isSeasonFormat(it.format) }
+            .maxByOrNull { seasonNumberOf(it, mediaCache) }
+            ?: return null
+        val finalCount = finished.totalEpisodes ?: finished.airedEpisodes
+        return closedRow(prev, animeId, seasonNumberOf(finished, mediaCache), finalCount, now)
+    }
+
+    /**
+     * Закрытая плашка «сезон вышел полностью»: aired == total, бар 100%.
+     * Живёт [FINISHED_ROW_TTL_MS] от момента закрытия (updatedAt наследуется,
+     * а не обновляется каждым проходом), потом строка не переписывается и исчезает.
+     */
+    private fun closedRow(
+        prev: AiringProgress,
+        animeId: String,
+        seasonNumber: Int?,
+        finalCount: Int,
+        now: Long,
+    ): AiringProgress? {
+        if (finalCount <= 0) return null
+        val wasClosed = prev.totalEpisodes != null && prev.airedEpisodes >= prev.totalEpisodes
+        val closedAt = if (wasClosed) prev.updatedAt else now
+        if (now - closedAt > FINISHED_ROW_TTL_MS) return null
+        return AiringProgress(
+            animeId = animeId,
+            seasonNumber = seasonNumber,
+            airedEpisodes = finalCount,
+            totalEpisodes = finalCount,
+            updatedAt = closedAt,
+        )
+    }
+
+    /**
+     * Номер сезона = 1 + число PREQUEL-переходов по «сезонным» форматам.
+     * Приквел вне кэша всё равно засчитывается (сезон минимум +1), дальше цепочка
+     * не продолжается — при обрыве получаем нижнюю оценку номера.
+     */
+    private fun seasonNumberOf(node: EpisodeCheckMedia, mediaCache: Map<Int, EpisodeCheckMedia>): Int {
+        var season = 1
+        var current: EpisodeCheckMedia? = node
+        val visited = mutableSetOf(node.anilistId)
+        while (current != null) {
+            val prequelId = current.relations
+                .firstOrNull { it.relationType == "PREQUEL" && isSeasonFormat(it.format) }
+                ?.anilistId ?: break
+            if (!visited.add(prequelId)) break
+            season++
+            current = mediaCache[prequelId]
+        }
+        return season
+    }
+
+    /** «Сезонные» форматы: полнометражки/спешлы в сумму серий не входят. */
+    private fun isSeasonFormat(format: String?): Boolean =
+        format == "TV" || format == "TV_SHORT" || format == "ONA"
+
+    // ==========================================================
+    // Сопоставление названий
+    // ==========================================================
+
+    private fun localTitles(anime: Anime): List<String> =
+        listOfNotNull(anime.title, anime.titleEn, anime.titleRu).filter { it.isNotBlank() }
+
+    /**
+     * Сохранённому id верим почти всегда (его ставили наши же флоу сопоставления).
+     * Отклоняем только явный рассинхрон, и только когда названия вообще сравнимы:
+     * кириллическое «Атака титанов» против romaji честно сравнить нельзя.
+     */
+    private fun trustIdMatch(anime: Anime, media: EpisodeCheckMedia): Boolean {
+        val remotes = listOfNotNull(media.titleRomaji, media.titleEnglish)
+        if (remotes.isEmpty()) return true
+        val comparable = localTitles(anime).filter { it.hasLatin() }
+        if (comparable.isEmpty()) return true
+        val score = comparable.maxOf { TitleMatcher.bestScore(it, remotes) }
+        return score >= ID_TRUST_SCORE
+    }
+
+    private fun isTitleMatch(anime: Anime, remote: ApiSearchResult): Boolean {
+        val candidates = listOfNotNull(remote.title, remote.altTitle)
+        return localTitles(anime).any { local ->
+            TitleMatcher.bestScore(local, candidates) >= STRICT_MATCH_SCORE
+        }
+    }
+
+    private fun pickMatchedResult(anime: Anime, results: List<ApiSearchResult>?): MatchedResult? {
+        val best = results.orEmpty()
+            .map { candidate ->
+                val remotes = listOfNotNull(candidate.title, candidate.altTitle)
+                val score = localTitles(anime).maxOfOrNull { TitleMatcher.bestScore(it, remotes) } ?: 0.0
+                MatchedResult(candidate, score)
+            }
+            .maxByOrNull { it.score } ?: return null
+        Log.d(TAG, "Search best: local=\"${anime.title}\" remote=\"${best.result.title}\" score=${best.score}")
+        return best.takeIf { it.score >= STRICT_MATCH_SCORE }
+    }
+
+    private fun String.hasLatin(): Boolean = any { it in 'a'..'z' || it in 'A'..'Z' }
+
+    // ==========================================================
+    // Сетевые мелочи
+    // ==========================================================
 
     private suspend fun <T> retry429(
         maxAttempts: Int = MAX_ATTEMPTS,
@@ -229,60 +679,6 @@ class BatchEpisodeCheckUseCase(
         return (System.currentTimeMillis() - ts) >= NOT_FOUND_TTL_MS
     }
 
-    private fun pickMatchedResult(
-        localTitle: String,
-        results: List<ApiSearchResult>?
-    ): MatchedResult? {
-        val best = results.orEmpty()
-            .filter { it.episodes > 0 }
-            .map { candidate ->
-                val score = bestTitleScore(localTitle, candidate)
-                candidate to score
-            }
-            .maxByOrNull { it.second }
-
-        if (best == null) return null
-        val (candidate, score) = best
-        val matched = isTitleMatch(localTitle, candidate)
-        if (matched) {
-            Log.d(
-                TAG,
-                "Title match accepted: local=\"$localTitle\" remote=\"${candidate.title}\" alt=\"${candidate.altTitle}\" score=$score"
-            )
-            return MatchedResult(candidate, score)
-        }
-        Log.d(
-            TAG,
-            "Title match rejected: local=\"$localTitle\" remote=\"${candidate.title}\" alt=\"${candidate.altTitle}\" score=$score"
-        )
-        return null
-    }
-
-    private fun isTitleMatch(localTitle: String, remote: ApiSearchResult): Boolean {
-        val score = bestTitleScore(localTitle, remote)
-        val localNorm = localTitle.normalizeForSearch()
-        val remoteNorm = remote.title.normalizeForSearch()
-        val shorter = minOf(localNorm.length, remoteNorm.length).toDouble()
-        val longer = maxOf(localNorm.length, remoteNorm.length).toDouble()
-        val lenRatio = if (longer == 0.0) 0.0 else shorter / longer
-
-        // Reject very short/partial aliases that can score high accidentally.
-        if (lenRatio < MIN_LENGTH_RATIO && score < VERY_HIGH_MATCH_SCORE) return false
-        if (score >= STRICT_MATCH_SCORE) return true
-
-        // Allow strong containment for long titles even with suffixes/subtitles.
-        val strongContains = localNorm.length >= MIN_CONTAINS_LEN &&
-            remoteNorm.length >= MIN_CONTAINS_LEN &&
-            (localNorm.contains(remoteNorm) || remoteNorm.contains(localNorm))
-
-        return strongContains && score >= CONTAINS_MATCH_SCORE
-    }
-
-    private fun bestTitleScore(localTitle: String, remote: ApiSearchResult): Double {
-        val candidates = listOfNotNull(remote.title, remote.altTitle)
-        return TitleMatcher.bestScore(localTitle, candidates)
-    }
-
     private fun isTransientFailure(throwable: Throwable?): Boolean {
         val msg = throwable?.message?.lowercase().orEmpty()
         return msg.contains("429")
@@ -294,9 +690,31 @@ class BatchEpisodeCheckUseCase(
             || msg.contains("ioexception")
     }
 
-    private data class RemoteEpisodes(
-        val episodes: Int,
-        val source: String
+    private fun EpisodeCheckMedia.toResolution() = Resolution(
+        source = "AniList",
+        aired = airedEpisodes,
+        total = totalEpisodes,
+        anilistId = anilistId
+    )
+
+    /** Итог полного детекта: предложения обновлений + снимок выходящих сезонов. */
+    private data class DetectResult(
+        val updates: List<AnimeUpdate>,
+        val airing: List<AiringProgress>,
+    )
+
+    /** Итог резолва записи: сколько серий вышло и где искать франшизу. */
+    private data class Resolution(
+        val source: String,
+        val aired: Int,
+        val total: Int?,
+        val anilistId: Int?,
+        /** Онгоинг по данным источника (Shikimori/AniLibria/MAL); null = статус неизвестен. */
+        val ongoing: Boolean? = null,
+        /** Вышло серий сейчас — для прогресс-бара, когда AniList-путь недоступен. */
+        val airedNow: Int? = null,
+        /** Заявлено серий всего (аналогично). */
+        val totalPlanned: Int? = null,
     )
 
     private data class MatchedResult(
@@ -304,27 +722,20 @@ class BatchEpisodeCheckUseCase(
         val score: Double
     )
 
-    private sealed interface ResolveResult {
-        data class Found(val remote: RemoteEpisodes) : ResolveResult
-        data object NotFound : ResolveResult
-        data object Skipped : ResolveResult
-    }
-
     private companion object {
         private const val TAG = "BatchEpisodeCheck"
-        private const val CHUNK_SIZE = 50
-        private const val CHUNK_DELAY_MS = 1_200L
-        private const val MAL_CHUNK_SIZE = 20
-        private const val MAL_CHUNK_DELAY_MS = 2_000L
-        private const val MAL_ITEM_DELAY_MS = 450L
+        private const val FALLBACK_ITEM_DELAY_MS = 350L
         private const val STRICT_MATCH_SCORE = 0.91
-        private const val VERY_HIGH_MATCH_SCORE = 0.97
-        private const val CONTAINS_MATCH_SCORE = 0.88
         private const val DIRECT_NOTIFY_FROM_SEARCH_SCORE = 0.96
-        private const val MIN_LENGTH_RATIO = 0.55
-        private const val MIN_CONTAINS_LEN = 8
+        private const val ID_TRUST_SCORE = 0.30
         private const val MAX_ATTEMPTS = 3
         private const val RETRY_BASE_DELAY_MS = 800L
         private const val NOT_FOUND_TTL_MS = 14L * 24L * 60L * 60L * 1000L
+        private const val FRANCHISE_MAX_DEPTH = 6
+        private const val FRANCHISE_MAX_NODES = 30
+        /** Бюджет AniLibria-запросов на один проход проверки. */
+        private const val ANILIBRIA_MAX_LOOKUPS = 10
+        /** Сколько держим закрытую плашку «сезон вышел полностью» после завершения. */
+        private const val FINISHED_ROW_TTL_MS = 14L * 24L * 60L * 60L * 1000L
     }
 }

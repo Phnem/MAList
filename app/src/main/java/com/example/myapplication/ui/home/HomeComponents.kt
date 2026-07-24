@@ -706,8 +706,8 @@ fun SwipeBackground(dismissState: SwipeToDismissBoxState) {
 
     val color by animateColorAsState(
         targetValue = when (direction) {
-            SwipeToDismissBoxValue.StartToEnd -> RateColor3.copy(alpha = 0.2f)
-            SwipeToDismissBoxValue.EndToStart -> BrandRed.copy(alpha = 0.2f)
+            SwipeToDismissBoxValue.StartToEnd -> Color(0xFFFFD600).copy(alpha = 0.85f)
+            SwipeToDismissBoxValue.EndToStart -> Color(0xFFFF1744).copy(alpha = 0.85f)
             SwipeToDismissBoxValue.Settled -> Color.Transparent
         },
         label = "swipeBg"
@@ -746,7 +746,11 @@ fun SwipeBackground(dismissState: SwipeToDismissBoxState) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                tint = if (direction == SwipeToDismissBoxValue.Settled) {
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                } else {
+                    Color.White
+                },
                 modifier = Modifier
                     .size(26.dp)
                     .graphicsLayer {

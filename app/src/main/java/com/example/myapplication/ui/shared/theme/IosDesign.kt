@@ -51,16 +51,16 @@ object IosDesign {
     object Category {
         val Account = Color(0xFFE85002)      // фирменный оранжевый
         val Cloud = Color(0xFF646464)        // серый (синхронизация/облако)
-        val Language = Color(0xFFB0562A)     // обожжённая глина
+        val Language = Color(0xFFE85002)     // обожжённая глина
         val Appearance = Color(0xFFF16001)   // яркий оранжевый (внешний вид)
         val Media = Color(0xFF333333)        // тёмно-серый (тип контента/медиа)
         val Notifications = Color(0xFFC10801) // глубокий красный
         val Security = Color(0xFFC10801)     // глубокий красный
-        val Network = Color(0xFFA98963)      // тёмный песочный
+        val Network = Color(0xFFE85002)      // тёмный песочный
         val Ai = Color(0xFF8A8A8E)           // средне-серый
         val Storage = Color(0xFF77716C)      // тёплый серый
-        val Update = Color(0xFFD08A4A)       // янтарный
-        val Support = Color(0xFFB08968)      // светлая глина (связь/поддержка)
+        val Update = Color(0xFFE85002)       // янтарный
+        val Support = Color(0xFFE85002)      // светлая глина (связь/поддержка)
         val Donate = Color(0xFFD93A2B)       // алый (осветлённый #C10801)
     }
 

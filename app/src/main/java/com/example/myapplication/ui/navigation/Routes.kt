@@ -15,7 +15,7 @@ data object WelcomeRoute
 data object HomeRoute
 
 @Serializable
-data class DetailsRoute(val animeId: String)
+data class DetailsRoute(val animeId: String, val openEpisodes: Boolean = false)
 
 @Serializable
 data class AddEditRoute(val animeId: String? = null)
@@ -36,4 +36,10 @@ fun NavDestination?.isSplashDestination(): Boolean {
     return route == serialName ||
         route.endsWith(".SplashRoute") ||
         route.contains("SplashRoute")
+}
+
+/** Определяет, что destination — [DetailsRoute] (для эффекта «вдавливания» Home под деталями). */
+fun NavDestination?.isDetailsDestination(): Boolean {
+    val route = this?.route ?: return false
+    return route.contains("DetailsRoute")
 }

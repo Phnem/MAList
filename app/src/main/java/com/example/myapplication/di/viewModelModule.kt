@@ -33,7 +33,8 @@ val viewModelModule = module {
             settingsDataStore = get(named("settings")),
             addFromApiUseCase = get(),
             statsFooterPhraseUseCase = get(),
-            batchEpisodeCheckUseCase = get()
+            batchEpisodeCheckUseCase = get(),
+            webLinksStore = get(),
         )
     }
     viewModel {
@@ -63,6 +64,7 @@ val viewModelModule = module {
             repairDbCoordinator = get(),
             collectionPdfGenerator = get(),
             titleDubbingCoordinator = get(),
+            enrichmentCoordinator = get(),
             aiCredentialsStore = get(),
             app = androidApplication()
         )
@@ -83,12 +85,52 @@ val viewModelModule = module {
             apiKeySyncRepository = get(),
         )
     }
+    viewModel { (language: com.example.myapplication.network.AppLanguage) ->
+        com.example.myapplication.ui.details.DownloadWizardViewModel(
+            application = androidApplication(),
+            fileIpcManager = get(),
+            language = language,
+            localLibraryUseCase = get(),
+        )
+    }
     viewModel { (animeId: String) ->
         DetailsViewModel(
             animeId = animeId,
             repository = get(),
             settingsDataStore = get(named("settings")),
-            imageStorage = get()
+            imageStorage = get(),
+            webLinksStore = get(),
+            seasonEpisodesStore = get(),
+            seasonEpisodesResolver = get(),
+        )
+    }
+    // Local player (isolated feature — remove to unwire it).
+    viewModel { (animeId: String, animeTitle: String, animeMalId: Int?, animeAnilistId: Int?) ->
+        com.example.myapplication.localplayer.ui.LocalPlayerViewModel(
+            app = androidApplication(),
+            animeId = animeId,
+            animeTitle = animeTitle,
+            animeMalId = animeMalId,
+            animeAnilistId = animeAnilistId,
+            store = get(),
+            libraryUseCase = get(),
+            settingsDataStore = get(named("settings")),
+        )
+    }
+    viewModel { (anime: com.example.myapplication.data.models.Anime) ->
+        com.example.myapplication.ui.details.EpisodeMenuViewModel(
+            application = androidApplication(),
+            anime = anime,
+            mediaGateway = get(),
+            artworkRepository = get(),
+            playbackStore = get(),
+        )
+    }
+    viewModel { (anime: com.example.myapplication.data.models.Anime, episodeNumber: Int) ->
+        com.example.myapplication.media.ui.StreamWatchViewModel(
+            anime = anime,
+            episodeNumber = episodeNumber,
+            mediaGateway = get(),
         )
     }
 }

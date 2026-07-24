@@ -1,0 +1,27 @@
+-- Прогресс текущего выходящего сезона (детект батч-проверки серий).
+-- Локальная производная таблица (не синхронизируется): полностью перезаписывается
+-- каждым проходом проверки. Наличие строки = тайтл сейчас «в процессе» (онгоинг-сезон).
+CREATE TABLE airing_progress (
+    anime_id TEXT PRIMARY KEY NOT NULL,
+    -- Номер выходящего сезона в цепочке франшизы (1 = первый).
+    -- NULL: сезон найден не через AniList-франшизу (Shikimori/AniLibria) — номер неизвестен.
+    season_number INTEGER,
+    -- Сколько серий сезона уже вышло.
+    aired_episodes INTEGER NOT NULL,
+    -- Заявленное число серий сезона; NULL — ещё не анонсировано.
+    total_episodes INTEGER,
+    updated_at INTEGER NOT NULL
+);
+
+getAllAiringProgress:
+SELECT anime_id, season_number, aired_episodes, total_episodes, updated_at FROM airing_progress;
+
+upsertAiringProgress:
+INSERT OR REPLACE INTO airing_progress(anime_id, season_number, aired_episodes, total_episodes, updated_at)
+VALUES (?, ?, ?, ?, ?);
+
+deleteAllAiringProgress:
+DELETE FROM airing_progress;
+
+deleteAiringProgressByAnimeId:
+DELETE FROM airing_progress WHERE anime_id = ?;

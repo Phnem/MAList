@@ -131,6 +131,7 @@ import com.example.myapplication.utils.getAiConnectStrings
 import com.example.myapplication.utils.getDevRepairDbStrings
 import com.example.myapplication.utils.getTitleDubbingStrings
 import com.example.myapplication.utils.TitleDubbingStrings
+import com.example.myapplication.utils.getCollectionEnrichmentStrings
 import com.example.myapplication.utils.getGithubUpdateStrings
 import com.example.myapplication.utils.getStrings
 import com.example.myapplication.utils.performHaptic
@@ -165,6 +166,27 @@ fun SettingsScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val isDark = isAppInDarkTheme()
     val bg = IosDesign.groupedBackground(isDark)
+    val settingsBackground = remember(bg, isDark) {
+        if (isDark) {
+            Brush.verticalGradient(
+                colorStops = arrayOf(
+                    0f to Color(0xFF430B05),
+                    0.24f to Color(0xFF210907),
+                    0.58f to bg,
+                    1f to bg,
+                ),
+            )
+        } else {
+            Brush.verticalGradient(
+                colorStops = arrayOf(
+                    0f to Color(0xFFFFD9CC),
+                    0.28f to Color(0xFFFFEEE8),
+                    0.64f to bg,
+                    1f to bg,
+                ),
+            )
+        }
+    }
     val textC = MaterialTheme.colorScheme.onBackground
     val view = LocalView.current
     val context = LocalContext.current
@@ -175,9 +197,11 @@ fun SettingsScreen(
     val titleDubbingStrings = getTitleDubbingStrings(uiState.language)
     val githubUpdateStrings = getGithubUpdateStrings(uiState.language)
     val aiConnectStrings = getAiConnectStrings(uiState.language)
+    val enrichmentStrings = getCollectionEnrichmentStrings(uiState.language)
 
     var showCloudSheet by remember { mutableStateOf(false) }
     var showAiConnectSheet by remember { mutableStateOf(false) }
+    var showEnrichmentSheet by remember { mutableStateOf(false) }
     var showContactSheet by remember { mutableStateOf(false) }
     var showUpdateChangelogSheet by remember { mutableStateOf(false) }
     var showFdroidUpdateDialog by remember { mutableStateOf(false) }
@@ -195,7 +219,7 @@ fun SettingsScreen(
     ) { viewModel.onReturnedFromInstallSettings(context) }
 
     BackHandler(
-        enabled = showCloudSheet || showAiConnectSheet || showContactSheet || showUpdateChangelogSheet || activePicker != null ||
+        enabled = showCloudSheet || showAiConnectSheet || showEnrichmentSheet || showContactSheet || showUpdateChangelogSheet || activePicker != null ||
             uiState.showRepairDbLogDialog || uiState.showTitleDubbingNoAiDialog || showFdroidUpdateDialog || showGithubUpdatesEnableDialog,
     ) {
         when {
@@ -207,6 +231,7 @@ fun SettingsScreen(
             else -> {
                 showCloudSheet = false
                 showAiConnectSheet = false
+                showEnrichmentSheet = false
                 showContactSheet = false
                 showUpdateChangelogSheet = false
             }
@@ -215,7 +240,7 @@ fun SettingsScreen(
 
     // Мягкий блюр фона под модальными листами (§10, но без ударной физики — тут sheet).
     val blurRadius by animateDpAsState(
-        targetValue = if (showCloudSheet || showAiConnectSheet || showContactSheet || showUpdateChangelogSheet) 16.dp else 0.dp,
+        targetValue = if (showCloudSheet || showAiConnectSheet || showEnrichmentSheet || showContactSheet || showUpdateChangelogSheet) 16.dp else 0.dp,
         animationSpec = tween(300),
         label = "backgroundBlur"
     )
@@ -275,14 +300,18 @@ fun SettingsScreen(
             },
         )
     }
+    uiState.fullEnrichmentPromptGapCount?.let { gapCount ->
+        FullEnrichmentPromptDialog(gapCount = gapCount, viewModel = viewModel)
+    }
 
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
     IosSheetScaffold(
-        sheetVisible = showCloudSheet || showAiConnectSheet || showContactSheet || showUpdateChangelogSheet || activePicker != null,
+        sheetVisible = showCloudSheet || showAiConnectSheet || showEnrichmentSheet || showContactSheet || showUpdateChangelogSheet || activePicker != null,
         onDismiss = {
             showCloudSheet = false
             showAiConnectSheet = false
+            showEnrichmentSheet = false
             showContactSheet = false
             showUpdateChangelogSheet = false
             activePicker = null
@@ -296,7 +325,7 @@ fun SettingsScreen(
         // а плавающие стеклянные элементы (шапка, Share-FAB) сэмплируют его → настоящее
         // жидкое стекло с преломлением контента под ними (как бегунок рейтинга сэмплирует трек).
         val backdrop = rememberLayerBackdrop {
-            drawRect(bg)
+            drawRect(brush = settingsBackground)
             drawContent()
         }
         with(sharedTransitionScope) {
@@ -314,7 +343,7 @@ fun SettingsScreen(
                         clipInOverlayDuringTransition = OverlayClip(SquircleShape(IosDesign.RadiusLg))
                     )
                     .clip(SquircleShape(IosDesign.RadiusLg))
-                    .background(bg)
+                    .background(settingsBackground)
             ) {
                 val listState = rememberLazyListState()
 
@@ -390,6 +419,17 @@ fun SettingsScreen(
                                         iconWell = false,
                                         showChevron = true,
                                         onClick = { performHaptic(view, "light"); showCloudSheet = true },
+                                    )
+                                },
+                                {
+                                    IosRow(
+                                        title = enrichmentStrings.cardTitle,
+                                        subtitle = enrichmentStrings.cardSubtitle,
+                                        isDark = isDark,
+                                        icon = Icons.Filled.AutoFixHigh,
+                                        iconWell = false,
+                                        showChevron = true,
+                                        onClick = { performHaptic(view, "light"); showEnrichmentSheet = true },
                                     )
                                 },
                                 {
@@ -499,8 +539,6 @@ fun SettingsScreen(
                             DeveloperGroups(
                                 strings = strings,
                                 githubUpdateStrings = githubUpdateStrings,
-                                devRepairStrings = devRepairStrings,
-                                titleDubbingStrings = titleDubbingStrings,
                                 uiState = uiState,
                                 isDark = isDark,
                                 onMirrorDbToggle = { performHaptic(view, "light"); viewModel.setDevMirrorDb(it) },
@@ -515,8 +553,6 @@ fun SettingsScreen(
                                 onExportLogs = { performHaptic(view, "light"); viewModel.exportLogs(context) },
                                 onExportPdf = { performHaptic(view, "light"); viewModel.exportCollectionPdf(context) },
                                 onImportDb = { performHaptic(view, "light"); importDbPicker.launch("*/*") },
-                                onRepairDb = { performHaptic(view, "light"); viewModel.repairDatabase() },
-                                onTitleDubbing = { performHaptic(view, "light"); viewModel.runTitleDubbing() },
                             )
                         }
                     }
@@ -676,6 +712,10 @@ fun SettingsScreen(
                     showAiConnectSheet -> AiConnectSheet(
                         onDismiss = { showAiConnectSheet = false },
                     )
+                    showEnrichmentSheet -> CollectionEnrichmentSheet(
+                        viewModel = viewModel,
+                        onDismiss = { showEnrichmentSheet = false },
+                    )
                     showContactSheet -> ContactSheet(
                         onDismiss = { showContactSheet = false },
                     )
@@ -764,8 +804,6 @@ private fun SegIcon(icon: ImageVector, selected: Boolean, isDark: Boolean) {
 private fun DeveloperGroups(
     strings: UiStrings,
     githubUpdateStrings: GithubUpdateStrings,
-    devRepairStrings: DevRepairDbStrings,
-    titleDubbingStrings: TitleDubbingStrings,
     uiState: SettingsUiState,
     isDark: Boolean,
     onMirrorDbToggle: (Boolean) -> Unit,
@@ -776,8 +814,6 @@ private fun DeveloperGroups(
     onExportLogs: () -> Unit,
     onExportPdf: () -> Unit,
     onImportDb: () -> Unit,
-    onRepairDb: () -> Unit,
-    onTitleDubbing: () -> Unit,
 ) {
     val devIcon = Color(0xFF8E8E93)
     Column(verticalArrangement = Arrangement.spacedBy(30.dp)) {
@@ -859,28 +895,6 @@ private fun DeveloperGroups(
                         title = strings.devImportDbTitle, subtitle = strings.devImportDbSubtitle,
                         icon = Icons.Filled.FileOpen, iconBg = devIcon, isLoading = uiState.isImportingDb,
                         isDark = isDark, onClick = onImportDb,
-                    )
-                },
-                {
-                    DevActionRow(
-                        title = devRepairStrings.title, subtitle = devRepairStrings.subtitle,
-                        icon = Icons.Filled.AutoFixHigh, iconBg = devIcon, isLoading = uiState.isRepairingDb,
-                        isDark = isDark, onClick = onRepairDb,
-                    )
-                },
-                {
-                    val dubSubtitle = if (uiState.isTitleDubbing && uiState.titleDubbingTotal > 0) {
-                        titleDubbingStrings.runningTemplate.format(
-                            uiState.titleDubbingProcessed,
-                            uiState.titleDubbingTotal,
-                        )
-                    } else {
-                        titleDubbingStrings.subtitle
-                    }
-                    DevActionRow(
-                        title = titleDubbingStrings.title, subtitle = dubSubtitle,
-                        icon = Icons.Filled.Translate, iconBg = devIcon, isLoading = uiState.isTitleDubbing,
-                        isDark = isDark, onClick = onTitleDubbing,
                     )
                 },
             ),
