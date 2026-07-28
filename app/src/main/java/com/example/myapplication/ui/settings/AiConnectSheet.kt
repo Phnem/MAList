@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.myapplication.data.ai.AiProvider
 import com.example.myapplication.isAppInDarkTheme
+import com.example.myapplication.ui.shared.theme.IosDesign
 import com.example.myapplication.ui.shared.theme.OverlayThemeTokens
 import com.example.myapplication.ui.shared.theme.SnProFamily
 import com.example.myapplication.utils.getAiConnectStrings
@@ -81,13 +82,13 @@ fun AiConnectSheet(
     val accent = OverlayThemeTokens.AccentNeonGreen
 
     Column(
+        // Панель рисует IosSheetScaffold (общий iosSheetContainer) — здесь только контент.
         modifier = sharedModifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .background(sheetSurface, RoundedCornerShape(28.dp))
             .heightIn(max = 640.dp)
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 20.dp),
+            .padding(horizontal = 20.dp)
+            .padding(top = IosDesign.SheetContentTop, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Row(

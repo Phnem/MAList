@@ -156,7 +156,11 @@ fun IosSheetScaffold(
                     .heightIn(max = maxHeight * 0.94f)
                     .align(Alignment.BottomCenter)
                     .onSizeChanged { measuredPanelPx = it.height.toFloat() }
-                    .graphicsLayer { translationY = (1f - progress.value) * panelHeightPx + dragPx }
+                    // Смещение считаем от СВОЕЙ высоты слоя, а не от panelHeightPx: у панели по
+                    // высоте контента (sheetHeightFraction = null) на первых кадрах measuredPanelPx
+                    // ещё 0, и panelHeightPx подставляет догадку 0.9 экрана. Панель стартовала с
+                    // чужого офсета и дёргалась, когда приезжала реальная высота.
+                    .graphicsLayer { translationY = (1f - progress.value) * size.height + dragPx }
                     // iOS-глубина шторки (окантовка+блик+градиент+тень) — единый рецепт для всех
                     // непрозрачных панелей. Для прозрачной (Details рисует свой hero) — только clip.
                     .then(

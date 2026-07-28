@@ -73,6 +73,14 @@
             android:supportsPictureInPicture="true"
             android:theme="@style/Theme.MyApplication" />
 
+        <!-- Manga reader (isolated feature: com.example.myapplication.manga).
+             To remove the feature entirely, delete this activity + the manga package. -->
+        <activity
+            android:name="com.example.myapplication.manga.ui.MangaReaderActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|smallestScreenSize|keyboardHidden|screenLayout"
+            android:theme="@style/Theme.MyApplication" />
+
         <activity
             android:name="com.example.myapplication.media.ui.StreamPlayerActivity"
             android:exported="false"

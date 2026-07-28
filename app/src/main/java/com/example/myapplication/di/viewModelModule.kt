@@ -35,6 +35,8 @@ val viewModelModule = module {
             statsFooterPhraseUseCase = get(),
             batchEpisodeCheckUseCase = get(),
             webLinksStore = get(),
+            seasonEpisodesStore = get(),
+            episodePlaybackStore = get(),
         )
     }
     viewModel {
@@ -124,6 +126,28 @@ val viewModelModule = module {
             mediaGateway = get(),
             artworkRepository = get(),
             playbackStore = get(),
+        )
+    }
+    // Manga engine (isolated feature — remove to unwire it).
+    viewModel { (animeId: String, animeTitle: String, animeTitleEn: String) ->
+        com.example.myapplication.manga.ui.MangaLibraryViewModel(
+            app = androidApplication(),
+            animeId = animeId,
+            animeTitle = animeTitle,
+            animeTitleEn = animeTitleEn,
+            engine = get(),
+            bindingStore = get(),
+            readingStore = get(),
+            cacheStore = get(),
+            downloadStore = get(),
+        )
+    }
+    viewModel { (animeId: String, chapterKey: String) ->
+        com.example.myapplication.manga.ui.MangaReaderViewModel(
+            animeId = animeId,
+            initialChapterKey = chapterKey,
+            pageResolver = get(),
+            readingStore = get(),
         )
     }
     viewModel { (anime: com.example.myapplication.data.models.Anime, episodeNumber: Int) ->

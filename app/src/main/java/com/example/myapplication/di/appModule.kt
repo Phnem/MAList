@@ -94,13 +94,71 @@ val appModule = module {
         )
     }
 
+    // Manga engine (isolated feature — remove these lines + манифест-запись ридера, чтобы отключить).
+    single { com.example.myapplication.manga.data.MangaBindingStore(androidContext()) }
+    single { com.example.myapplication.manga.data.MangaChapterCacheStore(androidContext()) }
+    single { com.example.myapplication.manga.data.MangaReadingStore(get(named("settings"))) }
+    single { com.example.myapplication.manga.data.MangaDownloadStore(androidContext()) }
+    single {
+        com.example.myapplication.manga.download.MangaChapterDownloader(
+            client = get(),
+            store = get(),
+        )
+    }
+    single {
+        com.example.myapplication.manga.download.MangaPageResolver(
+            engine = get(),
+            downloadStore = get(),
+        )
+    }
+    single(named("manga_rate")) {
+        // MangaDex: 5 req/s на IP; держимся вдвое ниже потолка — главы всё равно грузим пачками.
+        com.example.myapplication.network.TokenBucketRateLimiter(
+            maxTokens = 2.0,
+            refillTokensPerSecond = 2.0,
+        )
+    }
+    single(named("remanga_rate")) {
+        // Remanga лимиты не публикует: оглавление грузится страницами по 100, идём спокойно.
+        com.example.myapplication.network.TokenBucketRateLimiter(
+            maxTokens = 1.0,
+            refillTokensPerSecond = 1.0 / 0.4,
+        )
+    }
+    single {
+        com.example.myapplication.manga.source.MangaDexSource(
+            client = get(),
+            rateLimiter = get(named("manga_rate")),
+        )
+    }
+    single {
+        com.example.myapplication.manga.source.RemangaSource(
+            client = get(),
+            rateLimiter = get(named("remanga_rate")),
+        )
+    }
+    single {
+        com.example.myapplication.manga.source.MangaSourceEngine(
+            // Remanga первым: у русскоязычной коллекции шанс попадания выше.
+            sources = listOf(
+                get<com.example.myapplication.manga.source.RemangaSource>(),
+                get<com.example.myapplication.manga.source.MangaDexSource>(),
+            ),
+        )
+    }
+
     // Media engine (stream + download)
     single { okhttp3.OkHttpClient.Builder().build() }
     single { com.example.myapplication.media.source.AniLibriaSource(client = get()) }
     single { com.example.myapplication.media.source.AnimeGoSource(client = get()) }
     single { com.example.myapplication.media.source.JutSuSource(client = get()) }
     single { com.example.myapplication.media.source.KodikSource(client = get()) }
-    single { com.example.myapplication.media.source.ConsumetSource(client = get()) }
+    // Browser-UA client without the cookie plugin: gate.php is selected by a per-request `key` cookie.
+    single {
+        com.example.myapplication.media.source.AnimeHeavenSource(
+            client = get(org.koin.core.qualifier.named("weblink")),
+        )
+    }
     single { com.example.myapplication.media.source.UrlSource(context = androidContext()) }
     single {
         com.example.myapplication.media.source.SourceEngine(
@@ -108,7 +166,7 @@ val appModule = module {
             animeGoSource = get(),
             jutSuSource = get(),
             kodikSource = get(),
-            consumetSource = get(),
+            animeHeavenSource = get(),
             urlSource = get(),
             webLinksStore = get(),
         )

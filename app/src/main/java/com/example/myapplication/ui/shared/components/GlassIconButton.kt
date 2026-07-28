@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.example.myapplication.isAppInDarkTheme
 import com.example.myapplication.ui.shared.GlassPreset
 import com.example.myapplication.ui.shared.adaptiveGlassBackdrop
 import com.example.myapplication.ui.shared.rememberAdaptiveGlassEffects
@@ -44,9 +45,12 @@ fun GlassIconButton(
     iconOffsetX: Dp = 0.dp,
     iconOffsetY: Dp = 0.dp
 ) {
-    val borderAlpha = if (enabled) 0.3f else 0.1f
-    val borderColor = Color.White.copy(alpha = borderAlpha)
-    val glassEffects = rememberAdaptiveGlassEffects(GlassPreset.IconButton)
+    // Тот же рецепт стекла, что у дока рядом (CompactNav): слабый blur + сильная линза. Пресет
+    // IconButton с blur 28dp давал матовое пятно вместо преломления — кнопка выбивалась из дока.
+    val glassEffects = rememberAdaptiveGlassEffects(GlassPreset.CompactNav)
+    val isDark = isAppInDarkTheme()
+    val borderBase = if (isDark) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.8f)
+    val borderColor = if (enabled) borderBase else borderBase.copy(alpha = borderBase.alpha * 0.35f)
 
     Box(
         modifier = modifier

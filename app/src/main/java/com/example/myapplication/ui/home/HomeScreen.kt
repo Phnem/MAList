@@ -139,6 +139,7 @@ fun HomeScreen(
     val playerPromoDeferred by viewModel.playerPromoDeferredThisSession.collectAsStateWithLifecycle()
     val webLinksMap by viewModel.webLinks.collectAsStateWithLifecycle()
     val airingMap by viewModel.airingProgress.collectAsStateWithLifecycle()
+    val watchedMap by viewModel.watchedEpisodes.collectAsStateWithLifecycle()
     var cloudSyncPillDismissed by remember { mutableStateOf(false) }
     val showCloudSyncPill =
         uiState.isListLoaded &&
@@ -640,7 +641,12 @@ fun HomeScreen(
                                             ) {
                                                 val webLinksEntry = webLinksMap[anime.id]
                                                 val airingEntry = airingMap[anime.id]
-                                                val cardState = remember(anime, currentLanguage, webLinksEntry, airingEntry) {
+                                                val cardProgress = rememberCardProgress(
+                                                    totalEpisodes = anime.episodes,
+                                                    watched = watchedMap[anime.id],
+                                                    airing = airingEntry,
+                                                )
+                                                val cardState = remember(anime, currentLanguage, webLinksEntry, cardProgress) {
                                                     // Название по выбранному языку: EN → английское, RU → русское.
                                                     // Замена, а не вторая строка; при отсутствии перевода — исходный title.
                                                     val displayTitle = when (currentLanguage) {
@@ -670,13 +676,7 @@ fun HomeScreen(
                                                             com.example.myapplication.data.models.MediaType.MANGA -> strings.typeManga
                                                             com.example.myapplication.data.models.MediaType.TV_SERIES -> strings.typeSeries
                                                         },
-                                                        airing = airingEntry?.let {
-                                                            AiringCardInfo(
-                                                                seasonNumber = it.seasonNumber,
-                                                                airedEpisodes = it.airedEpisodes,
-                                                                totalEpisodes = it.totalEpisodes,
-                                                            )
-                                                        }
+                                                        airing = cardProgress
                                                     )
                                                 }
                                                 with(sharedTransitionScope) {
@@ -1187,5 +1187,43 @@ private fun LazyListScope.apiSearchResultsSection(
                 com.example.myapplication.data.models.MediaType.TV_SERIES -> strings.typeSeries
             }
         )
+    }
+}
+
+
+/**
+ * Какой бар показать на карточке:
+ *  1. пользователь смотрит (есть сохранённая позиция хотя бы в одной серии) — бар просмотра,
+ *     брендовый оранжевый, «62 / 80 ep.»;
+ *  2. иначе идёт сезон — бар выхода серий, фиолетовый, «S5 4 / 14 ep.»;
+ *  3. иначе бара нет.
+ *
+ * Просмотр в приоритете над выходом серий: пока человек смотрит, ему важнее своя позиция.
+ * «Смотрит» здесь — факт воспроизведения в приложении, а не догадка по числам, поэтому ложных
+ * срабатываний на случайных тайтлах быть не может.
+ */
+@Composable
+private fun rememberCardProgress(
+    totalEpisodes: Int,
+    watched: Int?,
+    airing: com.example.myapplication.data.models.AiringProgress?,
+): AiringCardInfo? = remember(totalEpisodes, watched, airing) {
+    val progress = watched?.takeIf { it > 0 }
+    when {
+        progress != null -> AiringCardInfo(
+            seasonNumber = null,
+            airedEpisodes = progress.coerceAtMost(totalEpisodes.coerceAtLeast(progress)),
+            totalEpisodes = totalEpisodes.takeIf { it > 0 },
+            kind = CardProgressKind.WATCHING,
+        )
+
+        airing != null -> AiringCardInfo(
+            seasonNumber = airing.seasonNumber,
+            airedEpisodes = airing.airedEpisodes,
+            totalEpisodes = airing.totalEpisodes,
+            kind = CardProgressKind.AIRING,
+        )
+
+        else -> null
     }
 }

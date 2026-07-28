@@ -35,3 +35,14 @@ ehthumbs.db
 Desktop.ini
 *.swp
 *~
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Claude Code local state (skills are tracked, worktrees/settings are not)
+.claude/worktrees/
+.claude/settings.local.json
+
+# Stray artifact from a mistyped git command
+/-remote --tags origin

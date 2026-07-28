@@ -35,6 +35,7 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
@@ -50,6 +51,7 @@ import com.example.myapplication.worker.AnimeUpdateWorker
 private val KEY_CONTENT_TYPE = stringPreferencesKey("contentType")
 private val KEY_LANG = stringPreferencesKey("lang")
 
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class HomeViewModel(
     private val repository: AnimeRepository,
     private val localDataSource: AnimeLocalDataSource,
@@ -60,12 +62,39 @@ class HomeViewModel(
     private val statsFooterPhraseUseCase: ResolveStatsFooterPhraseUseCase,
     private val batchEpisodeCheckUseCase: BatchEpisodeCheckUseCase,
     private val webLinksStore: com.example.myapplication.data.local.WebLinksStore,
+    private val seasonEpisodesStore: com.example.myapplication.data.local.SeasonEpisodesStore,
+    private val episodePlaybackStore: com.example.myapplication.media.progress.EpisodePlaybackStore,
 ) : ViewModel() {
 
     /** Найденные прямые ссылки по одобренным сайтам (animeId → запись). Реактивно для карточек. */
     val webLinks: StateFlow<Map<String, com.example.myapplication.domain.enrichment.weblinks.WebLinksEntry>> =
         webLinksStore.flow
     init { viewModelScope.launch { webLinksStore.ensureLoaded() } }
+
+    /**
+     * Сколько серий тайтла пользователь досмотрел, сквозной нумерацией по франшизе
+     * (animeId → число). Считаем от самой дальней серии, до которой он дошёл: серии всех
+     * предыдущих сезонов плюс номер текущей. Разбивка по сезонам берётся из
+     * [com.example.myapplication.data.local.SeasonEpisodesStore]; для первого сезона она не нужна,
+     * поэтому прогресс появляется даже без неё.
+     */
+    val watchedEpisodes: StateFlow<Map<String, Int>> =
+        localDataSource.observeAllAnime()
+            .map { list -> list.map { anime -> anime.id } }
+            .distinctUntilChanged()
+            .flatMapLatest { ids -> episodePlaybackStore.furthestEpisodeFlow(ids) }
+            .combine(seasonEpisodesStore.flow) { furthest, seasons ->
+                furthest.mapValues { (animeId, mark) ->
+                    val chain = seasons[animeId]?.seasons.orEmpty()
+                    val before = chain
+                        .filter { it.seasonNumber < mark.season }
+                        .sumOf { it.episodes }
+                    before + mark.episode
+                }.filterValues { it > 0 }
+            }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
+    init { viewModelScope.launch { seasonEpisodesStore.ensureLoaded() } }
 
     /** Выходящие сейчас сезоны (animeId → прогресс) — карточки «в процессе». */
     val airingProgress: StateFlow<Map<String, com.example.myapplication.data.models.AiringProgress>> =

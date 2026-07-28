@@ -317,7 +317,9 @@ fun SettingsScreen(
             activePicker = null
         },
         sheetHeightFraction = null,
-        sheetContainerColor = if (activePicker != null) null else Color.Transparent,
+        // Все шторки настроек — та же панель, что и в остальном приложении (iosSheetContainer).
+        // Раньше здесь стоял Transparent, и каждая шторка рисовала свою плавающую карточку.
+        sheetContainerColor = null,
         showGrabber = true,
         content = {
       Box(modifier = Modifier.fillMaxSize()) {

@@ -67,6 +67,7 @@ import com.example.myapplication.utils.formatApkSizeLabel
 import com.example.myapplication.utils.getStrings
 import com.example.myapplication.utils.performHaptic
 import com.example.myapplication.ui.shared.AuthProviderIcon
+import com.example.myapplication.ui.shared.theme.IosDesign
 import com.example.myapplication.ui.shared.theme.OverlayThemeTokens
 import com.example.myapplication.ui.shared.theme.SnProFamily
 import com.example.myapplication.ui.shared.theme.softPlateShadowForLightSheet
@@ -105,13 +106,11 @@ fun CloudSettingsSheet(
     val cloudPanelShape = RoundedCornerShape(24.dp)
     val maxSheetHeight = (LocalConfiguration.current.screenHeightDp * 0.78f).dp
 
-    Card(
+    Box(
         modifier = sharedModifier
             .fillMaxWidth()
+            .padding(top = IosDesign.SheetContentTop)
             .heightIn(max = maxSheetHeight),
-        shape = cloudPanelShape,
-        colors = CardDefaults.cardColors(containerColor = sheetSurface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
             modifier = Modifier
@@ -623,10 +622,8 @@ fun ContactSheet(
     Column(
         modifier = sharedModifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .clip(RoundedCornerShape(28.dp))
-            .background(if (sheetInDark) OverlayThemeTokens.TileBackgroundDark else Color(0xFFFFFFFF))
-            .padding(24.dp),
+            .padding(horizontal = 20.dp)
+            .padding(top = IosDesign.SheetContentTop, bottom = 28.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
         Column(
@@ -762,9 +759,8 @@ fun UpdateChangelogSheet(
     Column(
         modifier = sharedModifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
-            .background(sheetSurface)
-            .padding(horizontal = 20.dp, vertical = 16.dp)
+            .padding(horizontal = 20.dp)
+            .padding(top = IosDesign.SheetContentTop, bottom = 24.dp)
             .verticalScroll(rememberScrollState())
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {

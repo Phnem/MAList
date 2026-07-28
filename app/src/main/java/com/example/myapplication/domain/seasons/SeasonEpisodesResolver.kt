@@ -21,10 +21,13 @@ import kotlinx.coroutines.withContext
  * Каскад (от дешёвого к дорогому, язык не важен):
  *  1. Сид-узел AniList: по anilistId → по malId/shikimoriId (idMal_in) → поиском по названиям
  *     (AniList → Shikimori → MAL, сопоставление TitleMatcher ≥ 0.91). Найденные id пишутся в БД.
- *  2. Цепочка: BFS по PREQUEL/SEQUEL (батчи episodeCheckByAnilistIds), только сезонные форматы
- *     (TV/TV_SHORT/ONA), порядок восстанавливается по рёбрам.
- *  3. Число серий узла: AniList totalEpisodes → airedEpisodes; дырки дозаполняются точечными
- *     Shikimori byId → MAL byId (Shikimori id ≡ MAL id).
+ *  2. Цепочка: BFS по PREQUEL/SEQUEL (батчи episodeCheckByAnilistIds) СКВОЗЬ все форматы, порядок
+ *     восстанавливается по рёбрам, и только потом остаются сезонные форматы (TV/TV_SHORT/ONA).
+ *     Идти сквозь фильмы/OVA обязательно: цепочки вида «S2 → фильм → S3» встречаются постоянно,
+ *     и обход, останавливающийся на фильме, теряет все последующие сезоны.
+ *  3. Число серий узла: завершённый — AniList totalEpisodes, онгоинг — только вышедшие
+ *     (nextAiringEpisode−1), чтобы UI не предлагал невышедшие серии; дырки дозаполняются
+ *     точечными Shikimori byId → MAL byId (Shikimori id ≡ MAL id).
  *  4. Совсем без AniList-узла (нет ни id, ни совпадений) — одиночный «сезон 1» из данных
  *     Shikimori/MAL самой записи, чтобы хоть что-то показать.
  *
@@ -82,22 +85,37 @@ class SeasonEpisodesResolver(
         val self = findSeedNode(anime)
             ?: return fallbackSingleSeason(anime)
 
-        val nodes = gatherFranchise(self)
-        val ordered = orderByRelations(nodes.filterValues { it.isSeasonFormat() })
+        val graph = gatherFranchise(self)
+        // Порядок строим по ПОЛНОМУ графу (фильмы/OVA внутри цепочки — тоже рёбра), а в сезоны
+        // отбираем уже потом: иначе «S2 → фильм → S3» разваливается на два куска.
+        val ordered = orderByRelations(graph.nodes)
+            .filter { it.isSeasonFormat() }
             .ifEmpty { listOf(self) }
 
         val seasons = ArrayList<SeasonInfo>(ordered.size)
         var allResolved = true
         for ((index, node) in ordered.withIndex()) {
             val ongoing = node.status == "RELEASING"
-            var episodes = node.totalEpisodes ?: node.airedEpisodes.takeIf { it > 0 }
+            val declared = node.totalEpisodes
+            val aired = node.airedEpisodes.takeIf { it > 0 }
+            // Онгоинг: доступны только вышедшие серии, сколько бы ни было анонсировано.
+            var episodes = if (ongoing) aired ?: declared else declared ?: aired
+            var total = declared
             var source = "AniList"
 
-            // Дырка у AniList (анонс без числа серий и т.п.) — точечно спрашиваем Shikimori/MAL.
-            if (episodes == null && node.malId != null) {
-                fillFromShikimoriOrMal(node.malId!!)?.let { (eps, src) ->
-                    episodes = eps
-                    source = src
+            // Дырка у AniList: нет числа серий вовсе, либо сезон идёт без объявленного расписания
+            // (nextAiringEpisode пуст → airedEpisodes вырождается в заявленное число, и мы бы
+            // показали невышедшие серии). И то, и другое лечится точечным Shikimori/MAL.
+            val airedUnknown = ongoing && aired != null && aired == declared
+            if ((episodes == null || airedUnknown) && node.malId != null) {
+                fillFromShikimoriOrMal(node.malId!!)?.let { filled ->
+                    val filledEpisodes =
+                        if (ongoing) filled.aired ?: filled.total else filled.total ?: filled.aired
+                    if (filledEpisodes != null) {
+                        episodes = filledEpisodes
+                        total = filled.total ?: total
+                        source = filled.source
+                    }
                 }
             }
 
@@ -108,6 +126,7 @@ class SeasonEpisodesResolver(
             seasons += SeasonInfo(
                 seasonNumber = index + 1,
                 episodes = episodes!!,
+                totalEpisodes = total,
                 ongoing = ongoing,
                 anilistId = node.anilistId,
                 malId = node.malId,
@@ -122,8 +141,11 @@ class SeasonEpisodesResolver(
         return SeasonEpisodesEntry(
             animeId = anime.id,
             seasons = renumbered,
-            complete = allResolved && renumbered.none { it.ongoing },
+            // graph.complete обязателен: без него ОДИН сорванный батч AniList давал «полную»
+            // запись из одного сезона, и она залипала в кэше на месяц (см. gatherFranchise).
+            complete = allResolved && graph.complete && renumbered.none { it.ongoing },
             resolvedAt = System.currentTimeMillis(),
+            schema = SeasonEpisodesEntry.CURRENT_SCHEMA,
         )
     }
 
@@ -198,8 +220,13 @@ class SeasonEpisodesResolver(
     private suspend fun fallbackSingleSeason(anime: Anime): SeasonEpisodesEntry? {
         val mal = anime.malId ?: anime.shikimoriId
         if (mal != null) {
-            fillFromShikimoriOrMal(mal)?.let { (eps, src) ->
-                return singleSeasonEntry(anime, eps, src)
+            fillFromShikimoriOrMal(mal)?.let { filled ->
+                // Источник знает про вышедшие серии — значит тайтл ещё идёт, показываем только их.
+                val ongoing = filled.aired != null && filled.total != null && filled.aired < filled.total
+                val episodes = if (ongoing) filled.aired else filled.total ?: filled.aired
+                if (episodes != null) {
+                    return singleSeasonEntry(anime, episodes, filled.total, filled.source, ongoing)
+                }
             }
         }
         // Последний рубеж: Shikimori-поиск (кириллица дружелюбна) — счётчик из выдачи.
@@ -211,8 +238,11 @@ class SeasonEpisodesResolver(
         for (q in queries) {
             val found = retry429 { repository.searchAnimeShikimoriOnly(q, AppLanguage.RU, allowZeroEpisodes = true) }
                 .getOrNull()?.let { pickMatch(anime, it) } ?: continue
-            val eps = found.totalEpisodes ?: found.airedEpisodes ?: found.episodes.takeIf { it > 0 } ?: continue
-            return singleSeasonEntry(anime, eps, "Shikimori", ongoing = found.isOngoing == true)
+            val ongoing = found.isOngoing == true
+            val total = found.totalEpisodes?.takeIf { it > 0 }
+            val aired = found.airedEpisodes?.takeIf { it > 0 } ?: found.episodes.takeIf { it > 0 }
+            val eps = (if (ongoing) aired ?: total else total ?: aired) ?: continue
+            return singleSeasonEntry(anime, eps, total, "Shikimori", ongoing)
         }
         return null
     }
@@ -220,6 +250,7 @@ class SeasonEpisodesResolver(
     private fun singleSeasonEntry(
         anime: Anime,
         episodes: Int,
+        totalEpisodes: Int?,
         source: String,
         ongoing: Boolean = false,
     ): SeasonEpisodesEntry = SeasonEpisodesEntry(
@@ -228,6 +259,7 @@ class SeasonEpisodesResolver(
             SeasonInfo(
                 seasonNumber = 1,
                 episodes = episodes,
+                totalEpisodes = totalEpisodes,
                 ongoing = ongoing,
                 anilistId = anime.anilistId,
                 malId = anime.malId ?: anime.shikimoriId,
@@ -239,47 +271,81 @@ class SeasonEpisodesResolver(
         // попробует построить цепочку (id могли дозаполниться другими фичами).
         complete = false,
         resolvedAt = System.currentTimeMillis(),
+        schema = SeasonEpisodesEntry.CURRENT_SCHEMA,
     )
 
     // ==========================================================
     // Дозаполнение серий сезона: Shikimori → MAL (по malId)
     // ==========================================================
 
-    private suspend fun fillFromShikimoriOrMal(malId: Int): Pair<Int, String>? {
+    /** Счётчики одного сезона из «неанилистовых» источников: вышедшие и заявленные раздельно. */
+    private data class EpisodeCounts(val aired: Int?, val total: Int?, val source: String)
+
+    private suspend fun fillFromShikimoriOrMal(malId: Int): EpisodeCounts? {
         delay(ITEM_DELAY_MS)
         retry429 { repository.shikimoriById(malId, AppLanguage.RU) }.getOrNull()?.let { r ->
-            val eps = r.totalEpisodes ?: r.airedEpisodes ?: r.episodes.takeIf { it > 0 }
-            if (eps != null && eps > 0) return eps to "Shikimori"
+            counts(r.airedEpisodes, r.totalEpisodes ?: r.episodes, "Shikimori")?.let { return it }
         }
         delay(ITEM_DELAY_MS)
         retry429 { repository.malById(malId, AppLanguage.EN) }.getOrNull()?.let { r ->
-            val eps = r.totalEpisodes ?: r.airedEpisodes ?: r.episodes.takeIf { it > 0 }
-            if (eps != null && eps > 0) return eps to "MAL"
+            counts(r.airedEpisodes, r.totalEpisodes ?: r.episodes, "MAL")?.let { return it }
         }
         return null
+    }
+
+    private fun counts(aired: Int?, total: Int?, source: String): EpisodeCounts? {
+        val a = aired?.takeIf { it > 0 }
+        val t = total?.takeIf { it > 0 }
+        return if (a == null && t == null) null else EpisodeCounts(a, t, source)
     }
 
     // ==========================================================
     // Франшиза: BFS + порядок (по образцу FranchiseEpisodeMapper)
     // ==========================================================
 
-    private suspend fun gatherFranchise(self: EpisodeCheckMedia): Map<Int, EpisodeCheckMedia> {
+    /**
+     * Граф франшизы. [complete] = обход дошёл до конца сам, а не упёрся в сорванный запрос или
+     * в лимиты: только тогда запись имеет право считаться полной и жить месяц.
+     */
+    private class FranchiseGraph(val nodes: Map<Int, EpisodeCheckMedia>, val complete: Boolean)
+
+    /**
+     * BFS по PREQUEL/SEQUEL. Обходим ВСЕ узлы, включая фильмы и OVA: цепочки сплошь и рядом идут
+     * через них («KonoSuba 2 → фильм Kurenai Densetsu → KonoSuba 3»), и если на таком узле
+     * остановиться, все последующие сезоны просто не находятся. Отсев по формату — на выходе.
+     *
+     * Обрыв обхода НЕ маскируем: раньше упавший батч превращался в `emptyList()`, обход тихо
+     * заканчивался на сид-узле, и тайтл с пятью сезонами сохранялся как «S1, complete=true» —
+     * то есть залипал в кэше на месяц с одним сезоном.
+     */
+    private suspend fun gatherFranchise(self: EpisodeCheckMedia): FranchiseGraph {
         val result = LinkedHashMap<Int, EpisodeCheckMedia>()
         result[self.anilistId] = self
         var frontier = self.seasonNeighbors() - result.keys
         var level = 0
-        while (frontier.isNotEmpty() && result.size < MAX_NODES && level++ < MAX_LEVELS) {
+        var complete = true
+        while (frontier.isNotEmpty()) {
+            if (result.size >= MAX_NODES || level >= MAX_LEVELS) {
+                Log.w(TAG, "franchise traversal truncated at ${result.size} nodes / level $level")
+                complete = false
+                break
+            }
+            level++
             val fetched = retry429 { repository.episodeCheckByAnilistIds(frontier.toList()) }
-                .getOrNull().orEmpty()
+                .getOrNull()
+            if (fetched == null) {
+                Log.w(TAG, "franchise batch failed (${frontier.size} ids) — entry stays incomplete")
+                complete = false
+                break
+            }
             val next = HashSet<Int>()
             for (m in fetched) {
-                if (!m.isSeasonFormat()) continue
                 result[m.anilistId] = m
                 next += m.seasonNeighbors()
             }
             frontier = next - result.keys
         }
-        return result
+        return FranchiseGraph(result, complete)
     }
 
     private fun orderByRelations(nodes: Map<Int, EpisodeCheckMedia>): List<EpisodeCheckMedia> {
@@ -370,8 +436,9 @@ class SeasonEpisodesResolver(
         const val MATCH_SCORE = 0.91
         const val MAX_ATTEMPTS = 3
         const val RETRY_BASE_DELAY_MS = 800L
-        const val MAX_NODES = 16
-        const val MAX_LEVELS = 8
+        // Обход идёт сквозь фильмы/OVA, поэтому узлов на франшизу заметно больше, чем сезонов.
+        const val MAX_NODES = 40
+        const val MAX_LEVELS = 12
         val SEASON_FORMATS = setOf("TV", "TV_SHORT", "ONA")
     }
 }

@@ -37,6 +37,12 @@ object IosDesign {
      */
     val SheetCorner = 40.dp
 
+    /**
+     * Верхний отступ содержимого шторки: резерв под grab-индикатор (22dp) плюс воздух.
+     * Общий для всех панелей, чтобы контент везде начинался на одной высоте.
+     */
+    val SheetContentTop = 30.dp
+
     /** iOS icon-well для строки списка: контейнер 32dp, скругление 9dp, белая пиктограмма 18dp. */
     val ListIconSize = 32.dp
     val ListIconRadius = 9.dp
@@ -84,6 +90,41 @@ object IosDesign {
     /** Фон карточки/строки: серая ступень [OverlayThemeTokens.TileBackgroundDark] / белый. */
     fun rowBackground(isDark: Boolean): Color =
         if (isDark) OverlayThemeTokens.TileBackgroundDark else LightSurface
+
+    /**
+     * Контейнер группы под карточками строк — «карточка в карточке». На ступень ТЕМНЕЕ строк
+     * в тёмной теме и на ступень темнее белого в светлой: сами строки должны читаться выше
+     * контейнера, а не сливаться с ним.
+     */
+    fun groupBackground(isDark: Boolean): Color =
+        if (isDark) Color.White.copy(alpha = 0.045f) else Color.Black.copy(alpha = 0.035f)
+
+    /**
+     * Заливка карточки строки ВНУТРИ хаба. Намеренно полупрозрачная, а не [rowBackground]:
+     * непрозрачный серый не реагирует на подложку экрана, и на тонированном фоне настроек
+     * карточки оставались нейтрально-серыми, пока сам хаб тон уже подхватил.
+     * Кладётся поверх [groupBackground], поэтому суммарно карточка на ступень светлее хаба.
+     */
+    fun groupRowBackground(isDark: Boolean): Color =
+        if (isDark) Color.White.copy(alpha = 0.055f) else Color.White.copy(alpha = 0.55f)
+
+    /** Скругление контейнера группы: на ступень крупнее карточки строки ([RadiusMd]). */
+    val GroupRadius = 24.dp
+
+    // ---- Метрики карточки-строки. Карточка сама себе контейнер, поэтому у неё собственные
+    // поля и типографика: воздуха больше, чем у строки сплошного списка, иконка крупнее и
+    // плоская, заголовок полужирный, значение и chevron — приглушённые и мельче. ----
+    val CardHorizontalInset = 18.dp
+    val CardVerticalInset = 14.dp
+    val CardMinHeight = 64.dp
+    val CardIconSize = 28.dp
+    val CardIconGlyph = 24.dp
+    val CardIconTextGap = 16.dp
+    val CardChevronSize = 18.dp
+    /** Поля контейнера группы вокруг карточек строк. */
+    val GroupPadding = 6.dp
+    /** Зазор между соседними карточками строк внутри группы. */
+    val GroupRowSpacing = 6.dp
 
     /**
      * Поверхность bottom sheet — iOS elevated-палитра (HIG Dark Mode / WWDC19 §Semantic colors):

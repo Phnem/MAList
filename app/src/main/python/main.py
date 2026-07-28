@@ -87,7 +87,7 @@ def process_task(input_path: str, progress_callback=None):
 
     from extractors.ru.anilibria import AnilibriaExtractor
     from extractors.ru.animego import AnimeGoExtractor
-    from extractors.en.consumet import ConsumetExtractor
+    from extractors.en.animeheaven import AnimeHeavenExtractor
     from extractors.universal.ytdlp_ext import YtDlpExtractor
 
     if task.is_debug:
@@ -95,7 +95,7 @@ def process_task(input_path: str, progress_callback=None):
     elif task.region.upper() == "RU":
         extractor_chain = AnilibriaExtractor().set_next(AnimeGoExtractor())
     elif task.region.upper() == "EN":
-        extractor_chain = ConsumetExtractor()
+        extractor_chain = AnimeHeavenExtractor()
     else:
         logger.error(f"Unsupported region: {task.region}")
         output_path = str(Path(input_path).parent / "output.json")

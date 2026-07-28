@@ -10,6 +10,8 @@ class InputTask(BaseModel):
     search_query: str = ""
     region: str
     episode_range: str
+    """Номер сезона франшизы (1 = первый); шлётся Kotlin-визардом, см. DownloadIpcModels.kt."""
+    season_number: int = 1
     quality: str = "720p"
     output_dir: str
     ffmpeg_path: Optional[str] = None

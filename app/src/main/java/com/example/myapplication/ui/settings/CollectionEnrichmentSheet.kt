@@ -47,6 +47,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.myapplication.isAppInDarkTheme
 import com.example.myapplication.ui.shared.components.IosIconWell
 import com.example.myapplication.ui.shared.components.IosSwitch
+import com.example.myapplication.ui.shared.theme.IosDesign
 import com.example.myapplication.ui.shared.theme.OverlayThemeTokens
 import com.example.myapplication.ui.shared.theme.SnProFamily
 import com.example.myapplication.utils.getCollectionEnrichmentStrings
@@ -82,10 +83,8 @@ fun CollectionEnrichmentSheet(
     Column(
         modifier = sharedModifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .clip(RoundedCornerShape(28.dp))
-            .background(if (sheetInDark) OverlayThemeTokens.TileBackgroundDark else Color(0xFFFFFFFF))
-            .padding(24.dp),
+            .padding(horizontal = 20.dp)
+            .padding(top = IosDesign.SheetContentTop, bottom = 28.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         Text(

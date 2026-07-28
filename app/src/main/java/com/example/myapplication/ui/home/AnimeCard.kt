@@ -49,6 +49,7 @@ import coil3.request.crossfade
 import coil3.size.Size
 import com.example.myapplication.isAppInDarkTheme
 import com.example.myapplication.ui.shared.fluidClickable
+import com.example.myapplication.ui.shared.theme.BrandOrangeBright
 import com.example.myapplication.ui.shared.theme.SnProFamily
 import com.example.myapplication.ui.shared.theme.LightBorder
 import com.example.myapplication.data.models.RatingScale
@@ -57,14 +58,22 @@ import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
 import java.io.File
 
-/** Выходящий сейчас сезон: карточка показывает прогресс-бар «S3 2/12». */
+/**
+ * Что показывает бар на карточке:
+ *  • [AIRING] — выход серий сезона («S5 4 / 14 ep.»), фиолетовый;
+ *  • [WATCHING] — просмотр пользователя («62 / 80 ep.»), брендовый оранжевый.
+ */
+enum class CardProgressKind { AIRING, WATCHING }
+
+/** Прогресс на карточке — выход сезона либо просмотр, см. [CardProgressKind]. */
 @Immutable
 data class AiringCardInfo(
-    /** null — источник без графа франшизы (Shikimori/AniLibria): префикс «S{n}» не показываем. */
+    /** null — источник без графа франшизы (Shikimori/AniLibria) либо прогресс просмотра. */
     val seasonNumber: Int?,
     val airedEpisodes: Int,
     /** null — число серий сезона ещё не анонсировано (бар не рисуем, только текст). */
     val totalEpisodes: Int?,
+    val kind: CardProgressKind = CardProgressKind.AIRING,
 )
 
 @Immutable
@@ -107,8 +116,16 @@ private fun AiringProgressSection(
     }
     val total = airing.totalEpisodes?.takeIf { it > 0 } ?: courEstimatedTotal(airing.airedEpisodes)
     val counter = buildString {
-        airing.seasonNumber?.let { append("S").append(it).append(" ") }
+        // Префикс сезона осмыслен только для выхода серий: просмотр считается сквозной
+        // нумерацией по всей франшизе, номер сезона к нему не относится.
+        if (airing.kind == CardProgressKind.AIRING) {
+            airing.seasonNumber?.let { append("S").append(it).append(" ") }
+        }
         append(airing.airedEpisodes).append(" / ").append(total).append(" ep.")
+    }
+    val barColor = when (airing.kind) {
+        CardProgressKind.AIRING -> AiringBarColor
+        CardProgressKind.WATCHING -> BrandOrangeBright
     }
     // Компактно: секция живёт внутри фиксированных 180dp карточки, каждый dp на счету.
     Column(modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
@@ -148,7 +165,7 @@ private fun AiringProgressSection(
                     .fillMaxHeight()
                     .fillMaxWidth(fraction)
                     .clip(CircleShape)
-                    .background(AiringBarColor)
+                    .background(barColor)
             )
         }
     }

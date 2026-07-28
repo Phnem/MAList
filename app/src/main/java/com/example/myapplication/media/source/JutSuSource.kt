@@ -92,16 +92,26 @@ class JutSuSource(
         "$baseUrl/$slug/"
     }.onFailure { Log.w(TAG, "resolveTitleUrl: ${it.message}") }.getOrNull()
 
+    /**
+     * URL-ы ТОЛЬКО запрошенного сезона. Никаких перебросов на соседние: раньше список заканчивался
+     * бессезонным «/episode-N.html» (это первый сезон) и «/season-2/…», поэтому для сезона, которого
+     * на jut.su нет под таким номером, источник молча отдавал серию ПЕРВОГО сезона — пользователь
+     * открывал 8-й сезон и попадал на 1-й. Лучше вернуть пусто и уступить Kodik/AnimeGo, чем
+     * подсунуть чужую серию.
+     *
+     * У первого сезона обе формы (с префиксом и без) ведут на него же, поэтому их можно пробовать
+     * обе — это не смена сезона.
+     */
     private fun episodeUrlCandidates(slug: String, season: Int, episode: Int): List<String> {
         val ep = episode.coerceAtLeast(1)
-        return buildList {
-            if (season > 1) {
-                add("$baseUrl/$slug/season-$season/episode-$ep.html")
-            }
-            add("$baseUrl/$slug/episode-$ep.html")
-            add("$baseUrl/$slug/season-1/episode-$ep.html")
-            if (season != 2) add("$baseUrl/$slug/season-2/episode-$ep.html")
-        }.distinct()
+        return if (season > 1) {
+            listOf("$baseUrl/$slug/season-$season/episode-$ep.html")
+        } else {
+            listOf(
+                "$baseUrl/$slug/episode-$ep.html",
+                "$baseUrl/$slug/season-1/episode-$ep.html",
+            )
+        }
     }
 
     private suspend fun scrapeEpisodeSources(pageUrl: String): List<VetroVideo> = runCatching {

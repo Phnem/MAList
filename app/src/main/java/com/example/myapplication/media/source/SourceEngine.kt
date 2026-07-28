@@ -22,7 +22,7 @@ class SourceEngine(
     private val animeGoSource: AnimeGoSource,
     private val jutSuSource: JutSuSource,
     private val kodikSource: KodikSource,
-    private val consumetSource: ConsumetSource,
+    private val animeHeavenSource: AnimeHeavenSource,
     private val urlSource: UrlSource,
     private val webLinksStore: WebLinksStore,
 ) {
@@ -35,7 +35,7 @@ class SourceEngine(
         if (episodeNumber <= 0) return emptyList()
         val resolved = when (language) {
             AppLanguage.RU -> resolveRu(anime, episodeNumber, seasonInfo)
-            AppLanguage.EN -> resolveEn(anime, episodeNumber)
+            AppLanguage.EN -> resolveEn(anime, episodeNumber, seasonInfo)
         }
         val normalized = resolved.normalizeHosters()
         Log.i(
@@ -107,9 +107,11 @@ class SourceEngine(
     private suspend fun resolveEn(
         anime: Anime,
         episodeNumber: Int,
+        seasonInfo: SeasonInfo?,
     ): List<VetroHoster> {
-        val native = safeResolve("Consumet", SOURCE_TIMEOUT_MS) {
-            consumetSource.resolveEpisode(anime, episodeNumber)
+        // AnimeHeaven needs three sequential page loads (search → title → gate), hence its own budget.
+        val native = safeResolve("AnimeHeaven", EN_SOURCE_TIMEOUT_MS) {
+            animeHeavenSource.resolveEpisode(anime, episodeNumber, seasonInfo)
         }
         if (native.isNotEmpty()) return native
 
@@ -161,6 +163,7 @@ class SourceEngine(
         private const val EXACT_SOURCE_TIMEOUT_MS = 8_000L
         private const val SOURCE_TIMEOUT_MS = 12_000L
         private const val KODIK_SOURCE_TIMEOUT_MS = 24_000L
+        private const val EN_SOURCE_TIMEOUT_MS = 20_000L
         private const val DIRECT_TIMEOUT_MS = 5_000L
     }
 }

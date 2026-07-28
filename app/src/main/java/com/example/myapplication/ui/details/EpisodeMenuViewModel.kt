@@ -622,6 +622,13 @@ class EpisodeMenuViewModel(
         }
     }
 
+    /**
+     * Тайтл, каким его должны увидеть источники для конкретного сезона.
+     *
+     * titleRu/titleEn НЕ трогаем: Kodik и AnimeGo ищут в первую очередь по русскому названию, и
+     * без него просто ничего не находят (проверено — оба замолчали). Номер сезона до них нужно
+     * доводить отдельным параметром, а не подменой названий.
+     */
     private fun Anime.forSeason(season: SeasonInfo): Anime = copy(
         title = season.title?.takeIf { it.isNotBlank() } ?: title,
         anilistId = season.anilistId ?: anilistId,

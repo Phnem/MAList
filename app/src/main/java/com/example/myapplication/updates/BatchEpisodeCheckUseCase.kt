@@ -129,7 +129,8 @@ class BatchEpisodeCheckUseCase(
 
         // Одна волна расширения на объединение сидов: франшизным нужна сумма серий,
         // airing-сидам — полная цепочка для номера сезона.
-        val components = expandFranchiseComponents(franchiseSeeds + airingSeeds, mediaCache)
+        val expansion = expandFranchiseComponents(franchiseSeeds + airingSeeds, mediaCache)
+        val components = expansion.components
 
         for (anime in animeList) {
             if (anime.id !in franchiseSeeds) continue
@@ -149,7 +150,15 @@ class BatchEpisodeCheckUseCase(
 
         val now = System.currentTimeMillis()
         val airingById = components.mapNotNull { (animeId, component) ->
-            airingProgressOf(animeId, component, mediaCache, prevAiring[animeId], now)
+            // Обход франшизы не дошёл до конца (сорванный батч AniList, упор в лимит) — оставляем
+            // прошлую плашку как есть. Иначе на «урезанной» компоненте не находится RELEASING-узел,
+            // срабатывает ветка «сезон завершился», и корректное «S5 4 / 14» затирается
+            // на «S1 11 / 11» — снимок перезаписывается целиком (см. setAiringProgress).
+            if (animeId in expansion.degraded) {
+                prevAiring[animeId]
+            } else {
+                airingProgressOf(animeId, component, mediaCache, prevAiring[animeId], now)
+            }
         }.associateBy { it.animeId }.toMutableMap()
 
         // Фолбэк без AniList: Shikimori (и поисковые совпадения) сами знают
@@ -467,26 +476,35 @@ class BatchEpisodeCheckUseCase(
     // Франшиза: сумма вышедших серий по цепочке PREQUEL/SEQUEL
     // ==========================================================
 
+    /** Компоненты франшиз + записи, чей обход оборвался и чьему результату нельзя доверять. */
+    private class FranchiseExpansion(
+        val components: Map<String, Set<Int>>,
+        val degraded: Set<String>,
+    )
+
     private suspend fun expandFranchiseComponents(
         seeds: Map<String, Int>,
         mediaCache: MutableMap<Int, EpisodeCheckMedia>
-    ): Map<String, Set<Int>> {
-        if (seeds.isEmpty()) return emptyMap()
+    ): FranchiseExpansion {
+        if (seeds.isEmpty()) return FranchiseExpansion(emptyMap(), emptySet())
         // Компонента связности каждой записи; фронтиры всех сидов расширяем
         // синхронно — недостающие узлы дотягиваем ОДНИМ батчем на уровень.
         val components = seeds.mapValues { (_, seedId) -> linkedSetOf(seedId) }
         var frontiers: Map<String, Set<Int>> = seeds.mapValues { (_, seedId) -> setOf(seedId) }
 
+        val degraded = mutableSetOf<String>()
         var depth = 0
         while (frontiers.isNotEmpty() && depth < FRANCHISE_MAX_DEPTH) {
             depth++
             val needed = frontiers.values.flatten().toSet() - mediaCache.keys
             if (needed.isNotEmpty()) {
-                val fetched = repository.episodeCheckByAnilistIds(needed.toList())
-                    .getOrElse { e ->
-                        Log.w(TAG, "Franchise batch failed: ${e.message}")
-                        emptyList()
-                    }
+                val fetched = repository.episodeCheckByAnilistIds(needed.toList()).getOrElse { e ->
+                    // Сбой батча = все ещё расширявшиеся записи получили неполную франшизу.
+                    Log.w(TAG, "Franchise batch failed: ${e.message}")
+                    degraded += frontiers.keys
+                    null
+                }
+                if (fetched == null) break
                 fetched.forEach { mediaCache[it.anilistId] = it }
             }
             val nextFrontiers = mutableMapOf<String, Set<Int>>()
@@ -496,9 +514,15 @@ class BatchEpisodeCheckUseCase(
                 for (nodeId in frontier) {
                     val media = mediaCache[nodeId] ?: continue
                     for (rel in media.relations) {
-                        if (!isSeasonFormat(rel.format)) continue
+                        // Идём СКВОЗЬ фильмы/OVA/спешлы: цепочки вида «S2 → фильм → S3»
+                        // встречаются постоянно, и обход, останавливающийся на фильме, терял
+                        // все последующие сезоны. По формату отсеиваем потребители компоненты
+                        // (сумма серий, поиск RELEASING/FINISHED) — не сам обход.
                         if (rel.anilistId in component) continue
-                        if (component.size >= FRANCHISE_MAX_NODES) break
+                        if (component.size >= FRANCHISE_MAX_NODES) {
+                            degraded += animeId
+                            break
+                        }
                         component += rel.anilistId
                         next += rel.anilistId
                     }
@@ -507,7 +531,9 @@ class BatchEpisodeCheckUseCase(
             }
             frontiers = nextFrontiers
         }
-        return components
+        // Не доразвернули за отведённые уровни — остаток тоже недостоверен.
+        degraded += frontiers.keys
+        return FranchiseExpansion(components, degraded)
     }
 
     // ==========================================================
@@ -584,21 +610,21 @@ class BatchEpisodeCheckUseCase(
     }
 
     /**
-     * Номер сезона = 1 + число PREQUEL-переходов по «сезонным» форматам.
-     * Приквел вне кэша всё равно засчитывается (сезон минимум +1), дальше цепочка
-     * не продолжается — при обрыве получаем нижнюю оценку номера.
+     * Номер сезона = 1 + число ПРЕДШЕСТВУЮЩИХ сезонных узлов в цепочке PREQUEL.
+     *
+     * Идём по любому приквелу, а увеличиваем счётчик только на сезонных форматах: раньше обход
+     * обрывался на первом же фильме/спешле, и у франшизы с фильмом в середине номер сезона
+     * схлопывался к 1. Приквел вне кэша засчитывается (нижняя оценка), дальше цепочка не идёт.
      */
     private fun seasonNumberOf(node: EpisodeCheckMedia, mediaCache: Map<Int, EpisodeCheckMedia>): Int {
         var season = 1
         var current: EpisodeCheckMedia? = node
         val visited = mutableSetOf(node.anilistId)
         while (current != null) {
-            val prequelId = current.relations
-                .firstOrNull { it.relationType == "PREQUEL" && isSeasonFormat(it.format) }
-                ?.anilistId ?: break
-            if (!visited.add(prequelId)) break
-            season++
-            current = mediaCache[prequelId]
+            val prequel = current.relations.firstOrNull { it.relationType == "PREQUEL" } ?: break
+            if (!visited.add(prequel.anilistId)) break
+            if (isSeasonFormat(prequel.format)) season++
+            current = mediaCache[prequel.anilistId]
         }
         return season
     }
@@ -731,8 +757,10 @@ class BatchEpisodeCheckUseCase(
         private const val MAX_ATTEMPTS = 3
         private const val RETRY_BASE_DELAY_MS = 800L
         private const val NOT_FOUND_TTL_MS = 14L * 24L * 60L * 60L * 1000L
-        private const val FRANCHISE_MAX_DEPTH = 6
-        private const val FRANCHISE_MAX_NODES = 30
+        // Обход идёт сквозь фильмы/OVA, поэтому и уровней, и узлов на франшизу нужно больше:
+        // промежуточные не-сезонные узлы теперь тоже съедают бюджет.
+        private const val FRANCHISE_MAX_DEPTH = 9
+        private const val FRANCHISE_MAX_NODES = 48
         /** Бюджет AniLibria-запросов на один проход проверки. */
         private const val ANILIBRIA_MAX_LOOKUPS = 10
         /** Сколько держим закрытую плашку «сезон вышел полностью» после завершения. */

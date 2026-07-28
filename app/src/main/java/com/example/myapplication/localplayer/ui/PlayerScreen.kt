@@ -54,7 +54,7 @@ enum class VideoFit { ORIGINAL, CROP }
 
 /**
  * Полноэкранный проигрыватель на androidx.media3 (ExoPlayer) с полностью кастомным скином:
- * стеклянные доки + оранжевый жидко-стеклянный бегунок (см. [PlayerControlsOverlay]).
+ * плоские доки + белая полоса с оранжевым бегунком (см. [PlayerControlsOverlay]).
  * Стандартный контроллер [PlayerView] отключён (`useController = false`) — все кнопки наши,
  * никаких дефолтных +5/−5.
  *
@@ -104,6 +104,9 @@ fun PlayerScreen(
     var fit by remember { mutableStateOf(VideoFit.ORIGINAL) }
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
     var videoAspect by remember { mutableFloatStateOf(16f / 9f) }
+    // Сюрфейс плеера — источник кадра для тона доков (PixelCopy), см. rememberPlayerAmbient.
+    var videoSurface by remember { mutableStateOf<android.view.SurfaceView?>(null) }
+    var drmProtected by remember { mutableStateOf(false) }
     val viewportAspect = viewportSize.width.toFloat() / viewportSize.height.coerceAtLeast(1)
     val cropScale = max(
         viewportAspect / videoAspect.coerceAtLeast(0.01f),
@@ -158,6 +161,7 @@ fun PlayerScreen(
 
             override fun onTracksChanged(tracks: Tracks) {
                 audioTracks = tracks.extractAudioOptions()
+                drmProtected = tracks.isDrmProtected()
             }
 
             override fun onVideoSizeChanged(size: VideoSize) {
@@ -222,6 +226,9 @@ fun PlayerScreen(
         }
     }
 
+    // Полный экран: статус-бар и навигация уезжают, пока виден кадр (в PiP окно и так без баров).
+    ImmersivePlayerWindow(enabled = !isInPip)
+
     androidx.compose.foundation.layout.Box(
         modifier = modifier.fillMaxSize().background(Color.Black),
     ) {
@@ -234,6 +241,9 @@ fun PlayerScreen(
                     scaleY = animatedVideoScale
                 },
             factory = { ctx ->
+                // surface_type по умолчанию = SurfaceView: дешевле по батарее и композитингу, чем
+                // TextureView. Не переводить на TextureView ради блюра — доки плоские, кадр
+                // для их тона снимается отдельно через PixelCopy (см. rememberPlayerAmbient).
                 PlayerView(ctx).apply {
                     player = exoPlayer
                     useController = false
@@ -242,6 +252,7 @@ fun PlayerScreen(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                     )
                     setBackgroundColor(android.graphics.Color.BLACK)
+                    videoSurface = videoSurfaceView as? android.view.SurfaceView
                 }
             },
             update = { view ->
@@ -263,12 +274,15 @@ fun PlayerScreen(
 
         // В режиме «картинка в картинке» все контролы прячем — остаётся только видео.
         if (!isInPip) {
-            val ambient = rememberAmbientDockColor(
-                mediaUri = episodes.getOrNull(currentIndex)?.documentUri,
-                positionProvider = { exoPlayer.currentPosition },
-                active = true,
+            // Сэмплим кадр только пока контролы на экране — иначе читали бы сюрфейс впустую.
+            var controlsVisible by remember { mutableStateOf(true) }
+            val ambient = rememberPlayerAmbient(
+                surfaceProvider = { videoSurface },
+                adaptive = !drmProtected,
+                active = controlsVisible,
             )
             PlayerControlsOverlay(
+                onControlsVisibleChange = { controlsVisible = it },
                 player = exoPlayer,
                 title = episodes.getOrNull(currentIndex)?.originalName.orEmpty(),
                 ambient = ambient,

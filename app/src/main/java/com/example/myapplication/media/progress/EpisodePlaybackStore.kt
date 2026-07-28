@@ -103,6 +103,33 @@ class EpisodePlaybackStore(
         }
     }
 
+    /**
+     * Дальше всего продвинутая серия по каждому тайтлу: animeId → (сезон, серия).
+     *
+     * Один Flow на всю коллекцию, а не [progressFlow] на каждую запись: ключ прогресса — хэш от
+     * animeId, поэтому по снимку Preferences нельзя перечислить тайтлы, но МОЖНО дёшево спросить
+     * ключ для каждого известного id.
+     *
+     * Засчитываем только ОСМЫСЛЕННЫЙ просмотр: серия либо досмотрена, либо отыграна дольше
+     * [MEANINGFUL_WATCH_MS]. Плеер сохраняет позицию раз в секунду с самого старта, поэтому любое
+     * случайное открытие серии (проверить, играет ли источник) оставляет запись с позицией в
+     * пару секунд — по ней прогресс просмотра рисовать нельзя.
+     */
+    fun furthestEpisodeFlow(animeIds: List<String>): Flow<Map<String, PlaybackEpisodeKey>> {
+        val keys = animeIds.associateWith { progressKey(it) }
+        return dataStore.data.map { preferences ->
+            buildMap {
+                for ((animeId, key) in keys) {
+                    val furthest = decode(preferences[key])
+                        .filterValues { it.watched || it.positionMs >= MEANINGFUL_WATCH_MS }
+                        .keys
+                        .maxWithOrNull(compareBy({ it.season }, { it.episode }))
+                    if (furthest != null) put(animeId, furthest)
+                }
+            }
+        }.distinctUntilChanged()
+    }
+
     fun preferredQualityFlow(animeId: String): Flow<Int?> {
         val key = qualityKey(animeId)
         return dataStore.data
@@ -132,6 +159,11 @@ class EpisodePlaybackStore(
                     .map { PlaybackProgressEntry(it.key, it.value) }
             )
         )
+
+    private companion object {
+        /** Меньше минуты в серии — это не просмотр, а проба источника. */
+        const val MEANINGFUL_WATCH_MS = 60_000L
+    }
 
     private fun progressKey(animeId: String) =
         stringPreferencesKey("episode_progress_${stableSuffix(animeId)}")

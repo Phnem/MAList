@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.CircularProgressIndicator
@@ -58,6 +59,8 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.example.myapplication.data.models.Anime
+import com.example.myapplication.data.models.MediaType
+import com.example.myapplication.manga.ui.MangaChaptersPage
 import com.example.myapplication.data.models.RatingScale
 import com.example.myapplication.isAppInDarkTheme
 import com.example.myapplication.network.AppLanguage
@@ -65,6 +68,7 @@ import com.example.myapplication.ui.shared.GlassPreset
 import com.example.myapplication.ui.shared.adaptiveGlassBackdrop
 import com.example.myapplication.ui.shared.rememberAdaptiveGlassEffects
 import com.example.myapplication.ui.shared.theme.MotionTokens
+import com.example.myapplication.ui.shared.components.GrabberHandle
 import com.example.myapplication.ui.shared.theme.SnProFamily
 import com.example.myapplication.utils.performHaptic
 import com.kyant.backdrop.Backdrop
@@ -128,6 +132,8 @@ fun DetailsScreen(
     val episodeAnime = remember(current, displayTitle) {
         current.copy(title = displayTitle)
     }
+    // У манги вторая страница — главы из движка манги, а не серии: разный источник и разный ридер.
+    val isManga = current.mediaType == MediaType.MANGA
     val episodeMenuViewModel: EpisodeMenuViewModel =
         koinViewModel(key = "episode_menu_${current.id}") { parametersOf(episodeAnime) }
 
@@ -167,7 +173,16 @@ fun DetailsScreen(
                         },
                     )
 
-                    else -> ModernDetailsEpisodesPage(
+                    else -> if (isManga) MangaChaptersPage(
+                        animeId = current.id,
+                        animeTitle = displayTitle,
+                        animeTitleEn = current.titleEn,
+                        language = language,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .statusBarsPadding()
+                            .padding(top = 56.dp),
+                    ) else ModernDetailsEpisodesPage(
                         animeId = current.id,
                         animeTitle = displayTitle,
                         animeTitleRu = current.titleRu,
@@ -200,6 +215,7 @@ fun DetailsScreen(
             backdrop = backdrop,
             isDark = isDark,
             language = language,
+            isManga = isManga,
             activePage = pagerState.targetPage,
             onSelect = { page ->
                 performHaptic(view, "light")
@@ -214,7 +230,8 @@ fun DetailsScreen(
                 .zIndex(4f),
         )
 
-        if (pagerState.targetPage == 1) {
+        // «Начать смотреть» относится к сериям; у манги чтение начинается с выбранной главы.
+        if (pagerState.targetPage == 1 && !isManga) {
             DetailsGlassStartButton(
                 backdrop = backdrop,
                 onClick = {
@@ -260,6 +277,9 @@ private fun DetailsInfoPage(
     val chipBg = if (isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.05f)
     val ru = language == AppLanguage.RU
     val posterAccent = rememberPosterAccent(imgPath)
+    // Лист непрозрачный на всей высоте. Раньше верхние стопы шли с alpha < 1, из-за чего сквозь
+    // начало листа просвечивал hero и была видна граница обложки. Переход к фону экрана делаем
+    // смешиванием цветов, а не прозрачностью.
     val detailsBackground = remember(posterAccent, screenBg, isDark) {
         val leading = if (isDark) {
             lerp(posterAccent, Color.Black, 0.48f)
@@ -269,7 +289,7 @@ private fun DetailsInfoPage(
         Brush.verticalGradient(
             colorStops = arrayOf(
                 0f to leading,
-                0.30f to leading.copy(alpha = if (isDark) 0.82f else 0.72f),
+                0.30f to lerp(leading, screenBg, if (isDark) 0.18f else 0.28f),
                 0.68f to screenBg,
                 1f to screenBg,
             ),
@@ -342,9 +362,11 @@ private fun DetailsInfoPage(
                     .heightIn(min = viewportHeight)
                     .clip(RoundedCornerShape(topStart = sheetCorner, topEnd = sheetCorner))
                     .background(detailsBackground)
-                    .padding(horizontal = 20.dp)
-                    .padding(top = 24.dp),
+                    .padding(horizontal = 20.dp),
             ) {
+            // Grab-индикатор как у обычной шторки: сразу читается, что лист «наезжает» на арт.
+            GrabberHandle(isDark)
+            Spacer(Modifier.height(6.dp))
             Text(
                 text = displayTitle,
                 style = MaterialTheme.typography.headlineMedium.copy(
@@ -834,6 +856,7 @@ private fun DetailsMiniDock(
     backdrop: Backdrop,
     isDark: Boolean,
     language: AppLanguage,
+    isManga: Boolean,
     activePage: Int,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
@@ -860,8 +883,13 @@ private fun DetailsMiniDock(
             onClick = { onSelect(0) },
         )
         MiniDockItem(
-            icon = Icons.Rounded.PlayArrow,
-            label = if (ru) "Серии" else "Episodes",
+            icon = if (isManga) Icons.Rounded.MenuBook else Icons.Rounded.PlayArrow,
+            label = when {
+                isManga && ru -> "Главы"
+                isManga -> "Chapters"
+                ru -> "Серии"
+                else -> "Episodes"
+            },
             selected = activePage == 1,
             isDark = isDark,
             onClick = { onSelect(1) },

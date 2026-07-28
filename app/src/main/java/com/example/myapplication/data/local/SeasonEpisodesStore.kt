@@ -59,6 +59,9 @@ class SeasonEpisodesStore(context: Context) {
     fun isFresh(animeId: String, nowMillis: Long = System.currentTimeMillis()): Boolean {
         val e = _flow.value[animeId] ?: return false
         if (e.resolvedAt <= 0) return false
+        // Запись, собранная прежней версией резолвера, показывает неверный расклад — перерезолвить
+        // сразу, не дожидаясь месячного TTL «полных» записей.
+        if (e.schema < SeasonEpisodesEntry.CURRENT_SCHEMA) return false
         val ttl = if (e.complete) COMPLETE_TTL_MILLIS else INCOMPLETE_TTL_MILLIS
         return nowMillis - e.resolvedAt <= ttl
     }

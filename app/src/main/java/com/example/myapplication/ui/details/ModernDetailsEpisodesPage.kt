@@ -66,6 +66,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInWindow
@@ -220,7 +221,6 @@ fun ModernDetailsEpisodesPage(
                 start = 18.dp,
                 end = 18.dp,
             ),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item(key = "season_menu_header") {
                 SeasonMenuHeader(
@@ -234,21 +234,63 @@ fun ModernDetailsEpisodesPage(
                     onQualityClick = viewModel::openQualityPicker,
                     onQualityAnchorChanged = { qualityAnchor = it },
                 )
+                Spacer(Modifier.height(12.dp))
             }
-            items(normalizedSeasons, key = { it.seasonNumber }) { season ->
-                SeasonBlock(
-                    season = season,
-                    expanded = season.seasonNumber in state.expandedSeasons,
-                    posterPath = posterPath,
-                    seasonCover = state.seasonCovers[season.seasonNumber],
-                    state = state,
-                    ru = ru,
-                    isDark = isDark,
-                    onToggle = { viewModel.toggleSeason(season.seasonNumber) },
-                    onSeasonAction = { viewModel.seasonAction(season) },
-                    onEpisodeClick = { viewModel.play(season, it) },
-                    onEpisodeAction = { viewModel.episodeAction(season, it) },
-                )
+            // Раскрытый сезон разложен на ОТДЕЛЬНЫЕ элементы списка, а не лежит одним блоком
+            // внутри item. Иначе LazyColumn на каждом кадре раскрытия перемеряет весь сезон
+            // целиком (у длинных сезонов это десятки строк с обложками) — отсюда рывки.
+            // Так же уходит вложенная AnimatedVisibility на каждую серию: N одновременных
+            // анимаций внутри контейнера, который сам меняет высоту.
+            normalizedSeasons.forEach { season ->
+                val expanded = season.seasonNumber in state.expandedSeasons
+                val episodeCount = season.episodes.coerceAtLeast(0)
+
+                item(key = "season_head_${season.seasonNumber}") {
+                    SeasonHeaderCard(
+                        season = season,
+                        expanded = expanded,
+                        posterPath = posterPath,
+                        seasonCover = state.seasonCovers[season.seasonNumber],
+                        state = state,
+                        ru = ru,
+                        isDark = isDark,
+                        onToggle = { viewModel.toggleSeason(season.seasonNumber) },
+                        onSeasonAction = { viewModel.seasonAction(season) },
+                        modifier = Modifier.animateItem(),
+                    )
+                }
+
+                if (expanded) {
+                    items(
+                        count = episodeCount,
+                        key = { index -> "ep_${season.seasonNumber}_${index + 1}" },
+                    ) { index ->
+                        val episode = index + 1
+                        val key = EpisodeKey(season.seasonNumber, episode)
+                        SeasonEpisodeSlot(
+                            isLast = index == episodeCount - 1,
+                            isDark = isDark,
+                            modifier = Modifier.animateItem(),
+                        ) {
+                            EpisodeRow(
+                                episodeNumber = episode,
+                                visual = state.visuals[key],
+                                fallbackImage = state.seasonCovers[season.seasonNumber] ?: posterPath,
+                                action = state.actions[key] ?: EpisodeActionState.Available,
+                                progress = state.playback[key],
+                                streaming = state.streaming == key,
+                                ru = ru,
+                                isDark = isDark,
+                                onClick = { viewModel.play(season, episode) },
+                                onAction = { viewModel.episodeAction(season, episode) },
+                            )
+                        }
+                    }
+                }
+
+                item(key = "season_gap_${season.seasonNumber}") {
+                    Spacer(Modifier.height(12.dp))
+                }
             }
         }
 
@@ -423,8 +465,9 @@ private fun HeaderQualityChip(
     }
 }
 
+/** Шапка сезона. Раскрытые серии живут отдельными элементами списка — см. [SeasonEpisodeSlot]. */
 @Composable
-private fun SeasonBlock(
+private fun SeasonHeaderCard(
     season: SeasonInfo,
     expanded: Boolean,
     posterPath: String?,
@@ -434,17 +477,15 @@ private fun SeasonBlock(
     isDark: Boolean,
     onToggle: () -> Unit,
     onSeasonAction: () -> Unit,
-    onEpisodeClick: (Int) -> Unit,
-    onEpisodeAction: (Int) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val cardShape = RoundedCornerShape(22.dp)
-    val cardColor = if (isDark) {
-        Color.White.copy(alpha = 0.075f)
+    // Раскрытый сезон: низ карточки срезан — её продолжают карточки серий следующими элементами.
+    val cardShape = if (expanded) {
+        RoundedCornerShape(topStart = SEASON_CARD_RADIUS, topEnd = SEASON_CARD_RADIUS)
     } else {
-        Color.Black.copy(alpha = 0.045f)
+        RoundedCornerShape(SEASON_CARD_RADIUS)
     }
     val action = aggregateSeasonAction(season, state.actions)
-    val episodeEnterOffset = with(LocalDensity.current) { 20.dp.roundToPx() }
     val chevronRotation by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
         animationSpec = MotionTokens.standard(),
@@ -452,10 +493,10 @@ private fun SeasonBlock(
     )
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(cardShape)
-            .background(cardColor),
+            .background(seasonCardColor(isDark)),
     ) {
         Row(
             modifier = Modifier
@@ -500,11 +541,7 @@ private fun SeasonBlock(
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = if (ru) {
-                        "${season.episodes} ${pluralRuEpisode(season.episodes)}"
-                    } else {
-                        "${season.episodes} ${if (season.episodes == 1) "episode" else "episodes"}"
-                    },
+                    text = seasonEpisodesLabel(season, ru),
                     style = MaterialTheme.typography.bodyMedium.copy(fontFamily = SnProFamily),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -535,54 +572,39 @@ private fun SeasonBlock(
             )
         }
 
-        AnimatedVisibility(
-            visible = expanded,
-            enter = expandVertically(
-                animationSpec = MotionTokens.seasonExpansion(),
-                expandFrom = Alignment.Top,
-                clip = true,
-            ) + fadeIn(animationSpec = tween(200)),
-            exit = shrinkVertically(
-                animationSpec = MotionTokens.seasonExpansion(),
-                shrinkTowards = Alignment.Top,
-                clip = true,
-            ) + fadeOut(animationSpec = tween(160)),
-        ) {
-            Column(
-                modifier = Modifier.padding(start = 10.dp, end = 10.dp, bottom = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                (1..season.episodes.coerceAtLeast(0)).forEachIndexed { index, episode ->
-                    val key = EpisodeKey(season.seasonNumber, episode)
-                    AnimatedVisibility(
-                        visible = expanded,
-                        enter = slideInVertically(
-                            animationSpec = MotionTokens.seasonExpansion(),
-                            initialOffsetY = { episodeEnterOffset },
-                        ) + fadeIn(
-                            animationSpec = tween(
-                                durationMillis = 200,
-                                delayMillis = index.coerceAtMost(4) * 20,
-                            ),
-                        ),
-                        exit = fadeOut(animationSpec = tween(140)),
-                    ) {
-                        EpisodeRow(
-                            episodeNumber = episode,
-                            visual = state.visuals[key],
-                            fallbackImage = seasonCover ?: posterPath,
-                            action = state.actions[key] ?: EpisodeActionState.Available,
-                            progress = state.playback[key],
-                            streaming = state.streaming == key,
-                            ru = ru,
-                            isDark = isDark,
-                            onClick = { onEpisodeClick(episode) },
-                            onAction = { onEpisodeAction(episode) },
-                        )
-                    }
-                }
-            }
-        }
+    }
+}
+
+private val SEASON_CARD_RADIUS = 22.dp
+
+private fun seasonCardColor(isDark: Boolean): Color =
+    if (isDark) Color.White.copy(alpha = 0.075f) else Color.Black.copy(alpha = 0.045f)
+
+/**
+ * Одна серия как элемент списка: продолжает карточку сезона (те же поля и заливка), последняя
+ * закругляет низ. Появление/исчезновение отдаём [androidx.compose.foundation.lazy.LazyItemScope.animateItem]
+ * — работают только видимые строки, без пересчёта всего сезона.
+ */
+@Composable
+private fun SeasonEpisodeSlot(
+    isLast: Boolean,
+    isDark: Boolean,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val shape = if (isLast) {
+        RoundedCornerShape(bottomStart = SEASON_CARD_RADIUS, bottomEnd = SEASON_CARD_RADIUS)
+    } else {
+        RectangleShape
+    }
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(seasonCardColor(isDark))
+            .padding(start = 10.dp, end = 10.dp, bottom = if (isLast) 10.dp else 8.dp),
+    ) {
+        content()
     }
 }
 
@@ -890,6 +912,23 @@ private fun formatEpisodeTime(valueMs: Long): String {
     val minutes = totalSeconds / 60L
     val seconds = totalSeconds % 60L
     return "%02d:%02d".format(minutes, seconds)
+}
+
+/**
+ * Подпись сезона. Выходящий сезон показывает «сколько доступно из анонсированных» — список ниже
+ * содержит только вышедшие серии, и без итога было бы непонятно, ждать ли ещё.
+ */
+private fun seasonEpisodesLabel(season: SeasonInfo, ru: Boolean): String {
+    val announced = season.totalEpisodes?.takeIf { season.ongoing && it > season.episodes }
+    val count = if (ru) {
+        "${season.episodes} ${pluralRuEpisode(season.episodes)}"
+    } else {
+        "${season.episodes} ${if (season.episodes == 1) "episode" else "episodes"}"
+    }
+    return if (announced == null) count else {
+        if (ru) "${season.episodes} из $announced ${pluralRuEpisode(announced)}"
+        else "${season.episodes} of $announced episodes"
+    }
 }
 
 private fun pluralRuSeason(value: Int): String {

@@ -2,17 +2,22 @@ package com.example.myapplication.localplayer.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,6 +25,8 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.displayCutoutPadding
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -28,6 +35,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.activity.compose.BackHandler
@@ -35,10 +44,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.AspectRatio
 import androidx.compose.material.icons.rounded.CropFree
-import androidx.compose.material.icons.rounded.Forward10
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.MusicNote
-import androidx.compose.material.icons.rounded.Replay10
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PictureInPictureAlt
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -55,23 +62,28 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerInputScope
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
@@ -83,6 +95,9 @@ import com.example.myapplication.ui.shared.theme.BrandOrangeBright
 import com.example.myapplication.ui.shared.theme.MotionTokens
 import com.example.myapplication.ui.shared.theme.SnProFamily
 import com.example.myapplication.utils.performHaptic
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.util.Locale
 
 private enum class PlayerMenu { AUDIO, SPEED }
@@ -90,18 +105,28 @@ private enum class PlayerMenu { AUDIO, SPEED }
 private val SPEED_OPTIONS = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f)
 private val Capsule = RoundedCornerShape(percent = 50)
 
+/** Шаг перемотки дабл-тапом; каждый следующий тап подряд добавляет ещё один такой шаг. */
+private const val SEEK_STEP_MS = 10_000L
+/** Сколько ждём следующий тап, прежде чем решить, что это был одиночный тап (показать контролы). */
+private const val SINGLE_TAP_DELAY_MS = 220L
+/** Сколько серия перемотки живёт после последнего тапа — окно накопления и время показа плашки. */
+private const val SEEK_BURST_HOLD_MS = 750L
+
 private fun isRuLocale() = Locale.getDefault().language == "ru"
 
+/** Активная серия дабл-тапов: сторона и сколько шагов по [SEEK_STEP_MS] уже накоплено. */
+private data class SeekBurst(val forward: Boolean, val steps: Int)
+
 /**
- * Кастомный скин контролов поверх видео: стеклянные Ambilight-доки (сверху/снизу) + белый бегунок
- * на оранжевой полосе. Автоскрытие 3.5 c, тап по видео — показать/скрыть с плавной анимацией,
- * замок — заблокировать жесты.
+ * Кастомный скин контролов поверх видео: плоские доки ([ambientDockSurface]) + белая полоса
+ * с оранжевым бегунком. Автоскрытие 3.5 c, тап по видео — показать/скрыть, дабл-тап по краю —
+ * перемотка с накоплением (2 тапа = 10 c, 3 = 20 c, …), замок — заблокировать жесты.
  */
 @Composable
 fun PlayerControlsOverlay(
     player: ExoPlayer,
     title: String,
-    ambient: Color,
+    ambient: PlayerAmbient,
     isPlaying: Boolean,
     isBuffering: Boolean,
     position: Long,
@@ -120,8 +145,9 @@ fun PlayerControlsOverlay(
     onSelectSpeed: (Float) -> Unit,
     onSelectAudio: (AudioTrackOption) -> Unit,
     onCycleFit: () -> Unit,
+    onControlsVisibleChange: (Boolean) -> Unit = {},
 ) {
-    val noise = rememberNoiseBrush()
+    val scope = rememberCoroutineScope()
 
     var controlsVisible by remember { mutableStateOf(true) }
     var locked by remember { mutableStateOf(false) }
@@ -131,33 +157,77 @@ fun PlayerControlsOverlay(
     var unlockHintNonce by remember { mutableStateOf(0) }
     var showUnlockHint by remember { mutableStateOf(false) }
 
-    // Жесты по видео: превью перемотки (свайп вбок) + индикатор дабл-тапа ±10с.
+    // Жесты по видео: превью перемотки (свайп вбок) + накапливающаяся перемотка дабл-тапом.
     var seekPreview by remember { mutableStateOf<SeekPreview?>(null) }
-    var doubleTapNonce by remember { mutableStateOf(0) }
-    var doubleTapForward by remember { mutableStateOf(true) }
-    var showDoubleTap by remember { mutableStateOf(false) }
+    var seekBurst by remember { mutableStateOf<SeekBurst?>(null) }
+    var lastBurst by remember { mutableStateOf<SeekBurst?>(null) }
+    var tapCount by remember { mutableIntStateOf(0) }
+    var tapForward by remember { mutableStateOf(true) }
+    var burstBase by remember { mutableLongStateOf(0L) }
+    var tapJob by remember { mutableStateOf<Job?>(null) }
+
+    LaunchedEffect(controlsVisible) { onControlsVisibleChange(controlsVisible) }
 
     LaunchedEffect(controlsVisible, isPlaying, menuKind, isScrubbing, locked, seekPreview) {
         if (controlsVisible && isPlaying && menuKind == null && !isScrubbing && !locked && seekPreview == null) {
-            kotlinx.coroutines.delay(3500)
+            delay(3500)
             controlsVisible = false
         }
     }
     LaunchedEffect(unlockHintNonce) {
         if (unlockHintNonce > 0) {
             showUnlockHint = true
-            kotlinx.coroutines.delay(2500)
+            delay(2500)
             showUnlockHint = false
         }
     }
     LaunchedEffect(menuState.currentState, menuState.isIdle) {
         if (!menuState.currentState && menuState.isIdle) menuKind = null
     }
-    LaunchedEffect(doubleTapNonce) {
-        if (doubleTapNonce > 0) {
-            showDoubleTap = true
-            kotlinx.coroutines.delay(550)
-            showDoubleTap = false
+
+    /**
+     * Один тап по видео. Второй и каждый следующий тап подряд с той же стороны не перезапускает
+     * перемотку, а НАРАЩИВАЕТ её от позиции, зафиксированной на входе в серию: 2 тапа = 10 c,
+     * 3 = 20 c, 4 = 30 c и так далее. Считаем сами (а не через onDoubleTap), потому что
+     * detectTapGestures рапортует только пары и третий тап пришёл бы как новый одиночный.
+     */
+    fun onVideoTap(x: Float, widthPx: Int) {
+        if (locked) {
+            unlockHintNonce++
+            return
+        }
+        tapJob?.cancel()
+        if (duration <= 0L) {
+            tapCount = 0
+            controlsVisible = !controlsVisible
+            return
+        }
+
+        val forward = x > widthPx / 2f
+        tapCount = if (tapCount > 0 && forward == tapForward) tapCount + 1 else 1
+        tapForward = forward
+
+        if (tapCount == 1) {
+            tapJob = scope.launch {
+                delay(SINGLE_TAP_DELAY_MS)
+                controlsVisible = !controlsVisible
+                tapCount = 0
+            }
+            return
+        }
+
+        if (tapCount == 2) burstBase = player.currentPosition
+        val steps = tapCount - 1
+        val delta = steps * SEEK_STEP_MS * (if (forward) 1 else -1)
+        player.seekTo((burstBase + delta).coerceIn(0L, duration))
+        SeekBurst(forward, steps).let {
+            seekBurst = it
+            lastBurst = it
+        }
+        tapJob = scope.launch {
+            delay(SEEK_BURST_HOLD_MS)
+            seekBurst = null
+            tapCount = 0
         }
     }
 
@@ -165,22 +235,12 @@ fun PlayerControlsOverlay(
         modifier = Modifier
             .fillMaxSize()
             .pointerInput(locked, duration) {
-                detectTapGestures(
-                    onTap = {
-                        if (locked) unlockHintNonce++
-                        else controlsVisible = !controlsVisible
-                    },
-                    onDoubleTap = { offset ->
-                        if (!locked && duration > 0) {
-                            val forward = offset.x > size.width / 2f
-                            val target = (player.currentPosition + if (forward) 10_000L else -10_000L)
-                                .coerceIn(0L, duration)
-                            player.seekTo(target)
-                            doubleTapForward = forward
-                            doubleTapNonce++
-                        }
-                    },
-                )
+                awaitEachGesture {
+                    awaitFirstDown()
+                    val up = waitForUpOrCancellation() ?: return@awaitEachGesture
+                    up.consume()
+                    onVideoTap(up.position.x, size.width)
+                }
             }
             .pointerInput(locked, duration) {
                 if (locked) return@pointerInput
@@ -212,6 +272,7 @@ fun PlayerControlsOverlay(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
                     .statusBarsPadding()
+                    .displayCutoutPadding()
                     .padding(20.dp),
                 enter = fadeIn(MotionTokens.standard()),
                 exit = fadeOut(MotionTokens.dialogExit()),
@@ -219,29 +280,30 @@ fun PlayerControlsOverlay(
                 DockIconButton(
                     icon = Icons.Rounded.Lock,
                     contentDescription = if (isRuLocale()) "Разблокировать" else "Unlock",
+                    tint = ambient.topContent,
                     onClick = { locked = false; showUnlockHint = false; controlsVisible = true },
-                    modifier = Modifier.ambientGlassPill(Capsule, ambient, noise),
+                    modifier = Modifier.ambientDockSurface(Capsule, ambient.topTint),
                 )
             }
             return@Box
         }
 
-        // Превью перемотки свайпом + индикатор дабл-тапа — поверх, независимо от контролов.
+        // Превью перемотки свайпом + «линза» дабл-тапа — поверх, независимо от контролов.
         seekPreview?.let { SeekPreviewOverlay(it, Modifier.align(Alignment.Center)) }
-        if (showDoubleTap) {
-            DoubleTapIndicator(
-                forward = doubleTapForward,
-                modifier = Modifier
-                    .align(if (doubleTapForward) Alignment.CenterEnd else Alignment.CenterStart)
-                    .padding(horizontal = 40.dp),
-            )
+        AnimatedVisibility(
+            visible = seekBurst != null,
+            modifier = Modifier.fillMaxSize(),
+            enter = fadeIn(tween(120)),
+            exit = fadeOut(tween(280)),
+        ) {
+            lastBurst?.let { SeekRipple(it) }
         }
 
         // Кнопка «Пропустить» — весь опенинг, независимо от автоскрытия.
         if (skipVisible) {
             SkipButton(
-                ambient = ambient,
-                noise = noise,
+                tint = ambient.bottomTint,
+                content = ambient.bottomContent,
                 onClick = onSkip,
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
@@ -279,24 +341,30 @@ fun PlayerControlsOverlay(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    // Статус-бар спрятан ([ImmersivePlayerWindow]), поэтому его инсет нулевой —
+                    // от выреза камеры отступаем отдельно.
                     .statusBarsPadding()
+                    .displayCutoutPadding()
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 // Левая пилюля в weight-контейнере → правая пилюля всегда прижата к углу.
                 Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                     Row(
-                        modifier = Modifier.ambientGlassPill(Capsule, ambient, noise).padding(start = 6.dp, end = 16.dp),
+                        modifier = Modifier.ambientDockSurface(Capsule, ambient.topTint).padding(start = 6.dp, end = 16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        TransportIcon(Icons.AutoMirrored.Rounded.ArrowBack, 40.dp, 22.dp, onClick = onBack)
+                        TransportIcon(
+                            Icons.AutoMirrored.Rounded.ArrowBack, 40.dp, 22.dp,
+                            tint = ambient.topContent, onClick = onBack,
+                        )
                         Text(
                             text = title,
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontFamily = SnProFamily,
                                 fontWeight = FontWeight.SemiBold,
                             ),
-                            color = Color.White,
+                            color = ambient.topContent,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.padding(start = 4.dp),
@@ -307,12 +375,13 @@ fun PlayerControlsOverlay(
                 Spacer(Modifier.width(10.dp))
 
                 Row(
-                    modifier = Modifier.ambientGlassPill(Capsule, ambient, noise).padding(horizontal = 4.dp),
+                    modifier = Modifier.ambientDockSurface(Capsule, ambient.topTint).padding(horizontal = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     DockIconButton(
                         icon = Icons.Rounded.MusicNote,
                         contentDescription = if (isRuLocale()) "Аудиодорожка" else "Audio track",
+                        tint = ambient.topContent,
                         onClick = {
                             if (audioTracks.isNotEmpty()) { menuKind = PlayerMenu.AUDIO; menuState.targetState = true }
                         },
@@ -320,13 +389,14 @@ fun PlayerControlsOverlay(
                     DockIconButton(
                         icon = Icons.Rounded.Speed,
                         contentDescription = if (isRuLocale()) "Скорость" else "Speed",
+                        tint = ambient.topContent,
                         onClick = { menuKind = PlayerMenu.SPEED; menuState.targetState = true },
                     )
                 }
             }
         }
 
-        // ——— Центр: prev / play-pause / next ———
+        // ——— Центр: prev / play-pause / next (поверх голого кадра — всегда белые) ———
         AnimatedVisibility(
             visible = controlsVisible,
             modifier = Modifier.align(Alignment.Center),
@@ -360,6 +430,7 @@ fun PlayerControlsOverlay(
                 modifier = Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding()
+                    .displayCutoutPadding()
                     .padding(vertical = 12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
@@ -377,23 +448,31 @@ fun PlayerControlsOverlay(
                         )
                         Spacer(Modifier.weight(1f))
                         Row(
-                            modifier = Modifier.ambientGlassPill(Capsule, ambient, noise).padding(horizontal = 4.dp),
+                            modifier = Modifier.ambientDockSurface(Capsule, ambient.bottomTint).padding(horizontal = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            DockIconButton(Icons.Rounded.PictureInPictureAlt, contentDescription = "PiP", onClick = onEnterPip)
+                            DockIconButton(
+                                Icons.Rounded.PictureInPictureAlt,
+                                contentDescription = "PiP",
+                                tint = ambient.bottomContent,
+                                onClick = onEnterPip,
+                            )
                             DockIconButton(
                                 Icons.Rounded.ScreenRotation,
                                 contentDescription = if (isRuLocale()) "Поворот" else "Rotate",
+                                tint = ambient.bottomContent,
                                 onClick = onRotate,
                             )
                             DockIconButton(
                                 Icons.Rounded.Lock,
                                 contentDescription = if (isRuLocale()) "Блокировка" else "Lock",
+                                tint = ambient.bottomContent,
                                 onClick = { locked = true; controlsVisible = false },
                             )
                             DockIconButton(
                                 if (fit == VideoFit.CROP) Icons.Rounded.CropFree else Icons.Rounded.AspectRatio,
                                 contentDescription = if (isRuLocale()) "Формат кадра" else "Aspect",
+                                tint = ambient.bottomContent,
                                 onClick = onCycleFit,
                             )
                         }
@@ -404,7 +483,7 @@ fun PlayerControlsOverlay(
                         position = position,
                         buffered = buffered,
                         duration = duration,
-                        accent = BrandOrangeBright,
+                        thumbColor = BrandOrangeBright,
                         onScrubStart = { isScrubbing = true },
                         onScrubEnd = { fraction ->
                             isScrubbing = false
@@ -420,8 +499,7 @@ fun PlayerControlsOverlay(
             OptionMenu(
                 state = menuState,
                 menu = kind,
-                ambient = ambient,
-                noise = noise,
+                tint = ambient.topTint,
                 audioTracks = audioTracks,
                 speed = speed,
                 onSelectSpeed = { onSelectSpeed(it); menuState.targetState = false },
@@ -433,30 +511,44 @@ fun PlayerControlsOverlay(
 }
 
 /**
- * Оранжевая полоса + простой белый круглый бегунок (диаметр ~20% больше толщины полосы).
- * Никакого стекла на бегунке — по требованию.
+ * Полоса прокрутки: белая (пройденное — сплошной белый, хвост — полупрозрачный) с оранжевым
+ * круглым бегунком. В покое тонкая, на время перетаскивания раздувается вместе с бегунком и
+ * показывает всплывающее время над собой.
+ *
+ * Геометрия (отступы под бегунок и его ход) считается по ФИКСИРОВАННОМУ слоту [THUMB_SLOT], а
+ * анимируется только видимый размер — иначе на время анимации заливка уезжала бы от бегунка.
  */
 @Composable
 private fun SeekBar(
     position: Long,
     buffered: Long,
     duration: Long,
-    accent: Color,
+    thumbColor: Color,
     onScrubStart: () -> Unit,
     onScrubEnd: (Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
     val view = LocalView.current
-    val trackHeight = 12.dp
-    val thumb = 15.dp // ≈ +25% к толщине полосы
-    val thumbPx = with(density) { thumb.toPx() }
+    val slotPx = with(density) { THUMB_SLOT.toPx() }
 
     var isScrubbing by remember { mutableStateOf(false) }
     var scrubFraction by remember { mutableFloatStateOf(0f) }
     // Держим бегунок на отпущенной позиции, пока плеер реально не доедет туда — иначе он на кадр
     // «отскакивает» к старому месту (лаг).
     var pendingSeek by remember { mutableStateOf<Float?>(null) }
+    var bubbleWidthPx by remember { mutableIntStateOf(0) }
+
+    val trackHeight by animateDpAsState(
+        if (isScrubbing) TRACK_SCRUBBING else TRACK_IDLE,
+        MotionTokens.standard(),
+        label = "seekTrackHeight",
+    )
+    val thumbSize by animateDpAsState(
+        if (isScrubbing) THUMB_SCRUBBING else THUMB_IDLE,
+        MotionTokens.standard(),
+        label = "seekThumbSize",
+    )
 
     val fraction by remember(position, duration, isScrubbing, scrubFraction, pendingSeek) {
         derivedStateOf {
@@ -476,11 +568,11 @@ private fun SeekBar(
 
     BoxWithConstraints(
         modifier = modifier
-            .height(28.dp)
+            .height(30.dp)
             .pointerInput(duration) {
-                val padPx = thumbPx / 2f
+                val padPx = slotPx / 2f
                 fun xToFraction(x: Float): Float {
-                    val usable = (size.width - thumbPx).coerceAtLeast(1f)
+                    val usable = (size.width - slotPx).coerceAtLeast(1f)
                     return ((x - padPx) / usable).coerceIn(0f, 1f)
                 }
                 awaitPointerEventScope {
@@ -509,9 +601,9 @@ private fun SeekBar(
                 }
             },
     ) {
-        val travelPx = with(density) { (maxWidth - thumb).toPx() }
+        val travelPx = with(density) { (maxWidth - THUMB_SLOT).toPx() }
 
-        // Полоса: хвост + буфер + оранжевый прогресс.
+        // Полоса: хвост + буфер + белое пройденное.
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -519,48 +611,149 @@ private fun SeekBar(
                 .align(Alignment.Center)
                 .clip(Capsule)
                 .drawBehind {
-                    val w = size.width
                     val h = size.height
                     val r = h / 2f
-                    val pad = thumbPx / 2f
-                    val usable = (w - thumbPx).coerceAtLeast(1f)
-                    drawRoundRect(color = Color.White.copy(alpha = 0.22f), cornerRadius = CornerRadius(r, r))
+                    val pad = slotPx / 2f
+                    val usable = (size.width - slotPx).coerceAtLeast(1f)
+                    drawRoundRect(color = Color.White.copy(alpha = 0.28f), cornerRadius = CornerRadius(r, r))
                     drawRoundRect(
-                        color = Color.White.copy(alpha = 0.34f),
+                        color = Color.White.copy(alpha = 0.48f),
                         size = Size((pad + usable * bufferedFraction).coerceAtLeast(h), h),
                         cornerRadius = CornerRadius(r, r),
                     )
                     drawRoundRect(
-                        color = accent,
+                        color = Color.White,
                         size = Size((pad + usable * fraction).coerceAtLeast(h), h),
                         cornerRadius = CornerRadius(r, r),
                     )
                 },
         )
 
-        // Белый круглый бегунок.
+        // Оранжевый круглый бегунок в фиксированном слоте.
         Box(
             modifier = Modifier
                 .align(Alignment.CenterStart)
-                .graphicsLayer {
-                    translationX = travelPx * fraction
-                    val s = if (isScrubbing) 1.18f else 1f
-                    scaleX = s
-                    scaleY = s
+                .graphicsLayer { translationX = travelPx * fraction }
+                .size(THUMB_SLOT),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                Modifier
+                    .size(thumbSize)
+                    .clip(CircleShape)
+                    .background(thumbColor),
+            )
+        }
+
+        // Всплывающее время над бегунком — только пока тащим.
+        if (isScrubbing && duration > 0) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .onSizeChanged { bubbleWidthPx = it.width }
+                    .graphicsLayer {
+                        translationX = (travelPx * fraction + slotPx / 2f - bubbleWidthPx / 2f)
+                            .coerceIn(0f, (travelPx + slotPx - bubbleWidthPx).coerceAtLeast(0f))
+                        translationY = -size.height - with(density) { 6.dp.toPx() }
+                    },
+            ) {
+                Text(
+                    text = formatTime((fraction * duration).toLong()),
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = SnProFamily,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                    color = Color.White,
+                )
+            }
+        }
+    }
+}
+
+/** Геометрия «линзы» дабл-тапа: радиусы в долях экрана и вынос центра за внешний край. */
+private const val RIPPLE_RX = 0.54f
+private const val RIPPLE_RY = 0.62f
+private const val RIPPLE_CX = -0.039f
+
+private val THUMB_SLOT = 20.dp
+private val TRACK_IDLE = 4.dp
+private val TRACK_SCRUBBING = 11.dp
+private val THUMB_IDLE = 13.dp
+private val THUMB_SCRUBBING = 19.dp
+
+/**
+ * Индикатор перемотки дабл-тапом: не капсула, а мягкая «линза» во всю высоту, прижатая к краю
+ * экрана, с двумя стрелками и накопленной суммой внутри. Форма — большой овал, у которого видна
+ * только часть: в середине он выпирает к центру экрана, к верху и низу уходит за край.
+ */
+@Composable
+private fun SeekRipple(burst: SeekBurst, modifier: Modifier = Modifier) {
+    val seconds = burst.steps * SEEK_STEP_MS / 1000
+    Box(modifier.fillMaxSize()) {
+        Canvas(Modifier.fillMaxSize()) {
+            // Овал вылезает за верх, низ и внешний край экрана — видна только его внутренняя дуга.
+            // Радиусы подобраны так, чтобы дуга шла ~0.72 ширины у краёв и ~0.50 в середине:
+            // тот самый заметный выгиб к центру, а не почти прямая вертикаль.
+            val rx = size.width * RIPPLE_RX
+            val ry = size.height * RIPPLE_RY
+            val cx = if (burst.forward) size.width * (1f - RIPPLE_CX) else size.width * RIPPLE_CX
+            val left = cx - rx
+            val top = size.height / 2f - ry
+            val inner = Color.White.copy(alpha = 0.05f)
+            val outer = Color.White.copy(alpha = 0.20f)
+            drawOval(
+                brush = Brush.horizontalGradient(
+                    colors = if (burst.forward) listOf(inner, outer) else listOf(outer, inner),
+                    startX = left,
+                    endX = left + rx * 2f,
+                ),
+                topLeft = Offset(left, top),
+                size = Size(rx * 2f, ry * 2f),
+            )
+        }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth(0.5f)
+                .fillMaxHeight()
+                .align(if (burst.forward) Alignment.CenterEnd else Alignment.CenterStart),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(1.dp)) {
+                repeat(2) {
+                    Icon(
+                        Icons.Rounded.PlayArrow,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier
+                            .size(20.dp)
+                            .graphicsLayer { scaleX = if (burst.forward) 1f else -1f },
+                    )
                 }
-                .size(thumb)
-                .shadow(3.dp, CircleShape)
-                .clip(CircleShape)
-                .background(Color.White),
-        )
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = if (isRuLocale()) "$seconds секунд" else "$seconds seconds",
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontFamily = SnProFamily,
+                    fontWeight = FontWeight.SemiBold,
+                ),
+                color = Color.White,
+            )
+        }
     }
 }
 
 @Composable
-private fun SkipButton(ambient: Color, noise: androidx.compose.ui.graphics.ShaderBrush, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun SkipButton(
+    tint: Color,
+    content: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Row(
         modifier = modifier
-            .ambientGlassPill(Capsule, ambient, noise)
+            .ambientDockSurface(Capsule, tint)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -572,24 +765,23 @@ private fun SkipButton(ambient: Color, noise: androidx.compose.ui.graphics.Shade
         Text(
             text = if (isRuLocale()) "Пропустить" else "Skip",
             style = MaterialTheme.typography.titleMedium.copy(fontFamily = SnProFamily, fontWeight = FontWeight.SemiBold),
-            color = Color.White,
+            color = content,
         )
         Spacer(Modifier.width(6.dp))
-        Icon(Icons.Rounded.SkipNext, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
+        Icon(Icons.Rounded.SkipNext, contentDescription = null, tint = content, modifier = Modifier.size(24.dp))
     }
 }
 
 /**
- * Меню аудио/скорости в стиле стопки ресурсов на карточках ([WebLinkPopupMenu]): столбик стеклянных
- * пилюль, «вылетающих» из верхнего-правого угла (нота/спидометр) пружиной [MotionTokens.menuPop],
+ * Меню аудио/скорости в стиле стопки ресурсов на карточках: столбик плоских пилюль,
+ * «вылетающих» из верхнего-правого угла (нота/спидометр) пружиной [MotionTokens.menuPop],
  * поверх затемняющего скрима. Закрытие — обратное «всасывание».
  */
 @Composable
 private fun OptionMenu(
     state: MutableTransitionState<Boolean>,
     menu: PlayerMenu,
-    ambient: Color,
-    noise: ShaderBrush,
+    tint: Color,
     audioTracks: List<AudioTrackOption>,
     speed: Float,
     onSelectSpeed: (Float) -> Unit,
@@ -598,6 +790,23 @@ private fun OptionMenu(
 ) {
     BackHandler(enabled = true) { onDismiss() }
     val origin = TransformOrigin(1f, 0f) // «вытекает» из верхнего-правого дока
+    val labels = when (menu) {
+        PlayerMenu.AUDIO -> audioTracks.map { it.label }
+        PlayerMenu.SPEED -> SPEED_OPTIONS.map { s ->
+            if (s == 1f) (if (isRuLocale()) "Обычная (1×)" else "Normal (1×)") else "${trimSpeed(s)}×"
+        }
+    }
+    val selectedIndex = when (menu) {
+        PlayerMenu.AUDIO -> audioTracks.indexOfFirst { it.isSelected }.coerceAtLeast(0)
+        PlayerMenu.SPEED -> SPEED_OPTIONS.indexOfFirst { it == speed }.coerceAtLeast(0)
+    }
+    fun commit(index: Int) {
+        when (menu) {
+            PlayerMenu.AUDIO -> audioTracks.getOrNull(index)?.let(onSelectAudio)
+            PlayerMenu.SPEED -> SPEED_OPTIONS.getOrNull(index)?.let(onSelectSpeed)
+        }
+    }
+
     Box(Modifier.fillMaxSize()) {
         AnimatedVisibility(
             visibleState = state,
@@ -609,27 +818,54 @@ private fun OptionMenu(
                 Modifier
                     .fillMaxSize()
                     .background(Color.Black.copy(alpha = 0.4f))
-                    .pointerInput(Unit) { detectTapGestures(onTap = { onDismiss() }) },
+                    .pointerInput(Unit) { detectTapGestures(onTap = { onDismiss() }) }
+                    // Скрим глушит ПЕРЕТАСКИВАНИЯ: тап-детектор их не потребляет, и раньше любое
+                    // движение пальцем по открытому меню проваливалось в жесты плеера под ним —
+                    // список «нельзя было прокрутить», вместо этого шла перемотка.
+                    .pointerInput(Unit) { consumeDragsOnly() },
             )
         }
         AnimatedVisibility(
             visibleState = state,
-            modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = 66.dp, end = 14.dp),
-            enter = scaleIn(MotionTokens.menuPop(), initialScale = 0.5f, transformOrigin = origin) + fadeIn(MotionTokens.menuPop()),
-            exit = scaleOut(MotionTokens.sheetDismissForced(), targetScale = 0.6f, transformOrigin = origin) + fadeOut(MotionTokens.sheetDismissForced()),
+            modifier = Modifier.fillMaxSize(),
+            enter = fadeIn(MotionTokens.menuPop()),
+            exit = fadeOut(MotionTokens.sheetDismissForced()),
         ) {
-            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                when (menu) {
-                    PlayerMenu.AUDIO -> audioTracks.forEach { opt ->
-                        MenuPill(opt.label, opt.isSelected, ambient, noise) { onSelectAudio(opt) }
-                    }
-                    PlayerMenu.SPEED -> SPEED_OPTIONS.forEach { s ->
-                        MenuPill(
-                            label = if (s == 1f) (if (isRuLocale()) "Обычная (1×)" else "Normal (1×)") else "${trimSpeed(s)}×",
-                            selected = s == speed,
-                            ambient = ambient,
-                            noise = noise,
-                        ) { onSelectSpeed(s) }
+            if (labels.size >= ARC_MENU_THRESHOLD) {
+                // Длинный список — барабан-дуга от правого края (см. ArcCapsuleMenu).
+                ArcCapsuleMenu(
+                    labels = labels,
+                    selectedIndex = selectedIndex,
+                    onCommit = { index ->
+                        commit(index)
+                        onDismiss()
+                    },
+                    modifier = Modifier.statusBarsPadding().displayCutoutPadding(),
+                )
+            } else {
+                Box(Modifier.fillMaxSize()) {
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .statusBarsPadding()
+                            .displayCutoutPadding()
+                            .padding(top = 66.dp, end = 14.dp)
+                            .verticalScroll(rememberScrollState()),
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        when (menu) {
+                            PlayerMenu.AUDIO -> audioTracks.forEach { opt ->
+                                MenuPill(opt.label, opt.isSelected, tint) { onSelectAudio(opt) }
+                            }
+                            PlayerMenu.SPEED -> SPEED_OPTIONS.forEach { s ->
+                                MenuPill(
+                                    label = if (s == 1f) (if (isRuLocale()) "Обычная (1×)" else "Normal (1×)") else "${trimSpeed(s)}×",
+                                    selected = s == speed,
+                                    tint = tint,
+                                ) { onSelectSpeed(s) }
+                            }
+                        }
                     }
                 }
             }
@@ -637,11 +873,28 @@ private fun OptionMenu(
     }
 }
 
+/**
+ * Съедает только движения пальца, оставляя «чистые» тапы вышестоящему детектору: у тапа нет
+ * смещения, поэтому потреблять нечего и обработчик закрытия по клику продолжает работать.
+ */
+private suspend fun PointerInputScope.consumeDragsOnly() {
+    awaitEachGesture {
+        awaitFirstDown(requireUnconsumed = false)
+        while (true) {
+            val event = awaitPointerEvent()
+            event.changes.forEach { change ->
+                if (change.positionChange() != Offset.Zero) change.consume()
+            }
+            if (event.changes.none { it.pressed }) break
+        }
+    }
+}
+
 @Composable
-private fun MenuPill(label: String, selected: Boolean, ambient: Color, noise: ShaderBrush, onClick: () -> Unit) {
+private fun MenuPill(label: String, selected: Boolean, tint: Color, onClick: () -> Unit) {
     Row(
         modifier = Modifier
-            .ambientGlassPill(Capsule, ambient, noise)
+            .ambientDockSurface(Capsule, tint)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -693,37 +946,14 @@ private fun SeekPreviewOverlay(preview: SeekPreview, modifier: Modifier = Modifi
     }
 }
 
-@Composable
-private fun DoubleTapIndicator(forward: Boolean, modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier
-            .clip(Capsule)
-            .background(Color.Black.copy(alpha = 0.42f))
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            if (forward) Icons.Rounded.Forward10 else Icons.Rounded.Replay10,
-            contentDescription = null,
-            tint = Color.White,
-            modifier = Modifier.size(24.dp),
-        )
-        Spacer(Modifier.width(6.dp))
-        Text(
-            text = if (forward) "+10" else "−10",
-            style = MaterialTheme.typography.titleMedium.copy(fontFamily = SnProFamily, fontWeight = FontWeight.Bold),
-            color = Color.White,
-        )
-    }
-}
-
-/** Иконка транспорта без фона (белая). Без окраски по нажатию. */
+/** Иконка транспорта без фона. Без окраски по нажатию. */
 @Composable
 private fun TransportIcon(
     icon: ImageVector,
     size: Dp,
     iconSize: Dp,
     enabled: Boolean = true,
+    tint: Color = Color.White,
     onClick: () -> Unit,
 ) {
     Box(
@@ -737,16 +967,17 @@ private fun TransportIcon(
             ),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = null, tint = Color.White.copy(alpha = if (enabled) 1f else 0.35f), modifier = Modifier.size(iconSize))
+        Icon(icon, contentDescription = null, tint = tint.copy(alpha = if (enabled) 1f else 0.35f), modifier = Modifier.size(iconSize))
     }
 }
 
-/** Иконка-кнопка внутри дока. Всегда белая — без окраски при нажатии/активации. */
+/** Иконка-кнопка внутри дока; цвет приходит из [PlayerAmbient] под этим доком. */
 @Composable
 private fun DockIconButton(
     icon: ImageVector,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    tint: Color = Color.White,
     contentDescription: String? = null,
 ) {
     Box(
@@ -759,7 +990,7 @@ private fun DockIconButton(
             ),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = contentDescription, tint = Color.White, modifier = Modifier.size(22.dp))
+        Icon(icon, contentDescription = contentDescription, tint = tint, modifier = Modifier.size(22.dp))
     }
 }
 

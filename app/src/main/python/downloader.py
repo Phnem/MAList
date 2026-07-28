@@ -155,6 +155,13 @@ class HlsDownloader:
                 if frag_index and frag_count and frag_count > 0:
                     pct = int((frag_index / frag_count) * 100)
                     on_progress(episode.episode, pct)
+                    return
+                # Progressive MP4 (EN sources) has no fragments — report by bytes instead.
+                downloaded = d.get('downloaded_bytes')
+                total = d.get('total_bytes') or d.get('total_bytes_estimate')
+                if downloaded and total and total > 0:
+                    pct = min(int((downloaded / total) * 100), 100)
+                    on_progress(episode.episode, pct)
 
         referer = getattr(episode, 'referer', '') or 'https://aniboom.one/'
         parsed = urlparse(referer)

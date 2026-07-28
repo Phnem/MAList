@@ -114,8 +114,10 @@ fun IosRowDivider(isDark: Boolean, startInset: Dp = IosDesign.SeparatorInset) {
 }
 
 /**
- * Группа (карточка) сгруппированного списка. Рисует опциональный header/footer и squircle-карточку,
- * внутри которой [rows] разделяются inset-дивайдерами. Divider между строками — автоматически.
+ * Группа сгруппированного списка: опциональный header/footer и «карточка в карточке» —
+ * приподнятый контейнер группы, внутри которого КАЖДАЯ строка живёт в собственной squircle-карточке
+ * с зазором. Разделителей нет: границу строки задаёт сама карточка, поэтому список читается
+ * плотнее и не выглядит одной сплошной плитой.
  */
 @Composable
 fun IosListGroup(
@@ -123,7 +125,6 @@ fun IosListGroup(
     modifier: Modifier = Modifier,
     header: String? = null,
     footer: String? = null,
-    dividerStartInset: Dp = IosDesign.SeparatorInset,
     rows: List<@Composable () -> Unit>,
 ) {
     Column(
@@ -135,12 +136,21 @@ fun IosListGroup(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(SquircleShape(IosDesign.RadiusMd))
-                .background(IosDesign.rowBackground(isDark)),
+                .clip(SquircleShape(IosDesign.GroupRadius))
+                .background(IosDesign.groupBackground(isDark))
+                .padding(IosDesign.GroupPadding),
+            verticalArrangement = Arrangement.spacedBy(IosDesign.GroupRowSpacing),
         ) {
-            rows.forEachIndexed { index, row ->
-                if (index > 0) IosRowDivider(isDark, dividerStartInset)
-                row()
+            val cardShape = SquircleShape(IosDesign.RadiusMd)
+            rows.forEach { row ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(cardShape)
+                        .background(IosDesign.groupRowBackground(isDark)),
+                ) {
+                    row()
+                }
             }
         }
         if (footer != null) IosSectionFooter(footer, isDark)
@@ -224,7 +234,7 @@ fun IosRow(
      */
     chevronExpanded: Boolean? = null,
     titleColor: Color? = null,
-    minHeight: Dp = 52.dp,
+    minHeight: Dp = IosDesign.CardMinHeight,
     trailing: (@Composable () -> Unit)? = null,
     onClick: (() -> Unit)? = null,
 ) {
@@ -243,7 +253,7 @@ fun IosRow(
             .fillMaxWidth()
             .then(rowModifier)
             .defaultMinSize(minHeight = minHeight)
-            .padding(horizontal = IosDesign.ListHorizontalInset, vertical = 8.dp),
+            .padding(horizontal = IosDesign.CardHorizontalInset, vertical = IosDesign.CardVerticalInset),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (iconRes != null || icon != null) {
@@ -252,10 +262,11 @@ fun IosRow(
                 if (iconRes != null) IosIconWell(iconRes = iconRes, background = iconBackground, tint = wellTint)
                 else IosIconWell(icon = icon!!, background = iconBackground, tint = wellTint)
             } else {
-                // Плоский силуэт: тот же лидовый бокс 32dp (сохраняет inset разделителя), без подложки.
+                // Плоский силуэт без подложки — карточка сама себе контейнер, цветной well
+                // на ней превращается в «плитку в плитке».
                 val plainTint = if (iconTint == Color.Unspecified) MaterialTheme.colorScheme.onSurface else iconTint
                 Box(
-                    modifier = Modifier.size(IosDesign.ListIconSize),
+                    modifier = Modifier.size(IosDesign.CardIconSize),
                     contentAlignment = Alignment.Center,
                 ) {
                     if (iconRes != null) {
@@ -263,37 +274,39 @@ fun IosRow(
                             painter = painterResource(iconRes),
                             contentDescription = null,
                             tint = plainTint,
-                            modifier = Modifier.size(26.dp),
+                            modifier = Modifier.size(IosDesign.CardIconGlyph),
                         )
                     } else {
                         Icon(
                             imageVector = icon!!,
                             contentDescription = null,
                             tint = plainTint,
-                            modifier = Modifier.size(26.dp),
+                            modifier = Modifier.size(IosDesign.CardIconGlyph),
                         )
                     }
                 }
             }
-            Spacer(Modifier.width(IosDesign.ListIconTextGap))
+            Spacer(Modifier.width(IosDesign.CardIconTextGap))
         }
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
                 color = titleColor ?: MaterialTheme.colorScheme.onSurface,
                 fontFamily = SnProFamily,
-                fontWeight = FontWeight.Normal,
+                // Заголовок на карточке — полужирный: он якорь строки, подпись под ним приглушена.
+                fontWeight = FontWeight.Bold,
                 fontSize = 17.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             if (subtitle != null) {
+                Spacer(Modifier.height(2.dp))
                 Text(
                     text = subtitle,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
                     fontFamily = SnProFamily,
                     fontSize = 13.sp,
-                    maxLines = 2,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
@@ -306,9 +319,10 @@ fun IosRow(
             Spacer(Modifier.width(8.dp))
             Text(
                 text = value,
-                color = valueColor ?: MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                color = valueColor ?: MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
                 fontFamily = SnProFamily,
-                fontSize = 17.sp,
+                fontWeight = FontWeight.Medium,
+                fontSize = 15.sp,
                 maxLines = 1,
             )
         }
@@ -324,7 +338,7 @@ fun IosRow(
                 contentDescription = null,
                 tint = IosDesign.chevron(isDark),
                 modifier = Modifier
-                    .size(20.dp)
+                    .size(IosDesign.CardChevronSize)
                     .graphicsLayer { rotationZ = rotation },
             )
         } else if (showChevron) {
@@ -333,7 +347,7 @@ fun IosRow(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,
                 tint = IosDesign.chevron(isDark),
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(IosDesign.CardChevronSize),
             )
         }
     }

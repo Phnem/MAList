@@ -33,8 +33,11 @@ import androidx.media3.ui.PlayerView
 import com.example.myapplication.localplayer.domain.SkipSegment
 import com.example.myapplication.localplayer.domain.SkipSegmentProvider
 import com.example.myapplication.localplayer.ui.AudioTrackOption
+import com.example.myapplication.localplayer.ui.ImmersivePlayerWindow
 import com.example.myapplication.localplayer.ui.PlayerControlsOverlay
 import com.example.myapplication.localplayer.ui.VideoFit
+import com.example.myapplication.localplayer.ui.isDrmProtected
+import com.example.myapplication.localplayer.ui.rememberPlayerAmbient
 import com.example.myapplication.media.source.VetroVideo
 import com.example.myapplication.ui.shared.theme.MotionTokens
 import kotlinx.coroutines.delay
@@ -73,6 +76,13 @@ fun StreamPlayerSurface(
     var fit by remember(player) { mutableStateOf(VideoFit.ORIGINAL) }
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
     var videoAspect by remember(player) { mutableFloatStateOf(16f / 9f) }
+    // PixelCopy читает буфер SurfaceView, а не сеть, поэтому стрим сэмплится ровно так же, как
+    // локальный файл. Единственное, что реально запрещает съём пикселей, — DRM (protected surface).
+    var videoSurface by remember { mutableStateOf<android.view.SurfaceView?>(null) }
+    var drmProtected by remember(player) {
+        mutableStateOf(player.currentMediaItem?.localConfiguration?.drmConfiguration != null)
+    }
+    var controlsVisible by remember(player) { mutableStateOf(true) }
     val viewportAspect = viewportSize.width.toFloat() / viewportSize.height.coerceAtLeast(1)
     val cropScale = max(
         viewportAspect / videoAspect.coerceAtLeast(0.01f),
@@ -143,6 +153,8 @@ fun StreamPlayerSurface(
 
             override fun onTracksChanged(tracks: Tracks) {
                 embeddedAudioTracks = tracks.streamAudioOptions()
+                // Решаем один раз по факту дорожек, а не промахами PixelCopy в рантайме.
+                drmProtected = drmProtected || tracks.isDrmProtected()
             }
 
             override fun onVideoSizeChanged(size: VideoSize) {
@@ -172,6 +184,8 @@ fun StreamPlayerSurface(
         }
     }
 
+    ImmersivePlayerWindow(enabled = !isInPip)
+
     Box(modifier.fillMaxSize().background(Color.Black)) {
         AndroidView(
             modifier = Modifier
@@ -182,6 +196,8 @@ fun StreamPlayerSurface(
                     scaleY = animatedVideoScale
                 },
             factory = { context ->
+                // SurfaceView (значение surface_type по умолчанию) — не менять на TextureView:
+                // доки контролов плоские и живой блюр над видео им не нужен.
                 PlayerView(context).apply {
                     this.player = player
                     useController = false
@@ -190,6 +206,7 @@ fun StreamPlayerSurface(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                     )
                     setBackgroundColor(android.graphics.Color.BLACK)
+                    videoSurface = videoSurfaceView as? android.view.SurfaceView
                 }
             },
             update = { view ->
@@ -204,7 +221,12 @@ fun StreamPlayerSurface(
             PlayerControlsOverlay(
                 player = player,
                 title = title,
-                ambient = Color(0xFF141414),
+                ambient = rememberPlayerAmbient(
+                    surfaceProvider = { videoSurface },
+                    adaptive = !drmProtected,
+                    active = controlsVisible,
+                ),
+                onControlsVisibleChange = { controlsVisible = it },
                 onRotate = onRotate,
                 isPlaying = isPlaying,
                 isBuffering = isBuffering,

@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -33,6 +35,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -53,13 +57,13 @@ import androidx.navigation.NavController
 import coil3.compose.AsyncImage
 import com.phnem.vetro.R
 import com.example.myapplication.domain.inspect.InspectContentMode
-import com.example.myapplication.ui.home.ApiSearchResultCard
 import com.example.myapplication.ui.navigation.navigateToSettings
 import com.example.myapplication.ui.shared.theme.InspectVisualSearchTheme
+import com.example.myapplication.ui.shared.theme.MotionTokens
 import com.example.myapplication.utils.getAiConnectStrings
 import com.example.myapplication.utils.getStrings
 import com.example.myapplication.utils.performHaptic
-import kotlin.math.abs
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
@@ -79,8 +83,6 @@ fun InspectScreen(
     val addingId by viewModel.addingFromApiId.collectAsStateWithLifecycle()
     val hasVisionProvider by viewModel.hasVisionProvider.collectAsStateWithLifecycle()
     val aiConnectStrings = getAiConnectStrings(lang)
-    val requiresAiSetup =
-        contentMode == InspectContentMode.MoviesSeries && !hasVisionProvider
     val onSelectMode: (Int) -> Unit = { index ->
         performHaptic(view, "light")
         when (index) {
@@ -99,6 +101,15 @@ fun InspectScreen(
             )
         )
     }
+
+    // Пейджер — единственный источник правды о режиме: док листает его, а осевшая страница
+    // возвращается во вьюмодель. Иначе клик по доку и свайп спорили бы за состояние.
+    val pagerState = rememberPagerState(
+        initialPage = if (contentMode == InspectContentMode.Anime) 0 else 1,
+        pageCount = { 2 },
+    )
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(pagerState.settledPage) { onSelectMode(pagerState.settledPage) }
 
     val pickLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -122,6 +133,10 @@ fun InspectScreen(
                 val cardShape = RoundedCornerShape(22.dp)
                 val outlineMuted = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
 
+                // Без layerBackdrop: корень экрана — узел sharedBounds, и при переходе Compose
+                // рисует это поддерево в overlay шаред-элемента. Записанный GraphicsLayer бэкдропа
+                // при этом отрисовывается из двух мест сразу → SIGSEGV в RenderThread на открытии.
+                // Док берёт статичную заливку; фон здесь и так фото под виньеткой.
                 Box(modifier = Modifier.fillMaxSize()) {
                     BgImage(
                         painter = painterResource(R.drawable.vsbg),
@@ -139,28 +154,6 @@ fun InspectScreen(
                             .fillMaxSize()
                             .statusBarsPadding()
                             .navigationBarsPadding()
-                            .pointerInput(contentMode) {
-                                var totalHorizontalDrag = 0f
-                                detectHorizontalDragGestures(
-                                    onHorizontalDrag = { _, dragAmount ->
-                                        totalHorizontalDrag += dragAmount
-                                    },
-                                    onDragEnd = {
-                                        if (abs(totalHorizontalDrag) > 56f) {
-                                            when {
-                                                totalHorizontalDrag < 0 && contentMode == InspectContentMode.Anime -> {
-                                                    onSelectMode(1)
-                                                }
-                                                totalHorizontalDrag > 0 && contentMode == InspectContentMode.MoviesSeries -> {
-                                                    onSelectMode(0)
-                                                }
-                                            }
-                                        }
-                                        totalHorizontalDrag = 0f
-                                    },
-                                    onDragCancel = { totalHorizontalDrag = 0f }
-                                )
-                            }
                     ) {
                         InspectHeader(
                             toolbarTitle = strings.inspectVisualSearchToolbarTitle,
@@ -181,19 +174,21 @@ fun InspectScreen(
                                 .padding(horizontal = 20.dp, vertical = 12.dp),
                             textAlign = TextAlign.Start
                         )
-                        VisualSearchSegmentedControl(
-                            options = listOf(
-                                strings.inspectModeAnime,
-                                strings.inspectSegmentMoviesTv
-                            ),
-                            selectedIndex = if (contentMode == InspectContentMode.Anime) 0 else 1,
-                            onSelect = onSelectMode,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp)
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        if (requiresAiSetup) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        // Shared Axis X, как в Details: режимы — страницы одного пейджера, палец
+                        // тянет контент за собой. Раньше свайп просто подменял режим на месте,
+                        // без всякого движения, поэтому перехода не читалось вовсе.
+                        HorizontalPager(
+                            state = pagerState,
+                            modifier = Modifier.fillMaxSize(),
+                            beyondViewportPageCount = 1,
+                        ) { page ->
+                          // Флаг вычисляем ПО СТРАНИЦЕ, а не по активному режиму: соседняя
+                          // страница рендерится заранее (beyondViewportPageCount), и общий
+                          // requiresAiSetup показал бы на ней контент чужого режима.
+                          val pageNeedsAi = page == 1 && !hasVisionProvider
+                          Column(Modifier.fillMaxSize()) {
+                        if (pageNeedsAi) {
                             AiConnectPromptCard(
                                 title = aiConnectStrings.tileTitle,
                                 body = strings.inspectGeminiRequiredMovies,
@@ -300,7 +295,7 @@ fun InspectScreen(
                                 .weight(1f)
                                 .fillMaxWidth()
                         ) {
-                            if (!requiresAiSetup) {
+                            if (!pageNeedsAi) {
                                 Text(
                                     text = strings.inspectPoweredByFooter,
                                     style = MaterialTheme.typography.labelSmall,
@@ -310,7 +305,8 @@ fun InspectScreen(
                                         .align(Alignment.BottomCenter)
                                         .zIndex(0f)
                                         .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                                        .padding(horizontal = 16.dp)
+                                        .padding(bottom = 88.dp, top = 10.dp)
                                 )
                                 Box(
                                     modifier = Modifier
@@ -354,7 +350,7 @@ fun InspectScreen(
                                         is InspectUiState.Success -> {
                                             LazyColumn(
                                                 modifier = Modifier.fillMaxSize(),
-                                                contentPadding = PaddingValues(16.dp, 16.dp, 16.dp, 56.dp),
+                                                contentPadding = PaddingValues(16.dp, 16.dp, 16.dp, 116.dp),
                                                 verticalArrangement = Arrangement.spacedBy(12.dp)
                                             ) {
                                                 items(
@@ -365,19 +361,17 @@ fun InspectScreen(
                                                 ) { uiModel ->
                                                     val r = uiModel.result
                                                     val addKey = "${r.source}_${r.externalId ?: r.title}"
-                                                    ApiSearchResultCard(
+                                                    InspectResultCard(
                                                         result = r,
                                                         isAdded = uiModel.isAdded,
                                                         isLoading = addingId == addKey,
+                                                        addLabel = strings.addButton,
+                                                        addedLabel = strings.addedButton,
                                                         onAddClick = {
                                                             performHaptic(view, "light")
                                                             viewModel.addFromApi(r)
                                                         },
                                                         modifier = Modifier.fillMaxWidth(),
-                                                        displayGenres = null,
-                                                        addLabel = strings.addButton,
-                                                        addedLabel = strings.addedButton,
-                                                        forceDarkCardStyle = true
                                                     )
                                                 }
                                             }
@@ -386,7 +380,29 @@ fun InspectScreen(
                                 }
                             }
                         }
+                          }
+                        }
                     }
+
+                    InspectModeDock(
+                        animeLabel = strings.inspectModeAnime,
+                        moviesLabel = strings.inspectSegmentMoviesTv,
+                        selectedIndex = pagerState.targetPage,
+                        onSelect = { page ->
+                            performHaptic(view, "light")
+                            scope.launch {
+                                pagerState.animateScrollToPage(
+                                    page,
+                                    animationSpec = MotionTokens.sheetPresent(),
+                                )
+                            }
+                        },
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .navigationBarsPadding()
+                            .padding(bottom = 16.dp)
+                            .zIndex(3f),
+                    )
                 }
             }
         }
