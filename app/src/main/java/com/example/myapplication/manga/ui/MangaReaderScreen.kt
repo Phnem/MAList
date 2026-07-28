@@ -1,5 +1,6 @@
 package com.example.myapplication.manga.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -31,15 +32,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.NavigateBefore
 import androidx.compose.material.icons.automirrored.filled.NavigateNext
-import androidx.compose.material.icons.filled.KeyboardDoubleArrowDown
-import androidx.compose.material.icons.filled.KeyboardDoubleArrowLeft
-import androidx.compose.material.icons.filled.KeyboardDoubleArrowRight
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -55,12 +51,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
@@ -71,12 +69,21 @@ import coil3.compose.AsyncImagePainter
 import coil3.network.NetworkHeaders
 import coil3.network.httpHeaders
 import coil3.request.ImageRequest
+import coil3.request.allowConversionToBitmap
 import coil3.request.crossfade
+import coil3.request.transformations
+import com.example.myapplication.manga.data.ChapterReadingProgress
 import com.example.myapplication.manga.data.MangaReaderMode
 import com.example.myapplication.manga.data.PageDirection
 import com.example.myapplication.manga.domain.MangaChapter
 import com.example.myapplication.manga.domain.MangaPage
+import com.example.myapplication.ui.shared.components.IosSheetScaffold
+import com.example.myapplication.ui.shared.components.LiquidGlassTrack
 import com.example.myapplication.ui.shared.theme.BrandOrange
+import com.example.myapplication.utils.performHaptic
+import com.kyant.backdrop.Backdrop
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -84,53 +91,87 @@ import kotlin.math.roundToInt
 /**
  * Ридер главы: постранично или вебтун-лентой, поверх — скрываемый хром (тап по центру).
  *
- * Экран умышленно не знает ни про источник, ни про привязку тайтла — только про список страниц.
+ * Экран умышленно не знает ни про источник, ни про привязку тайтла — только про список страниц
+ * и оглавление, с которым его открыли.
  */
 @Composable
 fun MangaReaderScreen(
     state: MangaReaderUiState,
     mode: MangaReaderMode,
     direction: PageDirection,
+    cropBorders: Boolean,
+    chapters: List<MangaChapter>,
+    chapterProgress: Map<String, ChapterReadingProgress>,
     ru: Boolean,
     onPageChanged: (Int) -> Unit,
     onLayoutChange: (MangaReaderMode, PageDirection) -> Unit,
+    onToggleCrop: () -> Unit,
+    onOpenChapter: (String) -> Unit,
     onPreviousChapter: () -> Unit,
     onNextChapter: () -> Unit,
     onRetry: () -> Unit,
     onClose: () -> Unit,
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black),
-    ) {
-        when (state) {
-            MangaReaderUiState.Loading -> CircularProgressIndicator(
-                color = BrandOrange,
-                modifier = Modifier.align(Alignment.Center),
-            )
+    var chaptersVisible by remember { mutableStateOf(false) }
+    val currentChapterKey = (state as? MangaReaderUiState.Ready)?.chapter?.key.orEmpty()
 
-            is MangaReaderUiState.Error -> ReaderError(
-                state = state,
-                ru = ru,
-                onRetry = onRetry,
-                onClose = onClose,
-                modifier = Modifier.align(Alignment.Center),
-            )
+    // Открытая шторка забирает «назад» себе: иначе оглавление закрывало бы ридер целиком.
+    BackHandler(enabled = chaptersVisible) { chaptersVisible = false }
 
-            is MangaReaderUiState.Ready -> ReaderContent(
-                state = state,
-                mode = mode,
-                direction = direction,
+    IosSheetScaffold(
+        sheetVisible = chaptersVisible,
+        onDismiss = { chaptersVisible = false },
+        sheetHeightFraction = 0.72f,
+        content = {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black),
+            ) {
+                when (state) {
+                    MangaReaderUiState.Loading -> CircularProgressIndicator(
+                        color = BrandOrange,
+                        modifier = Modifier.align(Alignment.Center),
+                    )
+
+                    is MangaReaderUiState.Error -> ReaderError(
+                        state = state,
+                        ru = ru,
+                        onRetry = onRetry,
+                        onClose = onClose,
+                        modifier = Modifier.align(Alignment.Center),
+                    )
+
+                    is MangaReaderUiState.Ready -> ReaderContent(
+                        state = state,
+                        mode = mode,
+                        direction = direction,
+                        cropBorders = cropBorders,
+                        ru = ru,
+                        onPageChanged = onPageChanged,
+                        onLayoutChange = onLayoutChange,
+                        onToggleCrop = onToggleCrop,
+                        onChapters = { chaptersVisible = true },
+                        onPreviousChapter = onPreviousChapter,
+                        onNextChapter = onNextChapter,
+                        onClose = onClose,
+                    )
+                }
+            }
+        },
+        sheetContent = {
+            ReaderChaptersSheet(
+                chapters = chapters,
+                currentKey = currentChapterKey,
+                progress = chapterProgress,
                 ru = ru,
-                onPageChanged = onPageChanged,
-                onLayoutChange = onLayoutChange,
-                onPreviousChapter = onPreviousChapter,
-                onNextChapter = onNextChapter,
-                onClose = onClose,
+                onPick = { chapter ->
+                    chaptersVisible = false
+                    onOpenChapter(chapter.key)
+                },
             )
-        }
-    }
+        },
+    )
 }
 
 @Composable
@@ -138,9 +179,12 @@ private fun ReaderContent(
     state: MangaReaderUiState.Ready,
     mode: MangaReaderMode,
     direction: PageDirection,
+    cropBorders: Boolean,
     ru: Boolean,
     onPageChanged: (Int) -> Unit,
     onLayoutChange: (MangaReaderMode, PageDirection) -> Unit,
+    onToggleCrop: () -> Unit,
+    onChapters: () -> Unit,
     onPreviousChapter: () -> Unit,
     onNextChapter: () -> Unit,
     onClose: () -> Unit,
@@ -149,107 +193,123 @@ private fun ReaderContent(
     var currentPage by remember(state.chapter.key) { mutableIntStateOf(state.startPage) }
     val scope = rememberCoroutineScope()
 
-    // Перезапуск пейджера/ленты при смене главы: иначе новая глава открывается на старой странице.
-    // Направление тоже в ключе — HorizontalPager читает layout direction только при создании,
-    // без пересборки переключатель «классика/комикс» выглядел бы сломанным. В вебтуне направление
-    // из ключа выключаем: ленте оно безразлично, а лишняя пересборка сбросила бы позицию скролла.
-    key(state.chapter.key, mode, direction.takeIf { mode == MangaReaderMode.Paged }) {
-        when (mode) {
-            MangaReaderMode.Paged -> {
-                val pagerState = rememberPagerState(
-                    initialPage = state.startPage,
-                    pageCount = { state.pages.size },
-                )
-                LaunchedEffect(pagerState) {
-                    snapshotFlow { pagerState.currentPage }
-                        .distinctUntilChanged()
-                        .collect { page ->
-                            currentPage = page
-                            onPageChanged(page)
-                        }
-                }
-                // Направление задаём только пейджеру, не всему экрану: список страниц остаётся
-                // в исходном порядке, поэтому сохранённый pageIndex продолжает указывать
-                // на ту же страницу, а хром и слайдер не переворачиваются вместе с ней.
-                CompositionLocalProvider(
-                    LocalLayoutDirection provides when (direction) {
-                        PageDirection.Rtl -> LayoutDirection.Rtl
-                        PageDirection.Ltr -> LayoutDirection.Ltr
-                    },
-                ) {
-                    HorizontalPager(
-                        state = pagerState,
-                        modifier = Modifier.fillMaxSize(),
-                        beyondViewportPageCount = 1,
-                    ) { index ->
-                        ZoomablePage(
-                            page = state.pages[index],
-                            ru = ru,
-                            onToggleChrome = { chromeVisible = !chromeVisible },
-                        )
-                    }
-                }
-                ReaderChrome(
-                    visible = chromeVisible,
-                    state = state,
-                    mode = mode,
-                    direction = direction,
-                    ru = ru,
-                    currentPage = currentPage,
-                    onSeek = { target ->
-                        scope.launch { pagerState.scrollToPage(target) }
-                    },
-                    onLayoutChange = onLayoutChange,
-                    onPreviousChapter = onPreviousChapter,
-                    onNextChapter = onNextChapter,
-                    onClose = onClose,
-                )
-            }
+    // Перемотку хром получает функцией, а не самим pagerState/listState: хром живёт СНАРУЖИ
+    // key(...) и не имеет права пересобираться вместе с пейджером (иначе стеклянный док терял бы
+    // свой слой-задник). Текущий скроллер регистрирует себя сам при создании.
+    val seek = remember { mutableStateOf<suspend (Int) -> Unit>({ }) }
 
-            MangaReaderMode.Webtoon -> {
-                val listState = rememberLazyListState(initialFirstVisibleItemIndex = state.startPage)
-                LaunchedEffect(listState) {
-                    snapshotFlow { listState.firstVisibleItemIndex }
-                        .distinctUntilChanged()
-                        .collect { page ->
-                            currentPage = page
-                            onPageChanged(page)
-                        }
-                }
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .pointerInput(Unit) {
-                            detectTapGestures(onTap = { chromeVisible = !chromeVisible })
-                        },
-                ) {
-                    items(state.pages.size) { index ->
-                        PageImage(
-                            page = state.pages[index],
-                            contentScale = ContentScale.FillWidth,
-                            ru = ru,
-                            modifier = Modifier.fillMaxWidth(),
+    // Слой-задник для стекла дока: захватывает ТОЛЬКО страницы, поэтому док преломляет саму
+    // мангу, а не собственный хром. Узел с layerBackdrop лежит над key(...) и никогда не
+    // размонтируется — смена режима или главы его не трогает.
+    val pagesBackdrop = rememberLayerBackdrop {
+        drawRect(Color.Black)
+        drawContent()
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .layerBackdrop(pagesBackdrop),
+        ) {
+            // Перезапуск пейджера/ленты при смене главы: иначе новая глава открывается на старой
+            // странице. Направление тоже в ключе — HorizontalPager читает layout direction только
+            // при создании, без пересборки переключатель «классика/комикс» выглядел бы сломанным.
+            // В вебтуне направление из ключа выключаем: ленте оно безразлично, а лишняя пересборка
+            // сбросила бы позицию скролла.
+            key(state.chapter.key, mode, direction.takeIf { mode == MangaReaderMode.Paged }) {
+                when (mode) {
+                    MangaReaderMode.Paged -> {
+                        val pagerState = rememberPagerState(
+                            initialPage = state.startPage,
+                            pageCount = { state.pages.size },
                         )
+                        LaunchedEffect(pagerState) {
+                            seek.value = { page -> pagerState.scrollToPage(page) }
+                            snapshotFlow { pagerState.currentPage }
+                                .distinctUntilChanged()
+                                .collect { page ->
+                                    currentPage = page
+                                    onPageChanged(page)
+                                }
+                        }
+                        // Направление задаём только пейджеру, не всему экрану: список страниц
+                        // остаётся в исходном порядке, поэтому сохранённый pageIndex продолжает
+                        // указывать на ту же страницу, а хром и слайдер не переворачиваются
+                        // вместе с ней.
+                        CompositionLocalProvider(
+                            LocalLayoutDirection provides when (direction) {
+                                PageDirection.Rtl -> LayoutDirection.Rtl
+                                PageDirection.Ltr -> LayoutDirection.Ltr
+                            },
+                        ) {
+                            HorizontalPager(
+                                state = pagerState,
+                                modifier = Modifier.fillMaxSize(),
+                                beyondViewportPageCount = 1,
+                            ) { index ->
+                                ZoomablePage(
+                                    page = state.pages[index],
+                                    cropBorders = cropBorders,
+                                    ru = ru,
+                                    onToggleChrome = { chromeVisible = !chromeVisible },
+                                )
+                            }
+                        }
+                    }
+
+                    MangaReaderMode.Webtoon -> {
+                        val listState =
+                            rememberLazyListState(initialFirstVisibleItemIndex = state.startPage)
+                        LaunchedEffect(listState) {
+                            seek.value = { page -> listState.scrollToItem(page) }
+                            snapshotFlow { listState.firstVisibleItemIndex }
+                                .distinctUntilChanged()
+                                .collect { page ->
+                                    currentPage = page
+                                    onPageChanged(page)
+                                }
+                        }
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .pointerInput(Unit) {
+                                    detectTapGestures(onTap = { chromeVisible = !chromeVisible })
+                                },
+                        ) {
+                            items(state.pages.size) { index ->
+                                PageImage(
+                                    page = state.pages[index],
+                                    contentScale = ContentScale.FillWidth,
+                                    cropBorders = cropBorders,
+                                    ru = ru,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                        }
                     }
                 }
-                ReaderChrome(
-                    visible = chromeVisible,
-                    state = state,
-                    mode = mode,
-                    direction = direction,
-                    ru = ru,
-                    currentPage = currentPage,
-                    onSeek = { target ->
-                        scope.launch { listState.scrollToItem(target) }
-                    },
-                    onLayoutChange = onLayoutChange,
-                    onPreviousChapter = onPreviousChapter,
-                    onNextChapter = onNextChapter,
-                    onClose = onClose,
-                )
             }
         }
+
+        ReaderChrome(
+            visible = chromeVisible,
+            backdrop = pagesBackdrop,
+            state = state,
+            mode = mode,
+            direction = direction,
+            cropBorders = cropBorders,
+            ru = ru,
+            currentPage = currentPage,
+            onSeek = { target -> scope.launch { seek.value(target) } },
+            onLayoutChange = onLayoutChange,
+            onToggleCrop = onToggleCrop,
+            onChapters = onChapters,
+            onPreviousChapter = onPreviousChapter,
+            onNextChapter = onNextChapter,
+            onClose = onClose,
+        )
     }
 }
 
@@ -257,6 +317,7 @@ private fun ReaderContent(
 @Composable
 private fun ZoomablePage(
     page: MangaPage,
+    cropBorders: Boolean,
     ru: Boolean,
     onToggleChrome: () -> Unit,
 ) {
@@ -298,6 +359,7 @@ private fun ZoomablePage(
         PageImage(
             page = page,
             contentScale = ContentScale.Fit,
+            cropBorders = cropBorders,
             ru = ru,
             modifier = Modifier
                 .fillMaxSize()
@@ -321,6 +383,7 @@ private fun ZoomablePage(
 private fun PageImage(
     page: MangaPage,
     contentScale: ContentScale,
+    cropBorders: Boolean,
     ru: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -330,7 +393,7 @@ private fun PageImage(
     var failed by remember(page.url) { mutableStateOf(false) }
     var loading by remember(page.url) { mutableStateOf(true) }
 
-    val model = remember(page.url, attempt) {
+    val model = remember(page.url, attempt, cropBorders) {
         ImageRequest.Builder(context)
             .data(page.url)
             .crossfade(true)
@@ -348,6 +411,13 @@ private fun PageImage(
                 if (attempt > 0) {
                     memoryCacheKey("${page.url}#$attempt")
                     diskCacheKey("${page.url}#$attempt")
+                }
+                if (cropBorders) {
+                    transformations(EdgeCropTransformation)
+                    // Тайловую вебтун-полосу из RegionBitmapDecoder Coil ради трансформации
+                    // схлопнул бы в один гигантский битмап — тот самый OOM, от которого тайлы и
+                    // спасают. С этим флагом обрезка на таких страницах просто не применяется.
+                    allowConversionToBitmap(false)
                 }
             }
             .build()
@@ -426,13 +496,17 @@ private fun PageLoadError(
 @Composable
 private fun ReaderChrome(
     visible: Boolean,
+    backdrop: Backdrop,
     state: MangaReaderUiState.Ready,
     mode: MangaReaderMode,
     direction: PageDirection,
+    cropBorders: Boolean,
     ru: Boolean,
     currentPage: Int,
     onSeek: (Int) -> Unit,
     onLayoutChange: (MangaReaderMode, PageDirection) -> Unit,
+    onToggleCrop: () -> Unit,
+    onChapters: () -> Unit,
     onPreviousChapter: () -> Unit,
     onNextChapter: () -> Unit,
     onClose: () -> Unit,
@@ -447,9 +521,16 @@ private fun ReaderChrome(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color.Black.copy(alpha = 0.72f))
+                    // Градиент вместо плоской заливки: под доком должна просвечивать страница,
+                    // иначе преломлять ему нечего — сплошная чёрная плашка выглядит как рамка.
+                    .background(
+                        Brush.verticalGradient(
+                            0f to Color.Black.copy(alpha = 0.75f),
+                            1f to Color.Transparent,
+                        ),
+                    )
                     .statusBarsPadding()
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                    .padding(start = 4.dp, end = 12.dp, top = 8.dp, bottom = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = onClose) {
@@ -474,20 +555,17 @@ private fun ReaderChrome(
                         fontSize = 12.sp,
                     )
                 }
-                IconButton(
-                    onClick = {
-                        val (nextMode, nextDirection) = nextLayout(mode, direction)
-                        onLayoutChange(nextMode, nextDirection)
-                    },
-                ) {
-                    // Иконка показывает текущее состояние, а не следующее: стрелка совпадает
-                    // с направлением, в котором уезжает страница при свайпе.
-                    Icon(
-                        imageVector = layoutIcon(mode, direction),
-                        contentDescription = layoutLabel(mode, direction, ru),
-                        tint = Color.White,
-                    )
-                }
+                Spacer(Modifier.width(8.dp))
+                ReaderDock(
+                    backdrop = backdrop,
+                    mode = mode,
+                    direction = direction,
+                    cropBorders = cropBorders,
+                    ru = ru,
+                    onChapters = onChapters,
+                    onLayoutChange = onLayoutChange,
+                    onToggleCrop = onToggleCrop,
+                )
             }
         }
 
@@ -505,16 +583,12 @@ private fun ReaderChrome(
                     .padding(horizontal = 12.dp, vertical = 8.dp),
             ) {
                 if (state.pages.size > 1) {
-                    Slider(
-                        value = currentPage.toFloat(),
-                        onValueChange = { onSeek(it.roundToInt().coerceIn(0, state.pages.lastIndex)) },
-                        valueRange = 0f..state.pages.lastIndex.toFloat(),
-                        colors = SliderDefaults.colors(
-                            thumbColor = BrandOrange,
-                            activeTrackColor = BrandOrange,
-                            inactiveTrackColor = Color.White.copy(alpha = 0.24f),
-                        ),
+                    ReaderPageSlider(
+                        page = currentPage,
+                        pageCount = state.pages.size,
+                        onSeek = onSeek,
                     )
+                    Spacer(Modifier.height(6.dp))
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -538,6 +612,51 @@ private fun ReaderChrome(
             }
         }
     }
+}
+
+/**
+ * Перемотка по страницам на общем стеклянном треке. Значение здесь дискретное — номер страницы,
+ * поэтому отклик тоже дискретный: тик на каждый снап, а не непрерывная вибрация под пальцем.
+ */
+@Composable
+private fun ReaderPageSlider(
+    page: Int,
+    pageCount: Int,
+    onSeek: (Int) -> Unit,
+) {
+    val view = LocalView.current
+    val lastIndex = (pageCount - 1).coerceAtLeast(1)
+    // Последний отданный снап: без него тик срабатывал бы на каждое движение пальца внутри
+    // одной и той же страницы.
+    var lastSnap by remember { mutableIntStateOf(page) }
+
+    LiquidGlassTrack(
+        fraction = page.toFloat() / lastIndex,
+        ticks = if (pageCount <= MaxSliderTicks) pageCount else 0,
+        onScrubStart = { lastSnap = page },
+        onScrub = { fraction ->
+            val target = (fraction * lastIndex).roundToInt().coerceIn(0, lastIndex)
+            if (target != lastSnap) {
+                lastSnap = target
+                performHaptic(view, "tick")
+                onSeek(target)
+            }
+        },
+        onScrubEnd = { fraction ->
+            val target = (fraction * lastIndex).roundToInt().coerceIn(0, lastIndex)
+            performHaptic(view, "light")
+            onSeek(target)
+        },
+        thumbContent = {
+            Text(
+                text = "${page + 1}",
+                color = Color.White,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+            )
+        },
+    )
 }
 
 @Composable
@@ -600,35 +719,6 @@ private fun ReaderError(
     }
 }
 
-/**
- * Цикл одной кнопки: Вебтун → Классика (справа налево) → Комикс (слева направо) → Вебтун.
- * Из «комикса» в вебтун уходим, не сбрасывая направление: в ленте оно всё равно не видно,
- * а лишняя запись зря пересобрала бы состояние.
- */
-private fun nextLayout(
-    mode: MangaReaderMode,
-    direction: PageDirection,
-): Pair<MangaReaderMode, PageDirection> = when {
-    mode == MangaReaderMode.Webtoon -> MangaReaderMode.Paged to PageDirection.Rtl
-    direction == PageDirection.Rtl -> MangaReaderMode.Paged to PageDirection.Ltr
-    else -> MangaReaderMode.Webtoon to direction
-}
-
-private fun layoutIcon(
-    mode: MangaReaderMode,
-    direction: PageDirection,
-): androidx.compose.ui.graphics.vector.ImageVector = when {
-    mode == MangaReaderMode.Webtoon -> Icons.Filled.KeyboardDoubleArrowDown
-    direction == PageDirection.Rtl -> Icons.Filled.KeyboardDoubleArrowLeft
-    else -> Icons.Filled.KeyboardDoubleArrowRight
-}
-
-private fun layoutLabel(mode: MangaReaderMode, direction: PageDirection, ru: Boolean): String = when {
-    mode == MangaReaderMode.Webtoon -> if (ru) "Вебтун" else "Webtoon"
-    direction == PageDirection.Rtl -> if (ru) "Классика" else "Right to left"
-    else -> if (ru) "Комикс" else "Left to right"
-}
-
 private fun String.readerErrorText(ru: Boolean): String = when (this) {
     "pages_empty" -> if (ru) "Источник не отдал страницы этой главы" else "Source returned no pages"
     "chapter_missing" -> if (ru) "Глава больше недоступна" else "Chapter is no longer available"
@@ -645,6 +735,9 @@ fun MangaChapter.readerTitle(ru: Boolean): String {
 
 /** Высота места под ещё не загруженную или битую страницу — чтобы лента вебтуна не дёргалась. */
 private val PagePlaceholderHeight = 220.dp
+
+/** Насечки под страницы имеют смысл только у коротких глав; дальше это сплошная штриховка. */
+private const val MaxSliderTicks = 20
 
 private const val MIN_SCALE = 1f
 private const val MAX_SCALE = 4f

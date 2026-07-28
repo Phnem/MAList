@@ -50,6 +50,8 @@ class MangaReaderActivity : ComponentActivity() {
                 val state by viewModel.state.collectAsState()
                 val mode by viewModel.readerMode.collectAsState()
                 val direction by viewModel.pageDirection.collectAsState()
+                val cropBorders by viewModel.cropBorders.collectAsState()
+                val chapterProgress by viewModel.chapterProgress.collectAsState()
                 // Читаем язык из настроек как поток: блокировать главный поток ради одной строки
                 // на старте ридера незачем, а до первого значения подпись просто английская.
                 val ru by remember {
@@ -62,9 +64,14 @@ class MangaReaderActivity : ComponentActivity() {
                     state = state,
                     mode = mode,
                     direction = direction,
+                    cropBorders = cropBorders,
+                    chapters = viewModel.chapters,
+                    chapterProgress = chapterProgress,
                     ru = ru,
                     onPageChanged = viewModel::onPageChanged,
                     onLayoutChange = viewModel::setLayout,
+                    onToggleCrop = viewModel::toggleCropBorders,
+                    onOpenChapter = viewModel::openChapter,
                     onPreviousChapter = viewModel::openPrevious,
                     onNextChapter = viewModel::openNext,
                     onRetry = viewModel::load,
