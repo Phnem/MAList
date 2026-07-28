@@ -23,10 +23,25 @@ import java.net.URLEncoder
  */
 class JutSuSource(
     client: HttpClient,
+    /**
+     * Зеркало домена. Источник — синглтон, а зеркало меняется в настройках на лету, поэтому это
+     * провайдер, а не строка: значение читается на каждом резолве. null/пусто/мусор → дефолтный
+     * домен, то есть без настройки поведение ровно прежнее.
+     */
+    private val mirrorProvider: suspend () -> String? = { null },
 ) : VetroHttpSource(client) {
 
     override val name: String = "jut.su"
-    override val baseUrl: String = "https://jut.su"
+
+    /**
+     * Дефолт для контракта [VetroHttpSource]. Реальные запросы строятся от [activeBaseUrl] —
+     * он учитывает зеркало, поэтому внутри класса на это поле опираться нельзя.
+     */
+    override val baseUrl: String = DEFAULT_BASE_URL
+
+    /** Домен, на который реально уходят запросы прямо сейчас. */
+    private suspend fun activeBaseUrl(): String =
+        normalizeMirror(runCatching { mirrorProvider() }.getOrNull()) ?: DEFAULT_BASE_URL
 
     suspend fun resolveEpisode(
         anime: Anime,
@@ -34,13 +49,14 @@ class JutSuSource(
         seasonInfo: SeasonInfo? = null,
         knownTitleUrl: String? = null,
     ): List<VetroHoster> {
-        val titleUrl = knownTitleUrl?.takeIf { it.contains("jut.su", ignoreCase = true) }
+        val base = activeBaseUrl()
+        val titleUrl = knownTitleUrl?.takeIf { isOwnTitleUrl(it, base) }
             ?: run {
                 val query = anime.titleRu?.takeIf { it.isNotBlank() }
                     ?: anime.title.takeIf { it.isNotBlank() }
                     ?: anime.titleEn
                     ?: return emptyList()
-                resolveTitleUrl(query, anime)
+                resolveTitleUrl(query, anime, base)
             }
             ?: return emptyList()
 
@@ -48,7 +64,7 @@ class JutSuSource(
         if (slug.isBlank() || slug in NON_TITLE_SLUGS) return emptyList()
 
         val season = seasonInfo?.seasonNumber?.takeIf { it > 0 } ?: 1
-        val candidates = episodeUrlCandidates(slug, season, episodeNumber)
+        val candidates = episodeUrlCandidates(base, slug, season, episodeNumber)
 
         for (pageUrl in candidates) {
             val videos = scrapeEpisodeSources(pageUrl)
@@ -68,20 +84,22 @@ class JutSuSource(
         return emptyList()
     }
 
-    private suspend fun resolveTitleUrl(query: String, anime: Anime): String? = runCatching {
+    private suspend fun resolveTitleUrl(query: String, anime: Anime, base: String): String? = runCatching {
         val enc = URLEncoder.encode(query, "UTF-8")
-        val resp = client.get("$baseUrl/lookfor/$enc") {
+        val resp = client.get("$base/lookfor/$enc") {
             header(HttpHeaders.UserAgent, DEFAULT_UA)
             header(HttpHeaders.AcceptLanguage, "ru,en;q=0.9")
         }
         resp.bodyAsText()
         val finalUrl = resp.call.request.url.toString()
-        val slug = TITLE_URL.find(finalUrl)?.groupValues?.get(1)
+        // Редирект с lookfor приходит на активный домен, поэтому и регэксп строим по нему,
+        // иначе на зеркале слог не распознавался бы и источник молча отдавал бы пусто.
+        val slug = titleUrlRegex(base).find(finalUrl)?.groupValues?.get(1)
         if (slug == null || slug in NON_TITLE_SLUGS) {
             Log.i(TAG, "lookfor miss '$query' → $finalUrl")
             return@runCatching null
         }
-        val page = getText("$baseUrl/$slug/", extraHeaders = mapOf("Referer" to "$baseUrl/"))
+        val page = getText("$base/$slug/", extraHeaders = mapOf("Referer" to "$base/"))
         val docTitle = Jsoup.parse(page).selectFirst("h1, .anime_title, title")?.text().orEmpty()
         val local = listOfNotNull(anime.title, anime.titleRu, anime.titleEn)
         val remotes = listOfNotNull(docTitle, slug.replace('-', ' '))
@@ -89,7 +107,7 @@ class JutSuSource(
         if (score < TITLE_MATCH_THRESHOLD && local.isNotEmpty()) {
             Log.i(TAG, "weak title score=$score for '$docTitle' (query='$query'), keeping slug=$slug")
         }
-        "$baseUrl/$slug/"
+        "$base/$slug/"
     }.onFailure { Log.w(TAG, "resolveTitleUrl: ${it.message}") }.getOrNull()
 
     /**
@@ -102,14 +120,14 @@ class JutSuSource(
      * У первого сезона обе формы (с префиксом и без) ведут на него же, поэтому их можно пробовать
      * обе — это не смена сезона.
      */
-    private fun episodeUrlCandidates(slug: String, season: Int, episode: Int): List<String> {
+    private fun episodeUrlCandidates(base: String, slug: String, season: Int, episode: Int): List<String> {
         val ep = episode.coerceAtLeast(1)
         return if (season > 1) {
-            listOf("$baseUrl/$slug/season-$season/episode-$ep.html")
+            listOf("$base/$slug/season-$season/episode-$ep.html")
         } else {
             listOf(
-                "$baseUrl/$slug/episode-$ep.html",
-                "$baseUrl/$slug/season-1/episode-$ep.html",
+                "$base/$slug/episode-$ep.html",
+                "$base/$slug/season-1/episode-$ep.html",
             )
         }
     }
@@ -118,7 +136,8 @@ class JutSuSource(
         val html = getText(
             pageUrl,
             extraHeaders = mapOf(
-                "Referer" to "$baseUrl/",
+                // Referer должен совпадать с доменом самой страницы, иначе на зеркале уедет на jut.su.
+                "Referer" to originOf(pageUrl),
                 HttpHeaders.AcceptLanguage to "ru,en;q=0.9",
             ),
         )
@@ -174,7 +193,53 @@ class JutSuSource(
 
     companion object {
         private const val TAG = "JutSuSource"
-        private val TITLE_URL = Regex("""^https?://jut\.su/([a-z0-9\-]+)/?$""", RegexOption.IGNORE_CASE)
+        const val DEFAULT_BASE_URL = "https://jut.su"
+
+        /** Хост без схемы, пути и порта-мусора: «https://Mirror.example/x» → «mirror.example». */
+        private fun hostOf(url: String): String =
+            url.substringAfter("://").substringBefore('/').substringBefore('?').trim().lowercase()
+
+        /** Origin со слэшем — годится как Referer: «https://host/…» → «https://host/». */
+        private fun originOf(url: String): String =
+            url.substringBefore("://") + "://" + hostOf(url) + "/"
+
+        private fun titleUrlRegex(base: String): Regex =
+            Regex("""^https?://${Regex.escape(hostOf(base))}/([a-z0-9\-]+)/?$""", RegexOption.IGNORE_CASE)
+
+        /**
+         * Ссылка на тайтл считается «нашей», если её хост — активный домен ИЛИ дефолтный jut.su:
+         * сохранённые в WebLinks ссылки писались на jut.su ещё до включения зеркала, и терять их
+         * при переключении нельзя. Сам URL никуда не запрашивается — из него берётся только слог,
+         * а страницы уже строятся от активного домена.
+         */
+        internal fun isOwnTitleUrl(url: String, base: String): Boolean {
+            val host = hostOf(url)
+            return host.isNotEmpty() && (host == hostOf(base) || host == hostOf(DEFAULT_BASE_URL))
+        }
+
+        /**
+         * Нормализует пользовательский ввод зеркала: «mirror.example», «http://mirror.example/»,
+         * «https://mirror.example/anime/» → «https://mirror.example» (без хвостового слэша).
+         * Мусор (пусто, пробелы, хост без точки) → null, чтобы источник откатился на дефолтный
+         * домен, а не начал слать запросы в никуда.
+         */
+        internal fun normalizeMirror(raw: String?): String? {
+            val trimmed = raw?.trim().orEmpty()
+            if (trimmed.isEmpty()) return null
+            val scheme = when {
+                trimmed.startsWith("https://", ignoreCase = true) -> "https"
+                trimmed.startsWith("http://", ignoreCase = true) -> "http"
+                else -> null
+            }
+            val host = hostOf(if (scheme == null) "https://$trimmed" else trimmed)
+            if (!VALID_HOST.matches(host)) return null
+            return "${scheme ?: "https"}://$host"
+        }
+
+        /** Домен (с необязательным портом); точка обязательна — так отсеивается ввод вида «asdf». */
+        private val VALID_HOST =
+            Regex("""^[a-z0-9](?:[a-z0-9.\-]*[a-z0-9])?\.[a-z0-9\-]{2,}(?::\d{1,5})?$""")
+
         private val NON_TITLE_SLUGS = setOf(
             "anime", "search", "lookfor", "login", "register", "top", "new", "ongoing",
             "films", "manga", "forum", "user", "pm", "favicon.ico",

@@ -33,6 +33,7 @@ import com.example.myapplication.domain.stats.StatsPhraseCatalog
 import com.example.myapplication.updates.BatchEpisodeCheckUseCase
 import com.example.myapplication.notifications.AnimeNotifier
 import com.example.myapplication.notifications.AnimeNotifierImpl
+import kotlinx.coroutines.flow.first
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
@@ -151,7 +152,19 @@ val appModule = module {
     single { okhttp3.OkHttpClient.Builder().build() }
     single { com.example.myapplication.media.source.AniLibriaSource(client = get()) }
     single { com.example.myapplication.media.source.AnimeGoSource(client = get()) }
-    single { com.example.myapplication.media.source.JutSuSource(client = get()) }
+    single {
+        // Зеркало читаем на каждом резолве: источник — синглтон, а домен меняется в настройках
+        // (jut.su периодически блокируют) и должен подхватываться без перезапуска приложения.
+        val settings: androidx.datastore.core.DataStore<androidx.datastore.preferences.core.Preferences> =
+            get(named("settings"))
+        com.example.myapplication.media.source.JutSuSource(
+            client = get(),
+            mirrorProvider = {
+                val prefs = settings.data.first()
+                prefs[com.example.myapplication.data.local.DevPreferencesKeys.JUTSU_MIRROR_DOMAIN]
+            },
+        )
+    }
     single { com.example.myapplication.media.source.KodikSource(client = get()) }
     // Browser-UA client without the cookie plugin: gate.php is selected by a per-request `key` cookie.
     single {

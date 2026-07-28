@@ -2,6 +2,7 @@ package com.example.myapplication.data.local
 
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 
 object DevPreferencesKeys {
     val ADAPTIVE_GLASS_SCROLL = booleanPreferencesKey("dev_adaptive_glass_scroll")
@@ -27,6 +28,14 @@ object DevPreferencesKeys {
      * to legacy Python download wizard only.
      */
     val USE_NATIVE_MEDIA_ENGINE = booleanPreferencesKey("use_native_media_engine")
+    /**
+     * Зеркало домена jut.su: основной домен периодически блокируют, и тогда весь источник нужно
+     * переключить на альтернативный хост без пересборки. Пусто/отсутствие ключа = дефолтный
+     * «https://jut.su». Значение нормализуется в
+     * [com.example.myapplication.media.source.JutSuSource], так что сюда можно писать сырой ввод.
+     */
+    val JUTSU_MIRROR_DOMAIN = stringPreferencesKey("jutsu_mirror_domain")
+
     /** TEMP V3.3.3 promo. Delete this key together with PlayerPowerPromoDialog. */
     val TEMP_PLAYER_PROMO_V333_DISMISSED = booleanPreferencesKey("temp_player_promo_v333_dismissed")
 }
