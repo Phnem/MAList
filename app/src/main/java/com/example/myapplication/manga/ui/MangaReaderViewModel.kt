@@ -2,6 +2,7 @@ package com.example.myapplication.manga.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.myapplication.manga.data.ChapterReadingProgress
 import com.example.myapplication.manga.data.MangaReaderMode
 import com.example.myapplication.manga.data.MangaReadingStore
 import com.example.myapplication.manga.data.PageDirection
@@ -45,7 +46,8 @@ class MangaReaderViewModel(
     private val detectReaderMode: DetectReaderMode,
 ) : ViewModel() {
 
-    private val chapters: List<MangaChapter> = MangaChapterHandoff.chapters(animeId)
+    /** Оглавление, с которым открыли ридер: его же показывает шторка глав в доке. */
+    val chapters: List<MangaChapter> = MangaChapterHandoff.chapters(animeId)
 
     private val _state = MutableStateFlow<MangaReaderUiState>(MangaReaderUiState.Loading)
     val state: StateFlow<MangaReaderUiState> = _state.asStateFlow()
@@ -62,6 +64,14 @@ class MangaReaderViewModel(
 
     val pageDirection: StateFlow<PageDirection> = readingStore.directionFlow(animeId)
         .stateIn(viewModelScope, SharingStarted.Eagerly, PageDirection.Rtl)
+
+    val cropBorders: StateFlow<Boolean> = readingStore.cropBordersFlow(animeId)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    /** Отметки глав для шторки оглавления: те же, что видит список глав в Details. */
+    val chapterProgress: StateFlow<Map<String, ChapterReadingProgress>> =
+        readingStore.progressFlow(animeId)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     init {
         load()
@@ -136,6 +146,18 @@ class MangaReaderViewModel(
     fun openNext() = moveBy(1)
 
     fun openPrevious() = moveBy(-1)
+
+    /** Переход по оглавлению. Открытая глава повторно не перезагружается. */
+    fun openChapter(chapterKey: String) {
+        val target = chapters.indexOfFirst { it.key == chapterKey }
+        if (target < 0 || target == currentIndex) return
+        currentIndex = target
+        load()
+    }
+
+    fun toggleCropBorders() {
+        viewModelScope.launch { readingStore.setCropBorders(animeId, !cropBorders.value) }
+    }
 
     /**
      * Режим и направление меняются одной кнопкой-циклом, поэтому пишем их вместе.

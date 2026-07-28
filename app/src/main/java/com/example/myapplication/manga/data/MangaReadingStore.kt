@@ -66,6 +66,8 @@ private data class ReadingSnapshot(
     val mode: MangaReaderMode? = null,
     /** `null` = направление не выбрано, берём [DEFAULT_DIRECTION]. */
     val direction: PageDirection? = null,
+    /** Обрезка белых полей страницы. `null` = не выбрано, обрезки нет. */
+    val cropBorders: Boolean? = null,
 ) {
     fun progress(): Map<String, ChapterReadingProgress> = entries.associate { it.chapterKey to it.value }
 
@@ -136,6 +138,21 @@ class MangaReadingStore(
 
     suspend fun setDirection(animeId: String, direction: PageDirection) {
         updateSnapshot(animeId) { it.copy(direction = direction) }
+    }
+
+    /**
+     * Обрезка полей — тоже на тайтл: у одного сканлейта поля белые и широкие, у другого страницы
+     * уже обрезаны, и глобальный тумблер пришлось бы дёргать при каждом переключении тайтла.
+     */
+    fun cropBordersFlow(animeId: String): Flow<Boolean> {
+        val key = progressKey(animeId)
+        return dataStore.data
+            .map { preferences -> decodeSnapshot(preferences[key]).cropBorders ?: false }
+            .distinctUntilChanged()
+    }
+
+    suspend fun setCropBorders(animeId: String, enabled: Boolean) {
+        updateSnapshot(animeId) { it.copy(cropBorders = enabled) }
     }
 
     suspend fun saveProgress(
