@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.myapplication.manga.data.MangaReaderMode
 import com.example.myapplication.manga.data.MangaReadingStore
 import com.example.myapplication.manga.data.PageDirection
+import com.example.myapplication.manga.domain.DetectReaderMode
 import com.example.myapplication.manga.domain.MangaChapter
 import com.example.myapplication.manga.domain.MangaPage
 import com.example.myapplication.manga.download.MangaPageResolver
@@ -41,6 +42,7 @@ class MangaReaderViewModel(
     initialChapterKey: String,
     private val pageResolver: MangaPageResolver,
     private val readingStore: MangaReadingStore,
+    private val detectReaderMode: DetectReaderMode,
 ) : ViewModel() {
 
     private val chapters: List<MangaChapter> = MangaChapterHandoff.chapters(animeId)
@@ -51,6 +53,9 @@ class MangaReaderViewModel(
     private var currentIndex: Int = chapters.indexOfFirst { it.key == initialChapterKey }
     private var loadJob: Job? = null
     private var saveJob: Job? = null
+
+    /** Автодетект — разовое событие на сессию ридера, а не проверка при каждой смене главы. */
+    private var detectAttempted = false
 
     val readerMode: StateFlow<MangaReaderMode> = readingStore.readerModeFlow(animeId)
         .stateIn(viewModelScope, SharingStarted.Eagerly, MangaReaderMode.Paged)
@@ -90,6 +95,28 @@ class MangaReaderViewModel(
                 hasPrevious = currentIndex > 0,
                 hasNext = currentIndex < chapters.lastIndex,
             )
+            autoDetectLayout(pages)
+        }
+    }
+
+    /**
+     * Подобрать режим по пропорциям страницы — но только тайтлу, которому его ещё не выбирали:
+     * ручной выбор автодетект не перетирает.
+     *
+     * Отдельной корутиной, а не внутри [load]: глава уже показана, и переключение на вебтун
+     * догоняет её через секунду-другую вместо того, чтобы задерживать открытие.
+     */
+    private fun autoDetectLayout(pages: List<MangaPage>) {
+        if (detectAttempted) return
+        detectAttempted = true
+        viewModelScope.launch {
+            if (readingStore.hasExplicitMode(animeId)) return@launch
+            // Результат пишем даже когда он совпал с дефолтом: так выбор становится явным и
+            // детект больше не гоняется при каждом открытии тайтла.
+            val detected = detectReaderMode(pages) ?: return@launch
+            if (!readingStore.hasExplicitMode(animeId)) {
+                readingStore.setReaderMode(animeId, detected)
+            }
         }
     }
 

@@ -112,6 +112,7 @@ val appModule = module {
             downloadStore = get(),
         )
     }
+    single { com.example.myapplication.manga.domain.DetectReaderMode(client = get()) }
     single(named("manga_rate")) {
         // MangaDex: 5 req/s на IP; держимся вдвое ниже потолка — главы всё равно грузим пачками.
         com.example.myapplication.network.TokenBucketRateLimiter(

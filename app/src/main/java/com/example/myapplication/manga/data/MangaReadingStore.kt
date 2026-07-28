@@ -115,6 +115,14 @@ class MangaReadingStore(
             .distinctUntilChanged()
     }
 
+    /**
+     * Выбран ли режим у ЭТОГО тайтла. По [readerModeFlow] это не видно: он уже подмешивает дефолт,
+     * и «пользователь выбрал Paged» неотличимо от «никто ничего не выбирал». Нужно автодетекту —
+     * он имеет право высказаться только там, где выбора ещё не было.
+     */
+    suspend fun hasExplicitMode(animeId: String): Boolean =
+        decodeSnapshot(dataStore.data.first()[progressKey(animeId)]).mode != null
+
     suspend fun setReaderMode(animeId: String, mode: MangaReaderMode) {
         updateSnapshot(animeId) { it.copy(mode = mode) }
     }

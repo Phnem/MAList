@@ -148,6 +148,7 @@ val viewModelModule = module {
             initialChapterKey = chapterKey,
             pageResolver = get(),
             readingStore = get(),
+            detectReaderMode = get(),
         )
     }
     viewModel { (anime: com.example.myapplication.data.models.Anime, episodeNumber: Int) ->
