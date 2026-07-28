@@ -12,6 +12,55 @@ SQLDelight (коллекция), Koin, ktor + OkHttp. Пакет `com.example.my
 
 ---
 
+## Статус на 2026-07-28
+
+Волны A, B и C закрыты полностью — 10 тикетов, по коммиту на тикет, все локально в `main`
+(без пуша). Сборка `compileDebugKotlin` зелёная, юнит-тесты 82/83.
+
+| Волна | Тикеты | Статус |
+|---|---|---|
+| A — быстрые изолированные правки | A1, A2, A3 | ✅ сделано |
+| B — источники парсинга | B1, B2, B3 | ✅ сделано |
+| C — ядро ридера | C1, C2, C3, C4 | ✅ сделано |
+| D — UX ридера | D1, D2, D3 | ⬜ не начато |
+| E — полировка ридера | E1, E2, E3 | ⬜ не начато |
+| F — Details и меню глав | F1–F5 | ⬜ не начато |
+| G — синк прогресса | G1 | ⬜ не начато, требует таблицы в Supabase |
+
+Коммиты волн A–C, в порядке появления:
+
+```
+e2685f6  Retry the same stream URL once before falling back to another candidate   (A1)
+092bed0  Draw the quality dropdown as one surface instead of a stack of pills       (A2)
+21deb98  Remember the Kodik Caesar shift instead of brute-forcing it every time     (A3)
+0e41fac  Let jut.su be pointed at a mirror domain                                   (B1)
+602d701  Resolve AnimeGo episodes through CDNVideoHub as well as AniBoom            (B2)
+af16138  Search Kodik directly as well as through YummyAnime                        (B3)
+d61e7ec  Decode oversized manga pages in tiles instead of one bitmap                (C3)
+493b88f  Keep reading layout per title and split paged mode by direction            (C1)
+0641367  Guess the reading layout from page proportions on first open               (C2)
+23c08ba  Let a page that failed to load retry on its own                            (C4)
+```
+
+### Отклонения от плана, принятые при реализации
+
+- **A2** — настоящий backdrop-блюр в этом месте недостижим: поповер живёт в отдельном окне
+  `Popup`, и kyant-стеклу неоткуда сэмплировать слой окна приложения. Взят
+  `IosDesign.level2Surface()` — штатная замена там, где рефракция недоступна. Внешне цель тикета
+  (одна полупрозрачная карточка вместо стопки пилюль) достигнута, физического размытия фона нет.
+- **C3** — тайлы режутся по фиксированным 4096, а не по реальному `GL_MAX_TEXTURE_SIZE`
+  устройства. Запрос настоящего лимита требует живого EGL-контекста на потоке декодирования по
+  дисплею, общему с HWUI, — риск заметно выше выигрыша в одну-две лишние полосы.
+- **B3** — токены `kodik_tokens.json` чужие и датированы апрелем. Путь самоотключается, когда они
+  протухнут; YummyAnime продолжает работать. Стоит решить отдельно, оставлять ли их в репозитории.
+
+### Известное, но не наше
+
+`StatsRatingBucketTest > buckets_continuous_noGaps` падал до начала работ и падает сейчас —
+проверено на чистом дереве. К волнам A–C отношения не имеет.
+
+---
+
 ## 0. Расхождения планов с реальным кодом
 
 Проверено чтением кода, а не по описанию. Планы писались раньше — часть утверждений устарела.
@@ -33,9 +82,9 @@ SQLDelight (коллекция), Koin, ktor + OkHttp. Пакет `com.example.my
 
 ---
 
-## 1. Волна A — быстрые изолированные правки
+## 1. Волна A — быстрые изолированные правки ✅
 
-### A1. Same-URL retry перед fallback в плеере
+### A1. Same-URL retry перед fallback в плеере ✅
 
 **Сейчас.** `StreamPlayerActivity.onPlayerError` (строка 249): при любой автоматической попытке
 (`automaticRetries < MAX_AUTOMATIC_RETRIES`) сразу вызывается `refreshStream()`, который берёт
@@ -68,7 +117,7 @@ if (automaticRetries == 0) {
 
 ---
 
-### A2. Дропдаун качества — единая blur-поверхность
+### A2. Дропдаун качества — единая blur-поверхность ✅
 
 **Сейчас.** `EpisodeQualitySheet.kt`: список из отдельных пилюль (`QualityPill`), зазор
 `QualityMenuGap = 8.dp`, сплошной непрозрачный `pillColor` без блюра, на выбранном — оранжевая
@@ -93,7 +142,7 @@ if (automaticRetries == 0) {
 
 ---
 
-### A3. Кэш сдвига Caesar-шифра в Kodik
+### A3. Кэш сдвига Caesar-шифра в Kodik ✅
 
 **Сейчас.** `KodikSource.kt:358` `decodeKodikSource()` — чистый перебор `for (shift in 0..25)` на
 **каждый** элемент `sources`. При 3 качествах — до ~78 попыток `decodeBase64()` на эпизод, кэша
@@ -113,9 +162,9 @@ if (automaticRetries == 0) {
 
 ---
 
-## 2. Волна B — источники парсинга
+## 2. Волна B — источники парсинга ✅
 
-### B1. Зеркало домена jut.su
+### B1. Зеркало домена jut.su ✅
 
 **Сейчас.** `JutSuSource.kt:29` — `baseUrl = "https://jut.su"` зашит; ещё есть проверка
 `contains("jut.su")` на строке 37.
@@ -134,7 +183,7 @@ if (automaticRetries == 0) {
 
 ---
 
-### B2. AnimeGo — второй бэкенд плеера CVH (CDNVideoHub)
+### B2. AnimeGo — второй бэкенд плеера CVH (CDNVideoHub) ✅
 
 **Сейчас.** `AnimeGoSource.kt:53` — `label = "720p", resolution = 720` **захардкожено**; `cvh`
 в файле не встречается ни разу. Единственный путь — aniboom.
@@ -164,7 +213,7 @@ if (automaticRetries == 0) {
 
 ---
 
-### B3. Прямой поиск через kodik-api.com
+### B3. Прямой поиск через kodik-api.com ✅
 
 **Сейчас.** Единственный путь к Kodik — через YummyAnime (`api.yani.tv`, `findRelease()`).
 Не проиндексировал тайтл / отдал неверный slug / недоступен → Kodik выпадает целиком, хотя сам
@@ -195,9 +244,9 @@ Kodik жив.
 
 ---
 
-## 3. Волна C — ядро ридера
+## 3. Волна C — ядро ридера ✅
 
-### C1. Режим чтения per-title + направление
+### C1. Режим чтения per-title + направление ✅
 
 **Сейчас.** `MangaReadingStore.kt:33` — `MangaReaderMode { Paged, Webtoon }` с KDoc «Настройка
 глобальная: смена режима на каждый тайтл никому не нужна», один ключ `READER_MODE_KEY`.
@@ -232,7 +281,7 @@ Kodik жив.
 
 ---
 
-### C2. Автоопределение вебтуна
+### C2. Автоопределение вебтуна ✅
 
 Из `DetectReaderModeUseCase.kt` (Kotatsu). Декодировать **только bounds**
 (`inJustDecodeBounds = true`, без загрузки в память) страницы на 30 %-й позиции главы; если
@@ -249,7 +298,7 @@ C1), а не принудительное переключение: явный �
 
 ---
 
-### C3. RegionBitmapDecoder — защита от OOM
+### C3. RegionBitmapDecoder — защита от OOM ✅
 
 Из `RegionBitmapDecoder.kt` (Kotatsu). Это буквально `coil3.decode.Decoder` через
 `BitmapRegionDecoder`, с фолбэком на обычный декодер, если региональный недоступен. Подключается
@@ -263,7 +312,7 @@ C1), а не принудительное переключение: явный �
 
 ---
 
-### C4. Битая страница — inline retry
+### C4. Битая страница — inline retry ✅
 
 Coil3 `AsyncImage` `error`-слот → заглушка с кнопкой «Обновить», повторный `ImageRequest` с
 cache-bust параметром. `Pager`/`LazyColumn` не ломается по построению — ошибка одного элемента не
@@ -276,7 +325,7 @@ cache-bust параметром. `Pager`/`LazyColumn` не ломается по
 
 ---
 
-## 4. Волна D — UX ридера
+## 4. Волна D — UX ридера ⬜
 
 ### D1. Мини-док сверху справа
 
@@ -319,7 +368,7 @@ cache-bust параметром. `Pager`/`LazyColumn` не ломается по
 
 ---
 
-## 5. Волна E — полировка ридера
+## 5. Волна E — полировка ридера ⬜
 
 ### E1. Префетчинг страниц
 Паттерн `MangaPrefetchService.kt` (Kotatsu) — фоновый воркер, качающий страницы вперёд в
@@ -336,7 +385,7 @@ Coil-кэш. Адаптация: подключить к `MangaPageResolver` в�
 
 ---
 
-## 6. Волна F — Details и меню глав
+## 6. Волна F — Details и меню глав ⬜
 
 ### F1. Кнопка избранного в Details
 **Сжатый тикет** (см. §0): backend готов целиком. Нужна третья кнопка-закладка рядом со
@@ -364,7 +413,7 @@ AniList-пайплайн обогащения, **потом** вёрстка F3.
 
 ---
 
-## 7. Волна G — синк прогресса в Supabase
+## 7. Волна G — синк прогресса в Supabase ⬜
 
 `EpisodePlaybackStore` и `MangaReadingStore` **не подключены** к `sync/supabase/*` вообще, хотя там
 уже есть синк ключей, коллекции и картинок — паттерн `ApiKeySyncRepository`/`SyncRepository`
