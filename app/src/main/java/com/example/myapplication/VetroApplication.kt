@@ -14,6 +14,7 @@ import org.koin.core.context.startKoin
 import com.example.myapplication.di.appModule
 import com.example.myapplication.di.databaseModule
 import com.example.myapplication.di.viewModelModule
+import com.example.myapplication.manga.ui.RegionBitmapDecoder
 import com.example.myapplication.network.di.coreNetworkModule
 
 class VetroApplication : Application(), SingletonImageLoader.Factory {
@@ -43,6 +44,12 @@ class VetroApplication : Application(), SingletonImageLoader.Factory {
 
     override fun newImageLoader(context: PlatformContext): ImageLoader {
         return ImageLoader.Builder(context)
+            .components {
+                // Вебтун-страницы бывают в десятки тысяч пикселей высотой: штатный декодер на них
+                // либо ловит OOM, либо упирается в лимит текстуры и не рисует ничего. Фабрика
+                // сама решает, вмешиваться ли, — обычные страницы и обложки идут прежним путём.
+                add(RegionBitmapDecoder.Factory())
+            }
             .memoryCache {
                 MemoryCache.Builder()
                     .maxSizePercent(context, 0.25)
