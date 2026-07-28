@@ -8,10 +8,8 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,10 +22,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Hd
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -45,7 +43,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Fill
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
@@ -59,18 +56,28 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
+import com.example.myapplication.ui.shared.theme.IosDesign
 import com.example.myapplication.ui.shared.theme.MotionTokens
 import com.example.myapplication.ui.shared.theme.SnProFamily
+import com.example.myapplication.ui.shared.theme.SquircleShape
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
 private val QualityMenuWidth = 228.dp
 private val QualityRowHeight = 56.dp
-private val QualityMenuGap = 8.dp
 private val QualityArrowWidth = 22.dp
 private val QualityArrowHeight = 11.dp
 
-/** Anchored capsule popover matching the source selector on the home screen. */
+/** Скругление контекстного меню — гайдбук §3.1 ([IosDesign.RadiusMd], squircle, не капсула). */
+private val QualityMenuRadius = IosDesign.RadiusMd
+
+/** Левый inset разделителя = padding строки (10) + иконка (38) + зазор (12): линия под текстом. */
+private val QualityDividerInset = 60.dp
+
+/**
+ * Меню выбора качества, привязанное к якорю: одна полупрозрачная squircle-карточка с хвостиком,
+ * строки внутри разделены линией (раньше была стопка отдельных непрозрачных пилюль).
+ */
 @Composable
 fun EpisodeQualityPopover(
     state: EpisodeQualityPickerState,
@@ -104,12 +111,11 @@ fun EpisodeQualityPopover(
 
     val menuWidthPx = with(density) { QualityMenuWidth.toPx() }
     val rowPx = with(density) { QualityRowHeight.toPx() }
-    val gapPx = with(density) { QualityMenuGap.toPx() }
     val arrowPx = with(density) { QualityArrowHeight.toPx() }
     val marginPx = with(density) { 12.dp.toPx() }
     val anchorGapPx = with(density) { 8.dp.toPx() }
-    val menuHeightPx = state.options.size * rowPx +
-        (state.options.size - 1).coerceAtLeast(0) * gapPx + arrowPx
+    // Строки живут в одной карточке вплотную друг к другу — зазоров между ними больше нет.
+    val menuHeightPx = state.options.size * rowPx + arrowPx
     val anchorCenterX = anchor.center.x
     val menuX = (anchorCenterX - menuWidthPx / 2f).coerceIn(
         marginPx,
@@ -123,8 +129,16 @@ fun EpisodeQualityPopover(
     }
     val arrowFraction = ((anchorCenterX - menuX) / menuWidthPx).coerceIn(0.08f, 0.92f)
     val transformOrigin = TransformOrigin(arrowFraction, if (menuBelow) 0f else 1f)
-    val pillColor = if (isDark) Color(0xFF232329) else Color(0xFFF4F4F6)
-    val pillRing = if (isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.06f)
+    // Материал уровня 2 (гайдбук §3.2) — полупрозрачная alpha-поверхность, тот же токен, что у
+    // остальных всплывающих панелей. Настоящий backdrop-blur (kyant `drawBackdrop`, как у
+    // GlassMenuHeader/GlassIconButton) здесь недоступен: меню живёт в отдельном окне `Popup`, а
+    // `layerBackdrop` пишет контент окна приложения — сэмплировать его из чужого окна нельзя.
+    // Глубину даёт связка «elevated-поверхность + scrim», без рамок-«ободков» (см. §3.2).
+    val menuSurface = IosDesign.level2Surface(isDark)
+    val menuShape = remember { SquircleShape(QualityMenuRadius) }
+    // Разделитель в тон бывшему pillRing: чуть заметнее его, но заметно легче §3.3-сепаратора —
+    // на полупрозрачной поверхности линия 0.16 читалась бы как жирная решётка.
+    val dividerColor = if (isDark) Color.White.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.08f)
     val scrimColor = Color.Black.copy(alpha = if (isDark) 0.52f else 0.32f)
 
     val fullWindowProvider = remember {
@@ -190,21 +204,33 @@ fun EpisodeQualityPopover(
             ) {
                 Column(modifier = Modifier.width(QualityMenuWidth)) {
                     if (menuBelow) {
-                        QualityMenuArrow(true, arrowFraction, pillColor)
+                        QualityMenuArrow(true, arrowFraction, menuSurface)
                     }
-                    Column(verticalArrangement = Arrangement.spacedBy(QualityMenuGap)) {
-                        state.options.forEach { option ->
-                            QualityPill(
+                    // Одна цельная карточка вместо стопки пилюль: заливка и скругление живут на
+                    // контейнере, строки внутри разделены только линией.
+                    Column(
+                        modifier = Modifier
+                            .clip(menuShape)
+                            .background(menuSurface),
+                    ) {
+                        state.options.forEachIndexed { index, option ->
+                            if (index > 0) {
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(start = QualityDividerInset),
+                                    thickness = IosDesign.SeparatorThickness,
+                                    color = dividerColor,
+                                )
+                            }
+                            QualityRow(
                                 option = option,
                                 selected = selectedQuality == option.resolution,
                                 enabled = !closeRequested,
-                                isDark = isDark,
                                 onClick = { close(option.resolution) },
                             )
                         }
                     }
                     if (!menuBelow) {
-                        QualityMenuArrow(false, arrowFraction, pillColor)
+                        QualityMenuArrow(false, arrowFraction, menuSurface)
                     }
                 }
             }
@@ -212,35 +238,22 @@ fun EpisodeQualityPopover(
     }
 }
 
+/**
+ * Строка меню качества. Собственного фона и обводки у неё нет — они принадлежат общей карточке,
+ * иначе внутри полупрозрачной поверхности проступала бы вторая, более плотная плашка.
+ * Выбранный пункт помечается только галочкой: оранжевая подложка/обводка на строке убраны.
+ */
 @Composable
-private fun QualityPill(
+private fun QualityRow(
     option: EpisodeQualityOption,
     selected: Boolean,
     enabled: Boolean,
-    isDark: Boolean,
     onClick: () -> Unit,
 ) {
-    val shape = RoundedCornerShape(50)
-    val background = when {
-        selected -> MaterialTheme.colorScheme.primary.copy(alpha = if (isDark) 0.22f else 0.13f)
-        isDark -> Color(0xFF232329)
-        else -> Color(0xFFF4F4F6)
-    }
-    val ring = if (selected) {
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.46f)
-    } else if (isDark) {
-        Color.White.copy(alpha = 0.08f)
-    } else {
-        Color.Black.copy(alpha = 0.06f)
-    }
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(QualityRowHeight)
-            .clip(shape)
-            .background(background)
-            .border(1.dp, ring, shape)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -286,6 +299,11 @@ private fun QualityPill(
     }
 }
 
+/**
+ * Хвостик-указатель на якорь. [color] обязан быть ТЕМ ЖЕ полупрозрачным материалом, что и карточка:
+ * сплошная заливка выглядела бы приклеенным чужеродным треугольником, а alpha совпадает, потому что
+ * треугольник и карточка не перекрываются (стоят встык в [Column]).
+ */
 @Composable
 private fun QualityMenuArrow(pointUp: Boolean, fraction: Float, color: Color) {
     Canvas(
