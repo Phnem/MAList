@@ -165,7 +165,19 @@ val appModule = module {
             },
         )
     }
-    single { com.example.myapplication.media.source.KodikSource(client = get()) }
+    // Токены kodik-api лежат в assets, поэтому прямому поиску нужен Context (как UrlSource ниже).
+    single {
+        com.example.myapplication.media.source.KodikDirectSearch(
+            client = get(),
+            appContext = androidContext(),
+        )
+    }
+    single {
+        com.example.myapplication.media.source.KodikSource(
+            client = get(),
+            directSearch = get(),
+        )
+    }
     // Browser-UA client without the cookie plugin: gate.php is selected by a per-request `key` cookie.
     single {
         com.example.myapplication.media.source.AnimeHeavenSource(

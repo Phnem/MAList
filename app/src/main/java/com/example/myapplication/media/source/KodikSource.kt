@@ -22,57 +22,90 @@ import org.json.JSONObject
  * Native YummyAnime → Kodik resolver. YummyAnime provides episode/translation metadata and iframe
  * URLs; Kodik is then resolved into complete synchronized renditions. We deliberately expose each
  * dubbing as a separate [VetroHoster], never as an external audio track over unrelated video.
+ *
+ * К YummyAnime добавлен второй, независимый путь к iframe — [KodikDirectSearch] по kodik-api.
+ * Пути идут параллельно и не зависят друг от друга: YummyAnime индексирует не всё, а падение
+ * любого из двух не должно лишать пользователя второго.
  */
 class KodikSource(
     private val client: OkHttpClient,
+    private val directSearch: KodikDirectSearch? = null,
 ) {
     suspend fun resolveEpisode(anime: Anime, episodeNumber: Int): List<VetroHoster> {
         if (episodeNumber <= 0) return emptyList()
         return withContext(Dispatchers.IO) {
-            val release = findRelease(anime) ?: return@withContext emptyList()
-            val slug = release.optString("anime_url").trim().ifBlank { return@withContext emptyList() }
-            val details = requestJson("$API_ORIGIN/anime/$slug?need_videos=true")
-                ?.optJSONObject("response")
-                ?: return@withContext emptyList()
-            val entries = details.optJSONArray("videos").objects()
-                .filter { entry ->
-                    val number = entry.optString("number").trim()
-                    val player = entry.optJSONObject("data")?.optString("player").orEmpty()
-                    episodeMatches(number, episodeNumber) && player.contains("Kodik", ignoreCase = true)
+            val (yummy, direct) = coroutineScope {
+                val yummyTask = async(Dispatchers.IO) {
+                    runCatching { yummyCandidates(anime, episodeNumber) }
+                        .onFailure { Log.i(TAG, "Yummy path failed: ${it.message}") }
+                        .getOrDefault(emptyList<KodikIframeCandidate>())
                 }
-                .distinctBy { entry ->
-                    val data = entry.optJSONObject("data")
-                    data?.optString("dubbing").orEmpty() + "|" + entry.optString("iframe_url")
+                val directTask = async(Dispatchers.IO) {
+                    val search = directSearch ?: return@async emptyList<KodikIframeCandidate>()
+                    runCatching { search.findEpisodeCandidates(anime, episodeNumber, MAX_DUBBINGS) }
+                        .onFailure { Log.i(TAG, "Kodik direct path failed: ${it.message}") }
+                        .getOrDefault(emptyList<KodikIframeCandidate>())
                 }
-                .take(MAX_DUBBINGS)
+                awaitAll(yummyTask, directTask)
+            }
 
-            if (entries.isEmpty()) {
-                Log.i(TAG, "No Kodik entries for '$slug' ep=$episodeNumber")
+            // Дедуп до экстрактора, а не после: один и тот же iframe приходит обоими путями,
+            // а resolve() — это ещё 2-3 сетевых запроса на каждый адрес.
+            val candidates = (yummy + direct).distinctBy { it.iframeUrl }.take(MAX_DUBBINGS)
+            if (candidates.isEmpty()) {
+                Log.i(TAG, "No Kodik candidates for '${anime.title}' ep=$episodeNumber")
                 return@withContext emptyList()
             }
 
             coroutineScope {
-                entries.map { entry ->
+                candidates.map { candidate ->
                     async(Dispatchers.IO) {
-                        val iframe = normalizeUrl(entry.optString("iframe_url")) ?: return@async null
-                        val dubbing = entry.optJSONObject("data")
-                            ?.optString("dubbing")
-                            ?.trim()
-                            ?.takeIf(String::isNotBlank)
-                            ?: "Kodik"
-                        val videos = KodikExtractor(client).resolve(iframe)
+                        val videos = KodikExtractor(client).resolve(candidate.iframeUrl)
                         if (videos.isEmpty()) null else VetroHoster(
-                            name = "Kodik · $dubbing",
-                            url = iframe,
+                            name = "Kodik · ${candidate.dubbing}",
+                            url = candidate.iframeUrl,
                             videos = videos,
                             lazy = false,
                         )
                     }
                 }.awaitAll().filterNotNull()
             }.also { hosters ->
-                Log.i(TAG, "Resolved Kodik '$slug' ep=$episodeNumber dubbings=${hosters.size}")
+                Log.i(
+                    TAG,
+                    "Resolved Kodik ep=$episodeNumber dubbings=${hosters.size} " +
+                        "(yummy=${yummy.size}, direct=${direct.size})",
+                )
             }
         }
+    }
+
+    /** Прежний путь: YummyAnime отдаёт метаданные серий и готовые iframe_url плеера Kodik. */
+    private fun yummyCandidates(anime: Anime, episodeNumber: Int): List<KodikIframeCandidate> {
+        val release = findRelease(anime) ?: return emptyList()
+        val slug = release.optString("anime_url").trim().ifBlank { return emptyList() }
+        val details = requestJson("$API_ORIGIN/anime/$slug?need_videos=true")
+            ?.optJSONObject("response")
+            ?: return emptyList()
+        return details.optJSONArray("videos").objects()
+            .filter { entry ->
+                val number = entry.optString("number").trim()
+                val player = entry.optJSONObject("data")?.optString("player").orEmpty()
+                episodeMatches(number, episodeNumber) && player.contains("Kodik", ignoreCase = true)
+            }
+            .distinctBy { entry ->
+                val data = entry.optJSONObject("data")
+                data?.optString("dubbing").orEmpty() + "|" + entry.optString("iframe_url")
+            }
+            .take(MAX_DUBBINGS)
+            .mapNotNull { entry ->
+                val iframe = normalizeUrl(entry.optString("iframe_url")) ?: return@mapNotNull null
+                val dubbing = entry.optJSONObject("data")
+                    ?.optString("dubbing")
+                    ?.trim()
+                    ?.takeIf(String::isNotBlank)
+                    ?: "Kodik"
+                KodikIframeCandidate(iframeUrl = iframe, dubbing = dubbing)
+            }
     }
 
     private fun findRelease(anime: Anime): JSONObject? {
@@ -323,7 +356,8 @@ private class KodikExtractor(
     }
 }
 
-private fun JSONArray?.objects(): List<JSONObject> = buildList {
+// internal, а не private: тем же хелпером разбирает ответ соседний KodikDirectSearch.
+internal fun JSONArray?.objects(): List<JSONObject> = buildList {
     val array = this@objects ?: return@buildList
     for (index in 0 until array.length()) array.optJSONObject(index)?.let(::add)
 }
@@ -335,7 +369,8 @@ private fun JSONArray?.strings(): List<String> = buildList {
     }
 }
 
-private fun normalizeUrl(raw: String): String? {
+// internal: KodikDirectSearch обязан приводить ссылки Kodik ровно так же, что и этот файл.
+internal fun normalizeUrl(raw: String): String? {
     val value = raw.trim().replace("\\/", "/")
     return when {
         value.startsWith("https://") || value.startsWith("http://") -> value
