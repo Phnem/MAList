@@ -49,6 +49,7 @@ class MangaReaderActivity : ComponentActivity() {
             OneUiTheme {
                 val state by viewModel.state.collectAsState()
                 val mode by viewModel.readerMode.collectAsState()
+                val direction by viewModel.pageDirection.collectAsState()
                 // Читаем язык из настроек как поток: блокировать главный поток ради одной строки
                 // на старте ридера незачем, а до первого значения подпись просто английская.
                 val ru by remember {
@@ -60,9 +61,10 @@ class MangaReaderActivity : ComponentActivity() {
                 MangaReaderScreen(
                     state = state,
                     mode = mode,
+                    direction = direction,
                     ru = ru,
                     onPageChanged = viewModel::onPageChanged,
-                    onModeChange = viewModel::setReaderMode,
+                    onLayoutChange = viewModel::setLayout,
                     onPreviousChapter = viewModel::openPrevious,
                     onNextChapter = viewModel::openNext,
                     onRetry = viewModel::load,

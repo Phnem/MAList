@@ -30,7 +30,11 @@ data class ChapterReadingProgress(
         get() = if (pageCount > 0) ((pageIndex + 1).toFloat() / pageCount).coerceIn(0f, 1f) else 0f
 }
 
-/** Как листается ридер. Настройка глобальная: смена режима на каждый тайтл никому не нужна. */
+/**
+ * Как листается ридер. Настройка **на тайтл**: в одной коллекции соседствуют вебтуны и обычная
+ * манга, и один глобальный переключатель заставлял бы менять режим при каждом открытии.
+ */
+@Serializable
 enum class MangaReaderMode {
     /** Постранично, свайпом влево/вправо — обычная манга. */
     Paged,
@@ -39,11 +43,42 @@ enum class MangaReaderMode {
     Webtoon,
 }
 
+/**
+ * Направление листания страниц — отдельное от [MangaReaderMode] измерение: осмысленно только в
+ * [MangaReaderMode.Paged], вертикальной ленте направление не нужно.
+ */
+@Serializable
+enum class PageDirection {
+    /** «Классика»: справа налево, как в японской манге. */
+    Rtl,
+
+    /** «Комикс»: слева направо, как в западных комиксах и манхве в переводе. */
+    Ltr,
+}
+
 @Serializable
 private data class ReadingEntry(val chapterKey: String, val value: ChapterReadingProgress)
 
 @Serializable
-private data class ReadingSnapshot(val entries: List<ReadingEntry> = emptyList())
+private data class ReadingSnapshot(
+    val entries: List<ReadingEntry> = emptyList(),
+    /** `null` = per-title значение не выбрано, берём глобальный легаси-дефолт. */
+    val mode: MangaReaderMode? = null,
+    /** `null` = направление не выбрано, берём [DEFAULT_DIRECTION]. */
+    val direction: PageDirection? = null,
+) {
+    fun progress(): Map<String, ChapterReadingProgress> = entries.associate { it.chapterKey to it.value }
+
+    fun withProgress(value: Map<String, ChapterReadingProgress>): ReadingSnapshot = copy(
+        entries = value.entries.sortedBy { it.key }.map { ReadingEntry(it.key, it.value) },
+    )
+}
+
+/**
+ * Дефолт направления: автодетект невозможен — в модели тайтла нет ни страны, ни языка оригинала,
+ * так что берём самый частый для манги вариант, а дальше читатель переключит вручную.
+ */
+private val DEFAULT_DIRECTION = PageDirection.Rtl
 
 /**
  * Прогресс чтения по главам, одним компактным JSON-снимком на тайтл в общем settings DataStore —
@@ -68,17 +103,31 @@ class MangaReadingStore(
     suspend fun chapterProgress(animeId: String, chapterKey: String): ChapterReadingProgress? =
         decode(dataStore.data.first()[progressKey(animeId)])[chapterKey]
 
-    fun readerModeFlow(): Flow<MangaReaderMode> = dataStore.data
-        .map { preferences ->
-            when (preferences[READER_MODE_KEY]) {
-                MangaReaderMode.Webtoon.name -> MangaReaderMode.Webtoon
-                else -> MangaReaderMode.Paged
-            }
-        }
-        .distinctUntilChanged()
+    /**
+     * Режим тайтла: сначала per-title снимок, иначе старая глобальная настройка, иначе Paged.
+     * Легаси-ключ читается (но больше не пишется), чтобы тайтлы, открытые до разделения настройки,
+     * не перескочили на другой режим.
+     */
+    fun readerModeFlow(animeId: String): Flow<MangaReaderMode> {
+        val key = progressKey(animeId)
+        return dataStore.data
+            .map { preferences -> decodeSnapshot(preferences[key]).mode ?: legacyMode(preferences) }
+            .distinctUntilChanged()
+    }
 
-    suspend fun setReaderMode(mode: MangaReaderMode) {
-        dataStore.edit { it[READER_MODE_KEY] = mode.name }
+    suspend fun setReaderMode(animeId: String, mode: MangaReaderMode) {
+        updateSnapshot(animeId) { it.copy(mode = mode) }
+    }
+
+    fun directionFlow(animeId: String): Flow<PageDirection> {
+        val key = progressKey(animeId)
+        return dataStore.data
+            .map { preferences -> decodeSnapshot(preferences[key]).direction ?: DEFAULT_DIRECTION }
+            .distinctUntilChanged()
+    }
+
+    suspend fun setDirection(animeId: String, direction: PageDirection) {
+        updateSnapshot(animeId) { it.copy(direction = direction) }
     }
 
     suspend fun saveProgress(
@@ -89,63 +138,72 @@ class MangaReadingStore(
     ) {
         if (pageCount <= 0) return
         val page = pageIndex.coerceIn(0, pageCount - 1)
-        val preferenceKey = progressKey(animeId)
-        writeMutex.withLock {
-            dataStore.edit { preferences ->
-                val current = decode(preferences[preferenceKey]).toMutableMap()
-                current[chapterKey] = ChapterReadingProgress(
-                    pageIndex = page,
-                    pageCount = pageCount,
-                    read = current[chapterKey]?.read == true || page >= pageCount - 1,
-                    updatedAt = System.currentTimeMillis(),
-                )
-                preferences[preferenceKey] = encode(current)
-            }
+        updateSnapshot(animeId) { snapshot ->
+            val current = snapshot.progress().toMutableMap()
+            current[chapterKey] = ChapterReadingProgress(
+                pageIndex = page,
+                pageCount = pageCount,
+                read = current[chapterKey]?.read == true || page >= pageCount - 1,
+                updatedAt = System.currentTimeMillis(),
+            )
+            snapshot.withProgress(current)
         }
     }
 
     /** Явная отметка «прочитано/не прочитано» из списка глав. */
     suspend fun setRead(animeId: String, chapterKey: String, read: Boolean, pageCount: Int) {
+        updateSnapshot(animeId) { snapshot ->
+            val current = snapshot.progress().toMutableMap()
+            val count = pageCount.takeIf { it > 0 } ?: current[chapterKey]?.pageCount ?: 0
+            if (read) {
+                current[chapterKey] = ChapterReadingProgress(
+                    pageIndex = (count - 1).coerceAtLeast(0),
+                    pageCount = count,
+                    read = true,
+                    updatedAt = System.currentTimeMillis(),
+                )
+            } else {
+                current.remove(chapterKey)
+            }
+            snapshot.withProgress(current)
+        }
+    }
+
+    /**
+     * Единственная точка записи снимка: прогресс и настройки ридера лежат в одном JSON, поэтому
+     * любая правка обязана читать снимок целиком — иначе сохранение страницы стирало бы режим.
+     */
+    private suspend fun updateSnapshot(animeId: String, transform: (ReadingSnapshot) -> ReadingSnapshot) {
         val preferenceKey = progressKey(animeId)
         writeMutex.withLock {
             dataStore.edit { preferences ->
-                val current = decode(preferences[preferenceKey]).toMutableMap()
-                val count = pageCount.takeIf { it > 0 } ?: current[chapterKey]?.pageCount ?: 0
-                if (read) {
-                    current[chapterKey] = ChapterReadingProgress(
-                        pageIndex = (count - 1).coerceAtLeast(0),
-                        pageCount = count,
-                        read = true,
-                        updatedAt = System.currentTimeMillis(),
-                    )
-                } else {
-                    current.remove(chapterKey)
-                }
-                preferences[preferenceKey] = encode(current)
+                val snapshot = decodeSnapshot(preferences[preferenceKey])
+                preferences[preferenceKey] = json.encodeToString(transform(snapshot))
             }
         }
     }
 
-    private fun decode(raw: String?): Map<String, ChapterReadingProgress> {
-        if (raw.isNullOrBlank()) return emptyMap()
-        return runCatching {
-            json.decodeFromString<ReadingSnapshot>(raw).entries.associate { it.chapterKey to it.value }
-        }.getOrElse { emptyMap() }
+    private fun legacyMode(preferences: Preferences): MangaReaderMode =
+        when (preferences[READER_MODE_KEY]) {
+            MangaReaderMode.Webtoon.name -> MangaReaderMode.Webtoon
+            else -> MangaReaderMode.Paged
+        }
+
+    private fun decodeSnapshot(raw: String?): ReadingSnapshot {
+        if (raw.isNullOrBlank()) return ReadingSnapshot()
+        return runCatching { json.decodeFromString<ReadingSnapshot>(raw) }.getOrElse { ReadingSnapshot() }
     }
 
-    private fun encode(value: Map<String, ChapterReadingProgress>): String =
-        json.encodeToString(
-            ReadingSnapshot(
-                entries = value.entries
-                    .sortedBy { it.key }
-                    .map { ReadingEntry(it.key, it.value) },
-            ),
-        )
+    private fun decode(raw: String?): Map<String, ChapterReadingProgress> = decodeSnapshot(raw).progress()
 
     private fun progressKey(animeId: String) =
         stringPreferencesKey("manga_progress_${stableSuffix(animeId)}")
 
     private companion object {
+        /**
+         * Легаси-настройка «режим на всё приложение». Только чтение: она остаётся дефолтом для
+         * тайтлов, у которых per-title режим ещё не выбран, поэтому удалять ключ нельзя.
+         */
         val READER_MODE_KEY = stringPreferencesKey("manga_reader_mode")
     }
 

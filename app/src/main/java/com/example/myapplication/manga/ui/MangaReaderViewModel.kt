@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.manga.data.MangaReaderMode
 import com.example.myapplication.manga.data.MangaReadingStore
+import com.example.myapplication.manga.data.PageDirection
 import com.example.myapplication.manga.domain.MangaChapter
 import com.example.myapplication.manga.domain.MangaPage
 import com.example.myapplication.manga.download.MangaPageResolver
@@ -51,8 +52,11 @@ class MangaReaderViewModel(
     private var loadJob: Job? = null
     private var saveJob: Job? = null
 
-    val readerMode: StateFlow<MangaReaderMode> = readingStore.readerModeFlow()
+    val readerMode: StateFlow<MangaReaderMode> = readingStore.readerModeFlow(animeId)
         .stateIn(viewModelScope, SharingStarted.Eagerly, MangaReaderMode.Paged)
+
+    val pageDirection: StateFlow<PageDirection> = readingStore.directionFlow(animeId)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, PageDirection.Rtl)
 
     init {
         load()
@@ -106,8 +110,16 @@ class MangaReaderViewModel(
 
     fun openPrevious() = moveBy(-1)
 
-    fun setReaderMode(mode: MangaReaderMode) {
-        viewModelScope.launch { readingStore.setReaderMode(mode) }
+    /**
+     * Режим и направление меняются одной кнопкой-циклом, поэтому пишем их вместе.
+     * Направление — первым: при переходе «вебтун → классика» пейджера ещё нет, и он соберётся
+     * ровно один раз, уже с нужным направлением.
+     */
+    fun setLayout(mode: MangaReaderMode, direction: PageDirection) {
+        viewModelScope.launch {
+            if (direction != pageDirection.value) readingStore.setDirection(animeId, direction)
+            if (mode != readerMode.value) readingStore.setReaderMode(animeId, mode)
+        }
     }
 
     private fun moveBy(delta: Int) {

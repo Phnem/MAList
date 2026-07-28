@@ -31,9 +31,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.NavigateBefore
 import androidx.compose.material.icons.automirrored.filled.NavigateNext
+import androidx.compose.material.icons.filled.KeyboardDoubleArrowDown
+import androidx.compose.material.icons.filled.KeyboardDoubleArrowLeft
+import androidx.compose.material.icons.filled.KeyboardDoubleArrowRight
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Style
-import androidx.compose.material.icons.filled.ViewDay
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -41,6 +42,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -58,8 +60,10 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
@@ -68,6 +72,7 @@ import coil3.network.httpHeaders
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.example.myapplication.manga.data.MangaReaderMode
+import com.example.myapplication.manga.data.PageDirection
 import com.example.myapplication.manga.domain.MangaChapter
 import com.example.myapplication.manga.domain.MangaPage
 import com.example.myapplication.ui.shared.theme.BrandOrange
@@ -84,9 +89,10 @@ import kotlin.math.roundToInt
 fun MangaReaderScreen(
     state: MangaReaderUiState,
     mode: MangaReaderMode,
+    direction: PageDirection,
     ru: Boolean,
     onPageChanged: (Int) -> Unit,
-    onModeChange: (MangaReaderMode) -> Unit,
+    onLayoutChange: (MangaReaderMode, PageDirection) -> Unit,
     onPreviousChapter: () -> Unit,
     onNextChapter: () -> Unit,
     onRetry: () -> Unit,
@@ -114,9 +120,10 @@ fun MangaReaderScreen(
             is MangaReaderUiState.Ready -> ReaderContent(
                 state = state,
                 mode = mode,
+                direction = direction,
                 ru = ru,
                 onPageChanged = onPageChanged,
-                onModeChange = onModeChange,
+                onLayoutChange = onLayoutChange,
                 onPreviousChapter = onPreviousChapter,
                 onNextChapter = onNextChapter,
                 onClose = onClose,
@@ -129,9 +136,10 @@ fun MangaReaderScreen(
 private fun ReaderContent(
     state: MangaReaderUiState.Ready,
     mode: MangaReaderMode,
+    direction: PageDirection,
     ru: Boolean,
     onPageChanged: (Int) -> Unit,
-    onModeChange: (MangaReaderMode) -> Unit,
+    onLayoutChange: (MangaReaderMode, PageDirection) -> Unit,
     onPreviousChapter: () -> Unit,
     onNextChapter: () -> Unit,
     onClose: () -> Unit,
@@ -141,7 +149,10 @@ private fun ReaderContent(
     val scope = rememberCoroutineScope()
 
     // Перезапуск пейджера/ленты при смене главы: иначе новая глава открывается на старой странице.
-    key(state.chapter.key, mode) {
+    // Направление тоже в ключе — HorizontalPager читает layout direction только при создании,
+    // без пересборки переключатель «классика/комикс» выглядел бы сломанным. В вебтуне направление
+    // из ключа выключаем: ленте оно безразлично, а лишняя пересборка сбросила бы позицию скролла.
+    key(state.chapter.key, mode, direction.takeIf { mode == MangaReaderMode.Paged }) {
         when (mode) {
             MangaReaderMode.Paged -> {
                 val pagerState = rememberPagerState(
@@ -156,26 +167,37 @@ private fun ReaderContent(
                             onPageChanged(page)
                         }
                 }
-                HorizontalPager(
-                    state = pagerState,
-                    modifier = Modifier.fillMaxSize(),
-                    beyondViewportPageCount = 1,
-                ) { index ->
-                    ZoomablePage(
-                        page = state.pages[index],
-                        onToggleChrome = { chromeVisible = !chromeVisible },
-                    )
+                // Направление задаём только пейджеру, не всему экрану: список страниц остаётся
+                // в исходном порядке, поэтому сохранённый pageIndex продолжает указывать
+                // на ту же страницу, а хром и слайдер не переворачиваются вместе с ней.
+                CompositionLocalProvider(
+                    LocalLayoutDirection provides when (direction) {
+                        PageDirection.Rtl -> LayoutDirection.Rtl
+                        PageDirection.Ltr -> LayoutDirection.Ltr
+                    },
+                ) {
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier.fillMaxSize(),
+                        beyondViewportPageCount = 1,
+                    ) { index ->
+                        ZoomablePage(
+                            page = state.pages[index],
+                            onToggleChrome = { chromeVisible = !chromeVisible },
+                        )
+                    }
                 }
                 ReaderChrome(
                     visible = chromeVisible,
                     state = state,
                     mode = mode,
+                    direction = direction,
                     ru = ru,
                     currentPage = currentPage,
                     onSeek = { target ->
                         scope.launch { pagerState.scrollToPage(target) }
                     },
-                    onModeChange = onModeChange,
+                    onLayoutChange = onLayoutChange,
                     onPreviousChapter = onPreviousChapter,
                     onNextChapter = onNextChapter,
                     onClose = onClose,
@@ -212,12 +234,13 @@ private fun ReaderContent(
                     visible = chromeVisible,
                     state = state,
                     mode = mode,
+                    direction = direction,
                     ru = ru,
                     currentPage = currentPage,
                     onSeek = { target ->
                         scope.launch { listState.scrollToItem(target) }
                     },
-                    onModeChange = onModeChange,
+                    onLayoutChange = onLayoutChange,
                     onPreviousChapter = onPreviousChapter,
                     onNextChapter = onNextChapter,
                     onClose = onClose,
@@ -318,10 +341,11 @@ private fun ReaderChrome(
     visible: Boolean,
     state: MangaReaderUiState.Ready,
     mode: MangaReaderMode,
+    direction: PageDirection,
     ru: Boolean,
     currentPage: Int,
     onSeek: (Int) -> Unit,
-    onModeChange: (MangaReaderMode) -> Unit,
+    onLayoutChange: (MangaReaderMode, PageDirection) -> Unit,
     onPreviousChapter: () -> Unit,
     onNextChapter: () -> Unit,
     onClose: () -> Unit,
@@ -365,22 +389,15 @@ private fun ReaderChrome(
                 }
                 IconButton(
                     onClick = {
-                        onModeChange(
-                            if (mode == MangaReaderMode.Paged) {
-                                MangaReaderMode.Webtoon
-                            } else {
-                                MangaReaderMode.Paged
-                            },
-                        )
+                        val (nextMode, nextDirection) = nextLayout(mode, direction)
+                        onLayoutChange(nextMode, nextDirection)
                     },
                 ) {
+                    // Иконка показывает текущее состояние, а не следующее: стрелка совпадает
+                    // с направлением, в котором уезжает страница при свайпе.
                     Icon(
-                        imageVector = if (mode == MangaReaderMode.Paged) {
-                            Icons.Filled.ViewDay
-                        } else {
-                            Icons.Filled.Style
-                        },
-                        contentDescription = null,
+                        imageVector = layoutIcon(mode, direction),
+                        contentDescription = layoutLabel(mode, direction, ru),
                         tint = Color.White,
                     )
                 }
@@ -494,6 +511,35 @@ private fun ReaderError(
             }
         }
     }
+}
+
+/**
+ * Цикл одной кнопки: Вебтун → Классика (справа налево) → Комикс (слева направо) → Вебтун.
+ * Из «комикса» в вебтун уходим, не сбрасывая направление: в ленте оно всё равно не видно,
+ * а лишняя запись зря пересобрала бы состояние.
+ */
+private fun nextLayout(
+    mode: MangaReaderMode,
+    direction: PageDirection,
+): Pair<MangaReaderMode, PageDirection> = when {
+    mode == MangaReaderMode.Webtoon -> MangaReaderMode.Paged to PageDirection.Rtl
+    direction == PageDirection.Rtl -> MangaReaderMode.Paged to PageDirection.Ltr
+    else -> MangaReaderMode.Webtoon to direction
+}
+
+private fun layoutIcon(
+    mode: MangaReaderMode,
+    direction: PageDirection,
+): androidx.compose.ui.graphics.vector.ImageVector = when {
+    mode == MangaReaderMode.Webtoon -> Icons.Filled.KeyboardDoubleArrowDown
+    direction == PageDirection.Rtl -> Icons.Filled.KeyboardDoubleArrowLeft
+    else -> Icons.Filled.KeyboardDoubleArrowRight
+}
+
+private fun layoutLabel(mode: MangaReaderMode, direction: PageDirection, ru: Boolean): String = when {
+    mode == MangaReaderMode.Webtoon -> if (ru) "Вебтун" else "Webtoon"
+    direction == PageDirection.Rtl -> if (ru) "Классика" else "Right to left"
+    else -> if (ru) "Комикс" else "Left to right"
 }
 
 private fun String.readerErrorText(ru: Boolean): String = when (this) {
