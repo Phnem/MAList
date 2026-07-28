@@ -258,6 +258,17 @@ class StreamPlayerActivity : ComponentActivity() {
                                 current = previousRendition.copy(resolvedAt = System.currentTimeMillis())
                                 return
                             }
+                            // Чаще всего падает не сам кандидат, а соединение/протухший сегмент,
+                            // поэтому первую попытку тратим на пересборку плеера с тем же URL —
+                            // уходить к другой озвучке/качеству имеет смысл только если и это не помогло.
+                            if (automaticRetries == 0) {
+                                Log.i(TAG, "Retrying same stream URL before fallback")
+                                automaticRetries = 1
+                                resumePosition = player.currentPosition.coerceAtLeast(0L)
+                                playbackError = null
+                                current = current.copy(resolvedAt = System.currentTimeMillis())
+                                return
+                            }
                             if (automaticRetries < MAX_AUTOMATIC_RETRIES) {
                                 automaticRetries += 1
                                 refreshStream()
