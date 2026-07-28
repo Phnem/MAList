@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import coil3.compose.AsyncImagePainter
 import coil3.network.NetworkHeaders
 import coil3.network.httpHeaders
 import coil3.request.ImageRequest
@@ -183,6 +184,7 @@ private fun ReaderContent(
                     ) { index ->
                         ZoomablePage(
                             page = state.pages[index],
+                            ru = ru,
                             onToggleChrome = { chromeVisible = !chromeVisible },
                         )
                     }
@@ -226,6 +228,7 @@ private fun ReaderContent(
                         PageImage(
                             page = state.pages[index],
                             contentScale = ContentScale.FillWidth,
+                            ru = ru,
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
@@ -254,6 +257,7 @@ private fun ReaderContent(
 @Composable
 private fun ZoomablePage(
     page: MangaPage,
+    ru: Boolean,
     onToggleChrome: () -> Unit,
 ) {
     var scale by remember(page.url) { mutableFloatStateOf(1f) }
@@ -294,6 +298,7 @@ private fun ZoomablePage(
         PageImage(
             page = page,
             contentScale = ContentScale.Fit,
+            ru = ru,
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer {
@@ -306,14 +311,26 @@ private fun ZoomablePage(
     }
 }
 
+/**
+ * Одна страница с собственным retry: битая картинка не должна утаскивать за собой главу.
+ *
+ * Общая точка отрисовки для обоих режимов, поэтому заглушка автоматически работает и в пейджере,
+ * и в вебтун-ленте.
+ */
 @Composable
 private fun PageImage(
     page: MangaPage,
     contentScale: ContentScale,
+    ru: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val model = remember(page.url) {
+    // Номер попытки живёт вместе со страницей и служит cache-bust'ом при перезагрузке.
+    var attempt by remember(page.url) { mutableIntStateOf(0) }
+    var failed by remember(page.url) { mutableStateOf(false) }
+    var loading by remember(page.url) { mutableStateOf(true) }
+
+    val model = remember(page.url, attempt) {
         ImageRequest.Builder(context)
             .data(page.url)
             .crossfade(true)
@@ -325,15 +342,85 @@ private fun PageImage(
                     }.build()
                     httpHeaders(headers)
                 }
+                // Сам URL не трогаем: у части источников он подписан, и лишний query-параметр
+                // сломал бы подпись. Попытки различаем ключами кэша — этого достаточно, чтобы
+                // Coil пошёл в сеть заново, а не отдал прошлый промах.
+                if (attempt > 0) {
+                    memoryCacheKey("${page.url}#$attempt")
+                    diskCacheKey("${page.url}#$attempt")
+                }
             }
             .build()
     }
-    AsyncImage(
-        model = model,
-        contentDescription = null,
-        contentScale = contentScale,
-        modifier = modifier,
-    )
+
+    Box(contentAlignment = Alignment.Center) {
+        AsyncImage(
+            model = model,
+            contentDescription = null,
+            contentScale = contentScale,
+            onState = { state ->
+                loading = state is AsyncImagePainter.State.Loading
+                failed = state is AsyncImagePainter.State.Error
+            },
+            modifier = modifier,
+        )
+        // Пока картинки нет, AsyncImage схлопывается в нулевую высоту — в вебтун-ленте это
+        // дёргало бы скролл. Заглушка держит место сама и задаёт высоту элементу.
+        if (failed) {
+            PageLoadError(ru = ru, onRetry = { attempt++ })
+        } else if (loading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(PagePlaceholderHeight),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator(color = BrandOrange, strokeWidth = 2.dp)
+            }
+        }
+    }
+}
+
+/** Заглушка вместо не загрузившейся страницы: соседние страницы при этом остаются рабочими. */
+@Composable
+private fun PageLoadError(
+    ru: Boolean,
+    onRetry: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(PagePlaceholderHeight),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            text = if (ru) "Страница не загрузилась" else "This page failed to load",
+            color = Color.White.copy(alpha = 0.7f),
+            fontSize = 14.sp,
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .clickable(onClick = onRetry)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Refresh,
+                contentDescription = null,
+                tint = BrandOrange,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = if (ru) "Обновить" else "Retry",
+                color = BrandOrange,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
 }
 
 @Composable
@@ -555,6 +642,9 @@ fun MangaChapter.readerTitle(ru: Boolean): String {
     return listOfNotNull(number, name).joinToString(" — ")
         .ifBlank { if (ru) "Глава" else "Chapter" }
 }
+
+/** Высота места под ещё не загруженную или битую страницу — чтобы лента вебтуна не дёргалась. */
+private val PagePlaceholderHeight = 220.dp
 
 private const val MIN_SCALE = 1f
 private const val MAX_SCALE = 4f
