@@ -355,22 +355,43 @@ private fun originOf(url: String): String = runCatching {
     "${uri.scheme}://${uri.host}" + if (uri.port > 0) ":${uri.port}" else ""
 }.getOrDefault("https://kodik.info")
 
+/**
+ * Сдвиг у Kodik меняется партиями, а не на каждой ссылке: попадание с прошлого раза
+ * экономит до 25 лишних base64-декодирований на каждый элемент sources.
+ * Кэш process-wide, потому что KodikExtractor пересоздаётся на каждый iframe,
+ * а @Volatile нужен из-за параллельных корутин на Dispatchers.IO.
+ */
+private object KodikCipherCache {
+    @Volatile
+    var lastShift: Int? = null
+}
+
 private fun String.decodeKodikSource(): String? {
     if (startsWith("http://") || startsWith("https://") || startsWith("//")) return this
+    val cached = KodikCipherCache.lastShift
+    if (cached != null) {
+        tryShift(cached)?.let { return it }
+    }
     for (shift in 0..25) {
-        val shifted = map { char ->
-            when (char) {
-                in 'a'..'z' -> 'a' + ((char - 'a' + shift) % 26)
-                in 'A'..'Z' -> 'A' + ((char - 'A' + shift) % 26)
-                else -> char
-            }
-        }.joinToString("")
-        val decoded = shifted.decodeBase64()
-        if (decoded != null && (decoded.startsWith("http") || decoded.startsWith("//"))) {
-            return decoded
+        if (shift == cached) continue // уже пробовали выше
+        tryShift(shift)?.let {
+            KodikCipherCache.lastShift = shift
+            return it
         }
     }
     return null
+}
+
+private fun String.tryShift(shift: Int): String? {
+    val shifted = map { char ->
+        when (char) {
+            in 'a'..'z' -> 'a' + ((char - 'a' + shift) % 26)
+            in 'A'..'Z' -> 'A' + ((char - 'A' + shift) % 26)
+            else -> char
+        }
+    }.joinToString("")
+    val decoded = shifted.decodeBase64() ?: return null
+    return decoded.takeIf { it.startsWith("http") || it.startsWith("//") }
 }
 
 private fun String.decodeBase64(): String? = runCatching {
