@@ -21,10 +21,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Hd
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -56,6 +54,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
+import com.example.myapplication.ui.shared.theme.BrandOrange
 import com.example.myapplication.ui.shared.theme.IosDesign
 import com.example.myapplication.ui.shared.theme.MotionTokens
 import com.example.myapplication.ui.shared.theme.OverlayThemeTokens
@@ -64,16 +63,28 @@ import com.example.myapplication.ui.shared.theme.SquircleShape
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
-private val QualityMenuWidth = 228.dp
-private val QualityRowHeight = 56.dp
+private val QualityMenuWidth = 260.dp
+private val QualityRowHeight = 62.dp
 private val QualityArrowWidth = 22.dp
 private val QualityArrowHeight = 11.dp
 
-/** Скругление контекстного меню — гайдбук §3.1 ([IosDesign.RadiusMd], squircle, не капсула). */
-private val QualityMenuRadius = IosDesign.RadiusMd
+/**
+ * Скругление контекстного меню — [IosDesign.RadiusLg], не §3.1-шный `RadiusMd`.
+ *
+ * Меню выбора качества по референсу ближе к плавающей панели, чем к контекстному меню: карточка
+ * широкая, строки высокие, и на такой площади 18dp читаются почти прямым углом.
+ */
+private val QualityMenuRadius = IosDesign.RadiusLg
 
-/** Левый inset разделителя = padding строки (10) + иконка (38) + зазор (12): линия под текстом. */
-private val QualityDividerInset = 60.dp
+/**
+ * Левый inset разделителя. Не под текстом, а почти во всю ширину карточки (как на референсе):
+ * линия делит строки, а не подчёркивает подпись.
+ */
+private val QualityDividerInset = 16.dp
+
+/** Бейдж «HD» — сплошная оранжевая плашка, а не иконка в полупрозрачном круге. */
+private val QualityBadgeWidth = 44.dp
+private val QualityBadgeHeight = 30.dp
 
 /**
  * Меню выбора качества, привязанное к якорю: одна полупрозрачная squircle-карточка с хвостиком,
@@ -135,9 +146,9 @@ fun EpisodeQualityPopover(
     // GlassMenuHeader/GlassIconButton) здесь недоступен: меню живёт в отдельном окне `Popup`, а
     // `layerBackdrop` пишет контент окна приложения — сэмплировать его из чужого окна нельзя.
     // Глубину даёт связка «elevated-поверхность + scrim», без рамок-«ободков» (см. §3.2).
-    // В тёмной теме — непрозрачный #333333, а не level2Surface: тот даёт чёрный с alpha 0.75, что
-    // на чистом чёрном фоне приложения неотличимо от фона. В светлой теме материал уровня 2
-    // работает как задумано и остаётся.
+    // В тёмной теме — почти непрозрачный #1C1C1E (OverlayThemeTokens), а не level2Surface: тот
+    // даёт чёрный с alpha 0.75, что на чистом чёрном фоне приложения неотличимо от фона. В светлой
+    // теме материал уровня 2 работает как задумано и остаётся.
     val menuSurface = if (isDark) OverlayThemeTokens.EpisodeMenuSurfaceDark else IosDesign.level2Surface(isDark)
     val menuShape = remember { SquircleShape(QualityMenuRadius) }
     // Разделитель в тон бывшему pillRing: чуть заметнее его, но заметно легче §3.3-сепаратора —
@@ -264,31 +275,37 @@ private fun QualityRow(
                 enabled = enabled,
                 onClick = onClick,
             )
-            .padding(horizontal = 10.dp),
+            // Тот же отступ, что у разделителя, — бейдж и линия начинаются по одной вертикали.
+            .padding(horizontal = QualityDividerInset),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             modifier = Modifier
-                .size(38.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                .size(QualityBadgeWidth, QualityBadgeHeight)
+                .clip(SquircleShape(IosDesign.RadiusXs))
+                .background(BrandOrange),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                imageVector = Icons.Rounded.Hd,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(21.dp),
+            // Текстом, а не `Icons.Rounded.Hd`: у векторной иконки буквы уже вписаны в рамку, и
+            // поверх собственной плашки получилась бы вторая рамка внутри первой.
+            Text(
+                text = "HD",
+                style = MaterialTheme.typography.labelLarge.copy(
+                    fontFamily = SnProFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                ),
+                color = Color.White,
             )
         }
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(14.dp))
         Text(
             text = option.label,
             modifier = Modifier.weight(1f),
             style = MaterialTheme.typography.titleMedium.copy(
                 fontFamily = SnProFamily,
                 fontWeight = FontWeight.SemiBold,
-                fontSize = 16.sp,
+                fontSize = 18.sp,
             ),
             color = MaterialTheme.colorScheme.onSurface,
         )
@@ -297,7 +314,7 @@ private fun QualityRow(
                 imageVector = Icons.Rounded.Check,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(21.dp),
+                modifier = Modifier.size(23.dp),
             )
         }
     }
