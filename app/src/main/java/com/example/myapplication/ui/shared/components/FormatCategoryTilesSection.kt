@@ -44,6 +44,7 @@ import com.example.myapplication.data.repository.GenreRepository
 import com.example.myapplication.isAppInDarkTheme
 import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.ui.shared.icons.HeroCheck
+import com.example.myapplication.ui.shared.theme.OverlayThemeTokens
 import com.example.myapplication.ui.shared.theme.SnProFamily
 import com.example.myapplication.ui.shared.theme.lightTileShadowInLightTheme
 import org.koin.compose.koinInject
@@ -94,9 +95,11 @@ fun FormatCategoryTilesWithGenres(
     )
 
     val categories = listOf(
-        GenreCategoryData("Anime", strings.genreAnime, animeGenres, Color(0xFFE85002)),
-        GenreCategoryData("Movies", strings.genreMovies, movieGenres, Color(0xFF8A8A8E)),
-        GenreCategoryData("Series", strings.genreSeries, seriesGenres, Color(0xFFD9C3AB))
+        // Тёплый ряд из OverlayThemeTokens вместо прежних «бренд + два нейтрала» (#8A8A8E серый,
+        // #D9C3AB бежевый): рядом с брендовым оранжевым нейтралы читались как выключенные плитки.
+        GenreCategoryData("Anime", strings.genreAnime, animeGenres, OverlayThemeTokens.SortAccentPrimary),
+        GenreCategoryData("Movies", strings.genreMovies, movieGenres, OverlayThemeTokens.SortAccentSecondary),
+        GenreCategoryData("Series", strings.genreSeries, seriesGenres, OverlayThemeTokens.SortAccentTertiary)
     )
 
     val isDark = isAppInDarkTheme()

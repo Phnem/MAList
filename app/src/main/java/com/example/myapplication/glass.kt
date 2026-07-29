@@ -89,6 +89,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
@@ -697,9 +698,9 @@ fun SortOption.getIcon(): ImageVector = when (this) {
 }
 
 fun SortOption.getAccentColor(): Color = when (this) {
-    SortOption.RATING -> Color(0xFFE85002)
-    SortOption.EPISODES -> Color(0xFFFFB067)
-    SortOption.TITLE -> Color(0xFFA7A7A7)
+    SortOption.RATING -> OverlayThemeTokens.SortAccentPrimary
+    SortOption.EPISODES -> OverlayThemeTokens.SortAccentSecondary
+    SortOption.TITLE -> OverlayThemeTokens.SortAccentTertiary
 }
 
 // ==========================================
@@ -735,15 +736,13 @@ fun SortFilterOverlay(
     }
 
     val swipe = rememberIosSheetSwipe { onDismiss() }
-    val accentRating = Color(0xFFE85002)
-    val accentEpisodes = Color(0xFFFFB067)
-    val accentTitle = Color(0xFFA7A7A7)
-    val accentGenres = Color(0xFFD9C3AB)
-    fun sortAccent(o: SortOption) = when (o) {
-        SortOption.RATING -> accentRating
-        SortOption.EPISODES -> accentEpisodes
-        SortOption.TITLE -> accentTitle
-    }
+    // Один источник правды с [SortOption.getAccentColor] — раньше палитра была продублирована
+    // здесь литералами, и правка в одном месте не доезжала до второго.
+    val accentRating = OverlayThemeTokens.SortAccentPrimary
+    val accentEpisodes = OverlayThemeTokens.SortAccentSecondary
+    val accentTitle = OverlayThemeTokens.SortAccentTertiary
+    val accentGenres = OverlayThemeTokens.SortAccentQuaternary
+    fun sortAccent(o: SortOption) = o.getAccentColor()
     val applyAccent = when (val d = draftSelection) {
         SortGridSelection.Genres -> accentGenres
         is SortGridSelection.Sort -> sortAccent(d.option)
@@ -886,7 +885,15 @@ fun SortFilterOverlay(
                     ) {
                         Text(
                             text = strings.sortApply,
-                            color = if (applyAccent == accentRating) Color.Black.copy(alpha = 0.85f) else Color.White,
+                            // По яркости заливки, а не сравнением с одним конкретным акцентом:
+                            // акценты теперь все тёплые и светлые, и белый текст на янтарном
+                            // читался бы плохо. Порог подобран так, что брендовый #E85002
+                            // по-прежнему получает чёрный текст — как было до правки.
+                            color = if (applyAccent.luminance() > 0.2f) {
+                                Color.Black.copy(alpha = 0.85f)
+                            } else {
+                                Color.White
+                            },
                             fontFamily = SnProFamily,
                             fontWeight = FontWeight.Bold,
                             fontSize = 17.sp
