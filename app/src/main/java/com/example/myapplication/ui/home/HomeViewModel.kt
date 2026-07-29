@@ -150,12 +150,15 @@ class HomeViewModel(
 
     val apiSearchWithStatus: StateFlow<kotlinx.collections.immutable.ImmutableList<ApiSearchUiModel>> = combine(
         _uiState.map { it.apiSearchResults }.distinctUntilChanged(),
+        _uiState.map { it.optimisticallyAddedKeys }.distinctUntilChanged(),
         animeListFlow
-    ) { apiResults, localList ->
+    ) { apiResults, optimisticKeys, localList ->
         apiResults.map { result ->
             ApiSearchUiModel(
                 result = result,
-                isAdded = isAddedInMemory(result, localList)
+                // Оптимистичный ключ ИЛИ факт в БД: кнопка обязана переключиться сразу по нажатию,
+                // не дожидаясь скачивания постера, иначе она откатывается и пользователь дожимает.
+                isAdded = searchResultKey(result) in optimisticKeys || isAddedInMemory(result, localList)
             )
         }.toImmutableList()
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), persistentListOf())
@@ -259,6 +262,10 @@ class HomeViewModel(
         }
     }
 
+    /** Ключ результата поиска — тот же и для оптимистичного состояния, и для индикатора загрузки. */
+    private fun searchResultKey(result: ApiSearchResult): String =
+        "${result.source}_${result.externalId ?: result.title}"
+
     private fun isAddedInMemory(
         result: ApiSearchResult,
         localList: List<Anime>
@@ -281,17 +288,36 @@ class HomeViewModel(
     }
 
     fun addFromApi(result: ApiSearchResult) {
-        val key = "${result.source}_${result.externalId ?: result.title}"
+        val key = searchResultKey(result)
+
+        // Второе нажатие по той же карточке игнорируется: без этого «добавляю» и «уже добавлено»
+        // не спасают — два вызова успевают пройти проверку дубликата до того, как первый допишет
+        // запись в БД.
+        if (key in _uiState.value.optimisticallyAddedKeys) return
+
+        // Кнопка переключается здесь, до какой-либо работы. Всё остальное — фоном.
+        _uiState.update { it.copy(optimisticallyAddedKeys = it.optimisticallyAddedKeys.add(key)) }
+
         viewModelScope.launch {
             _uiState.update { it.copy(addingFromApiId = key) }
             addFromApiUseCase(result)
                 .fold(
                     onSuccess = {
+                        // И ADDED, и ALREADY_IN_COLLECTION — успех с точки зрения кнопки: тайтл в
+                        // коллекции, галочка правдива. Откатывать её во втором случае значило бы
+                        // предлагать пользователю добавить то, что уже добавлено.
                         _uiState.update { it.copy(addingFromApiId = null) }
                     },
                     onFailure = { e ->
                         e.printStackTrace()
-                        _uiState.update { it.copy(addingFromApiId = null) }
+                        // Молча оставить галочку нельзя — она соврала бы про сохранённый тайтл.
+                        _uiState.update {
+                            it.copy(
+                                addingFromApiId = null,
+                                optimisticallyAddedKeys = it.optimisticallyAddedKeys.remove(key),
+                                apiSearchError = e.message ?: "Не удалось добавить тайтл",
+                            )
+                        }
                     }
                 )
         }

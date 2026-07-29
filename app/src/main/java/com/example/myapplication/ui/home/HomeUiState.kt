@@ -6,7 +6,9 @@ import com.example.myapplication.data.models.AnimeUpdate
 import com.example.myapplication.data.models.SortOption
 import com.example.myapplication.network.ApiSearchResult
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.PersistentSet
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentSetOf
 
 @Immutable
 data class ApiSearchUiModel(
@@ -35,6 +37,15 @@ data class HomeUiState(
     val apiSearchLoading: Boolean = false,
     val apiSearchError: String? = null,
     val addingFromApiId: String? = null,
+    /**
+     * Ключи результатов поиска, добавление которых уже подтверждено кнопкой, но ещё не доехало до
+     * БД. Кнопка переключается на «✓» отсюда, не дожидаясь сохранения: раньше она читала только
+     * состояние БД и на время скачивания постера откатывалась обратно на «+», из-за чего
+     * пользователь дожимал её ещё несколько раз и получал по записи на нажатие.
+     *
+     * При ошибке фонового сохранения ключ убирается, и кнопка честно возвращается в «+».
+     */
+    val optimisticallyAddedKeys: PersistentSet<String> = persistentSetOf(),
     val libraryMediaTypeFilter: com.example.myapplication.data.models.MediaType? = null,
     val searchMediaTypeFilter: com.example.myapplication.data.models.MediaType = com.example.myapplication.data.models.MediaType.ANIME
 )
