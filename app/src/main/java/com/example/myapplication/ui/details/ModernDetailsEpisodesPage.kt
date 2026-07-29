@@ -88,6 +88,7 @@ import com.example.myapplication.localplayer.ui.DownloadedPlayerActivity
 import com.example.myapplication.media.progress.EpisodePlaybackProgress
 import com.example.myapplication.media.ui.StreamPlayerActivity
 import com.example.myapplication.network.AppLanguage
+import com.example.myapplication.ui.shared.theme.IosDesign
 import com.example.myapplication.ui.shared.theme.MotionTokens
 import com.example.myapplication.ui.shared.theme.SnProFamily
 import com.example.myapplication.utils.performHaptic
@@ -194,25 +195,8 @@ fun ModernDetailsEpisodesPage(
         }
     }
 
-    val episodeBackground = if (isDark) {
-        Brush.verticalGradient(
-            colorStops = arrayOf(
-                0f to Color(0xFF430B05),
-                0.24f to Color(0xFF210907),
-                0.58f to MaterialTheme.colorScheme.background,
-                1f to MaterialTheme.colorScheme.background,
-            ),
-        )
-    } else {
-        Brush.verticalGradient(
-            colorStops = arrayOf(
-                0f to Color(0xFFFFD8CB),
-                0.28f to Color(0xFFFFEEE8),
-                0.64f to MaterialTheme.colorScheme.background,
-                1f to MaterialTheme.colorScheme.background,
-            ),
-        )
-    }
+    // Общий с настройками и меню глав градиент — значение живёт в теме, а не копией на экран.
+    val episodeBackground = remember(isDark) { IosDesign.screenGradient(isDark) }
 
     Box(Modifier.fillMaxSize().background(episodeBackground)) {
         LazyColumn(

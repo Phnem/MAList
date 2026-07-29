@@ -169,27 +169,9 @@ fun SettingsScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val isDark = isAppInDarkTheme()
     val bg = IosDesign.groupedBackground(isDark)
-    val settingsBackground = remember(bg, isDark) {
-        if (isDark) {
-            Brush.verticalGradient(
-                colorStops = arrayOf(
-                    0f to Color(0xFF430B05),
-                    0.24f to Color(0xFF210907),
-                    0.58f to bg,
-                    1f to bg,
-                ),
-            )
-        } else {
-            Brush.verticalGradient(
-                colorStops = arrayOf(
-                    0f to Color(0xFFFFD9CC),
-                    0.28f to Color(0xFFFFEEE8),
-                    0.64f to bg,
-                    1f to bg,
-                ),
-            )
-        }
-    }
+    // Общий с меню серий и меню глав градиент — значение живёт в теме, а не тремя копиями по
+    // экранам (две из них уже успели разъехаться в светлой теме).
+    val settingsBackground = remember(isDark) { IosDesign.screenGradient(isDark) }
     val textC = MaterialTheme.colorScheme.onBackground
     val view = LocalView.current
     val context = LocalContext.current

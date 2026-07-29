@@ -77,6 +77,7 @@ import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.ui.shared.theme.BrandOrange
 import com.example.myapplication.ui.shared.theme.MotionTokens
 import com.example.myapplication.ui.shared.theme.SnProFamily
+import com.example.myapplication.ui.shared.theme.IosDesign
 import com.example.myapplication.ui.shared.theme.SquircleCornerShape
 import com.example.myapplication.ui.shared.theme.SquircleShape
 import com.example.myapplication.utils.performHaptic
@@ -410,7 +411,13 @@ private fun ChaptersContent(
     val ordered = if (newestFirst) visible.asReversed() else visible
     val groups = remember(ordered, ru) { groupByVolume(ordered, ru) }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(
+        // Тот же фон, что у настроек и меню серий: три списка приложения обязаны выглядеть одним
+        // экраном. Карточки ниже полупрозрачны — засветка читается сквозь них.
+        modifier = Modifier
+            .fillMaxSize()
+            .background(IosDesign.screenGradient(isDark)),
+    ) {
         ChaptersHeader(
             state = state,
             ru = ru,
@@ -640,10 +647,35 @@ private fun groupByVolume(chapters: List<MangaChapter>, ru: Boolean): List<Chapt
         }
 }
 
-/** Первая и последняя строки группы скругляются наружу — группа читается одной карточкой. */
+/** Наружные углы карточек томов и глав. В масштабе остальных карточек приложения (§3.1 `RadiusMd`+). */
+private val ChapterCardRadius = 22.dp
+
+/** Внутренние углы соседних строк одной группы — намеренно мелкие, чтобы группа читалась цельной. */
+private val ChapterCardInnerRadius = 6.dp
+
+/**
+ * Заливка строки главы. Затемнение, а не осветление: под карточками теперь тёплый градиент, и
+ * белая плёнка поверх него давала бы мутную дымку вместо стекла. Тот же приём, что у карточек
+ * серий (`ModernDetailsEpisodesPage`).
+ */
+@Composable
+private fun chapterRowBackground(isDark: Boolean): Color =
+    if (isDark) Color.Black.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.72f)
+
+/** Шапка тома — на ступень плотнее строк: она держит группу и обязана читаться первой. */
+@Composable
+private fun volumeHeaderBackground(isDark: Boolean): Color =
+    if (isDark) Color.Black.copy(alpha = 0.34f) else Color.White.copy(alpha = 0.82f)
+
+/**
+ * Первая и последняя строки группы скругляются наружу — группа читается одной карточкой.
+ *
+ * Радиусы в масштабе остального приложения (карточки — 18–26dp): прежние 18/4 были мельче всего,
+ * что рядом, и список глав выглядел чужим.
+ */
 private fun groupRowShape(index: Int, size: Int, insideVolume: Boolean): Shape {
-    val big = 18.dp
-    val small = 4.dp
+    val big = ChapterCardRadius
+    val small = ChapterCardInnerRadius
     // У тома верх карточки уже скруглён шапкой, поэтому первая строка под ней — почти прямая.
     val top = if (index == 0 && !insideVolume) big else small
     val bottom = if (index == size - 1) big else small
@@ -840,8 +872,15 @@ private fun VolumeHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(SquircleCornerShape(18.dp, 18.dp, 4.dp, 4.dp))
-            .background(if (isDark) Color.White.copy(alpha = 0.06f) else Color.Black.copy(alpha = 0.045f))
+            .clip(
+                SquircleCornerShape(
+                    ChapterCardRadius,
+                    ChapterCardRadius,
+                    ChapterCardInnerRadius,
+                    ChapterCardInnerRadius,
+                )
+            )
+            .background(volumeHeaderBackground(isDark))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -986,7 +1025,7 @@ private fun ChapterRow(
     onToggleDownload: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val rowBg = if (isDark) Color.White.copy(alpha = 0.045f) else Color.Black.copy(alpha = 0.035f)
+    val rowBg = chapterRowBackground(isDark)
     Row(
         modifier = modifier
             .fillMaxWidth()

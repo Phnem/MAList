@@ -2,6 +2,7 @@ package com.example.myapplication.ui.shared.theme
 
 import androidx.compose.foundation.interaction.InteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.Outline
@@ -86,6 +87,38 @@ object IosDesign {
     /** Фон экрана за списком: чёрный [DarkBackground] (#000000) / светлый [LightBackground]. */
     fun groupedBackground(isDark: Boolean): Color =
         if (isDark) DarkBackground else LightBackground
+
+    /**
+     * Фон экрана-списка с тёплой брендовой засветкой сверху: настройки, меню серий, меню глав.
+     *
+     * Одно значение на три экрана, а не литерал в каждом: две копии уже успели разъехаться в
+     * светлой теме (#FFD9CC против #FFD8CB), и третья закрепила бы расхождение как норму.
+     *
+     * К первой трети экрана градиент растворяется в фоне темы — дальше список идёт по обычному
+     * фону, и карточки на нём читаются как всегда.
+     */
+    fun screenGradient(isDark: Boolean): Brush {
+        val bg = groupedBackground(isDark)
+        return if (isDark) {
+            Brush.verticalGradient(
+                colorStops = arrayOf(
+                    0f to Color(0xFF430B05),
+                    0.24f to Color(0xFF210907),
+                    0.58f to bg,
+                    1f to bg,
+                ),
+            )
+        } else {
+            Brush.verticalGradient(
+                colorStops = arrayOf(
+                    0f to Color(0xFFFFD8CB),
+                    0.28f to Color(0xFFFFEEE8),
+                    0.64f to bg,
+                    1f to bg,
+                ),
+            )
+        }
+    }
 
     /** Фон карточки/строки: серая ступень [OverlayThemeTokens.TileBackgroundDark] / белый. */
     fun rowBackground(isDark: Boolean): Color =
