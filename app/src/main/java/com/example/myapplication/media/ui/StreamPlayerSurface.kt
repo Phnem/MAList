@@ -197,7 +197,8 @@ fun StreamPlayerSurface(
                 },
             factory = { context ->
                 // SurfaceView (значение surface_type по умолчанию) — не менять на TextureView:
-                // доки контролов плоские и живой блюр над видео им не нужен.
+                // фон доков размывается по снимку PixelCopy раз в секунду (rememberPlayerAmbient),
+                // живой блюр по кадру им не нужен, а TextureView стоил бы каждого кадра.
                 PlayerView(context).apply {
                     this.player = player
                     useController = false

@@ -124,6 +124,16 @@ internal object OverlayThemeTokens {
     /** Кнопка подтверждения «В избранное» в шите списка — брендовый песочный. */
     val FavoriteConfirmGold = Color(0xFFE85002)
     val OnFavoriteConfirmGold = Color(0xFF2B2014)
+
+    /**
+     * Рамка избранной карточки в списке коллекции — персиковый [AccentNeonYellow].
+     *
+     * Избранное подняли наверх списка поверх любой сортировки, и «почему этот тайтл первый»
+     * должно читаться с карточки, а не выводиться. Отдельная роль, а не бренд-оранжевый:
+     * оранжевым на карточке уже нарисованы прогресс просмотра и кнопка Edit, третьим оранжевым
+     * элементом рамка сливалась бы с ними вместо того, чтобы выделять.
+     */
+    val FavoriteCardBorder: Color = IconAccountYellow
     /** Алый (logout, destructive). */
     val AccentNeonRed: Color = LogoutIconTint
 

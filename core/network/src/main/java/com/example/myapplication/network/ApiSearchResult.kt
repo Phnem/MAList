@@ -24,4 +24,15 @@ data class ApiSearchResult(
     val airedEpisodes: Int? = null,
     /** Заявленное общее число серий; null = не анонсировано / источник не сообщил. */
     val totalEpisodes: Int? = null,
+    /** Статус сырым кодом источника: `RELEASING`, `FINISHED`, `ongoing`, `released`… */
+    val statusRaw: String? = null,
+    /** Формат выпуска сырым кодом источника: `TV`, `ONA`, `MOVIE`, `tv`, `ova`… */
+    val format: String? = null,
+    /** Первоисточник тайтла: `MANGA`, `LIGHT_NOVEL`, `ORIGINAL`… */
+    val sourceMaterial: String? = null,
+    /** Главная студия. */
+    val studio: String? = null,
+    /** Сезон выхода сырым кодом: `WINTER`, `SPRING`, `SUMMER`, `FALL`. */
+    val season: String? = null,
+    val seasonYear: Int? = null,
 )

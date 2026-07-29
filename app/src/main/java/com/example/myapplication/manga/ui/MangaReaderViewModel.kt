@@ -9,8 +9,10 @@ import com.example.myapplication.manga.data.PageDirection
 import com.example.myapplication.manga.domain.DetectReaderMode
 import com.example.myapplication.manga.domain.MangaChapter
 import com.example.myapplication.manga.domain.MangaPage
+import com.example.myapplication.manga.domain.MangaPagePrefetcher
 import com.example.myapplication.manga.download.MangaPageResolver
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -25,6 +27,11 @@ sealed interface MangaReaderUiState {
         val pages: List<MangaPage>,
         /** Страница, с которой открываем: сохранённый прогресс, иначе первая. */
         val startPage: Int,
+        /**
+         * Докрутка внутри [startPage], 0..1 её высоты. Осмысленна только в вебтун-ленте;
+         * постраничный режим её игнорирует — там страница и так занимает ровно экран.
+         */
+        val startOffsetFraction: Float,
         val hasPrevious: Boolean,
         val hasNext: Boolean,
     ) : MangaReaderUiState
@@ -44,6 +51,7 @@ class MangaReaderViewModel(
     private val pageResolver: MangaPageResolver,
     private val readingStore: MangaReadingStore,
     private val detectReaderMode: DetectReaderMode,
+    private val prefetcher: MangaPagePrefetcher,
 ) : ViewModel() {
 
     /** Оглавление, с которым открыли ридер: его же показывает шторка глав в доке. */
@@ -55,6 +63,10 @@ class MangaReaderViewModel(
     private var currentIndex: Int = chapters.indexOfFirst { it.key == initialChapterKey }
     private var loadJob: Job? = null
     private var saveJob: Job? = null
+    private var prefetchJob: Job? = null
+
+    /** Последняя записанная страница: по ней отличаем смену страницы от докрутки внутри неё. */
+    private var lastSavedPage: Int = -1
 
     /** Автодетект — разовое событие на сессию ридера, а не проверка при каждой смене главы. */
     private var detectAttempted = false
@@ -84,6 +96,8 @@ class MangaReaderViewModel(
             return
         }
         loadJob?.cancel()
+        prefetchJob?.cancel()
+        lastSavedPage = -1
         loadJob = viewModelScope.launch {
             _state.value = MangaReaderUiState.Loading
             val pages = pageResolver.pages(chapter)
@@ -91,21 +105,35 @@ class MangaReaderViewModel(
                 _state.value = MangaReaderUiState.Error(ERROR_NO_PAGES)
                 return@launch
             }
-            val saved = readingStore.chapterProgress(animeId, chapter.key)
+            val saved = readingStore.chapterProgress(animeId, chapter.key)?.takeIf { !it.read }
             // Дочитанную главу открываем сначала: продолжать с последней страницы бессмысленно.
-            val startPage = saved
-                ?.takeIf { !it.read }
-                ?.pageIndex
-                ?.coerceIn(0, pages.lastIndex)
-                ?: 0
+            val startPage = saved?.pageIndex?.coerceIn(0, pages.lastIndex) ?: 0
             _state.value = MangaReaderUiState.Ready(
                 chapter = chapter,
                 pages = pages,
                 startPage = startPage,
+                startOffsetFraction = saved?.scrollOffsetFraction ?: 0f,
                 hasPrevious = currentIndex > 0,
                 hasNext = currentIndex < chapters.lastIndex,
             )
             autoDetectLayout(pages)
+            // Первый прогрев — сразу после открытия: ждать свайпа значит показать спиннер на нём.
+            prefetch(pages, startPage)
+        }
+    }
+
+    /**
+     * Прогрев страниц вперёд. Каждый вызов отменяет предыдущий: читатель, пролиставший главу
+     * насквозь, не должен тащить за собой очередь запросов на страницы, мимо которых уже прошёл.
+     */
+    private fun prefetch(pages: List<MangaPage>, fromPage: Int) {
+        prefetchJob?.cancel()
+        prefetchJob = viewModelScope.launch {
+            prefetcher.prefetch(
+                pages = pages,
+                fromPage = fromPage,
+                nextChapter = chapters.getOrNull(currentIndex + 1),
+            )
         }
     }
 
@@ -130,17 +158,29 @@ class MangaReaderViewModel(
         }
     }
 
-    fun onPageChanged(pageIndex: Int) {
+    /**
+     * [offsetFraction] — докрутка внутри страницы из вебтун-ленты; постраничный режим шлёт `null`.
+     *
+     * Смена страницы пишется сразу, докрутка внутри той же страницы — с задержкой: в ленте она
+     * приходит десятками за один жест, и без паузы каждый скролл превращался бы в очередь записей
+     * в DataStore. Отмена предыдущей задачи делает из этого обычный trailing-debounce.
+     */
+    fun onPageChanged(pageIndex: Int, offsetFraction: Float? = null) {
         val ready = _state.value as? MangaReaderUiState.Ready ?: return
+        val pageChanged = pageIndex != lastSavedPage
+        lastSavedPage = pageIndex
         saveJob?.cancel()
         saveJob = viewModelScope.launch {
+            if (!pageChanged) delay(OFFSET_SAVE_DELAY_MS)
             readingStore.saveProgress(
                 animeId = animeId,
                 chapterKey = ready.chapter.key,
                 pageIndex = pageIndex,
                 pageCount = ready.pages.size,
+                scrollOffsetFraction = offsetFraction,
             )
         }
+        if (pageChanged) prefetch(ready.pages, pageIndex)
     }
 
     fun openNext() = moveBy(1)
@@ -181,5 +221,8 @@ class MangaReaderViewModel(
     private companion object {
         const val ERROR_NO_CHAPTER = "chapter_missing"
         const val ERROR_NO_PAGES = "pages_empty"
+
+        /** Пауза перед записью докрутки: короче любой осмысленной остановки взгляда на странице. */
+        const val OFFSET_SAVE_DELAY_MS = 400L
     }
 }

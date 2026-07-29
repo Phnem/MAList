@@ -126,6 +126,7 @@ val viewModelModule = module {
             mediaGateway = get(),
             artworkRepository = get(),
             playbackStore = get(),
+            seasonDiscovery = get(),
         )
     }
     // Manga engine (isolated feature — remove to unwire it).
@@ -149,6 +150,7 @@ val viewModelModule = module {
             pageResolver = get(),
             readingStore = get(),
             detectReaderMode = get(),
+            prefetcher = get(),
         )
     }
     viewModel { (anime: com.example.myapplication.data.models.Anime, episodeNumber: Int) ->

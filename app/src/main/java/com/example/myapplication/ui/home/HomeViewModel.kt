@@ -265,10 +265,14 @@ class HomeViewModel(
     ): Boolean {
         val q = result.title.normalizeForSearch()
         if (q.isEmpty()) return false
+        // Раздел поиска штампуется в categoryType (см. ApiService.searchApi), запись хранит тот же
+        // факт в mediaType — сравниваем их одним общим правилом, а не строками: у «Фильмов» и
+        // «Сериалов» тип записи один (TV_SERIES), и посимвольное сравнение их не сводило.
+        val resultType = com.example.myapplication.data.models.MediaType.fromCategoryType(result.categoryType)
         return localList.any { anime ->
-            // Enforce media type check (categoryType is ANIME, MANGA, TV_SERIES)
-            if (anime.mediaType.name != result.categoryType && !(anime.mediaType.name == "TV_SERIES" && result.categoryType == "SERIES")) return@any false
-            
+            if (resultType != null && anime.mediaType != resultType) return@any false
+
+
             val keys = listOfNotNull(anime.title, anime.titleEn, anime.titleRu)
                 .map { it.normalizeForSearch() }
                 .filter { it.isNotEmpty() }

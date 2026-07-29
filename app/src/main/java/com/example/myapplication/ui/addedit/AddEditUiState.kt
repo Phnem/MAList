@@ -1,6 +1,7 @@
 package com.example.myapplication.ui.addedit
 
 import android.net.Uri
+import com.example.myapplication.data.models.MediaType
 
 enum class CommentMode { AddButton, Editing, Saved }
 
@@ -26,7 +27,10 @@ data class AddEditUiState(
     /** 10-балльная шкала с шагом 0.1 (0 = не оценено). */
     val rating: Float = 0f,
     val selectedTags: List<String> = emptyList(),
+    /** Категория ЖАНРОВ (ANIME/MOVIE/SERIES) — не тип записи, см. [mediaType]. */
     val categoryType: String = "",
+    /** Тип записи: в UI не редактируется, но должен пережить сохранение (иначе манга станет аниме). */
+    val mediaType: MediaType = MediaType.ANIME,
     val imageUri: Uri? = null,
     val currentImageFileName: String? = null,
     val imageFilePath: String? = null,

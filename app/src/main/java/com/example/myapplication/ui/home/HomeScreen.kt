@@ -676,7 +676,8 @@ fun HomeScreen(
                                                             com.example.myapplication.data.models.MediaType.MANGA -> strings.typeManga
                                                             com.example.myapplication.data.models.MediaType.TV_SERIES -> strings.typeSeries
                                                         },
-                                                        airing = cardProgress
+                                                        airing = cardProgress,
+                                                        isFavorite = anime.isFavorite,
                                                     )
                                                 }
                                                 with(sharedTransitionScope) {
@@ -898,6 +899,7 @@ fun HomeScreen(
                     anime = animeToDelete!!,
                     confirmMode = AnimeMenuConfirmMode.DELETE,
                     strings = strings,
+                    language = currentLanguage,
                     getImgPath = { viewModel.getImgPath(it) },
                     onEvent = { event ->
                         when (event) {
@@ -916,8 +918,16 @@ fun HomeScreen(
             if (animeToFavorite != null) {
                 AnimeListMenuSheet(
                     anime = animeToFavorite!!,
-                    confirmMode = AnimeMenuConfirmMode.ADD_TO_FAVORITE,
+                    // Свайп вправо — переключатель: у уже избранного он предлагает снять звезду,
+                    // а не добавить её второй раз (toggleFavorite снизу и так был двусторонним,
+                    // но шит утверждал обратное).
+                    confirmMode = if (animeToFavorite!!.isFavorite) {
+                        AnimeMenuConfirmMode.REMOVE_FROM_FAVORITE
+                    } else {
+                        AnimeMenuConfirmMode.ADD_TO_FAVORITE
+                    },
                     strings = strings,
+                    language = currentLanguage,
                     getImgPath = { viewModel.getImgPath(it) },
                     onEvent = { event ->
                         when (event) {
@@ -1040,6 +1050,9 @@ fun HomeScreen(
         GlassBackdropRecovery(
             overlayActive = shouldBlur || anyHomeSheetOpen || showRecsSheet ||
                 animeToDelete != null || animeToFavorite != null || isSearchVisible,
+            // Обе анимации живут на ПРЕДКАХ layerBackdrop (homeScrollBlur и graphicsLayer со
+            // «вдавливанием»), поэтому перезаписывать стекло раньше их конца бессмысленно.
+            effectsSettled = blurAmount <= 0.dp && homePushProgress <= 0.001f,
             listState = listState,
             onRemount = { layerBackdropResetKey++ },
         )

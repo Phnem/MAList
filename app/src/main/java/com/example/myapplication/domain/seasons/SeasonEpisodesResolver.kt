@@ -138,15 +138,46 @@ class SeasonEpisodesResolver(
 
         // Пропуск в середине цепочки съедает нумерацию — перенумеруем по порядку.
         val renumbered = seasons.mapIndexed { i, s -> s.copy(seasonNumber = i + 1) }
+        val withStreaming = mergeStreamingSeasons(anime.id, renumbered)
         return SeasonEpisodesEntry(
             animeId = anime.id,
-            seasons = renumbered,
+            seasons = withStreaming,
             // graph.complete обязателен: без него ОДИН сорванный батч AniList давал «полную»
             // запись из одного сезона, и она залипала в кэше на месяц (см. gatherFranchise).
-            complete = allResolved && graph.complete && renumbered.none { it.ongoing },
+            complete = allResolved && graph.complete && withStreaming.none { it.ongoing },
             resolvedAt = System.currentTimeMillis(),
             schema = SeasonEpisodesEntry.CURRENT_SCHEMA,
         )
+    }
+
+    /**
+     * Вернуть в расклад сезоны, добытые кнопкой «Найти ещё» у источников просмотра.
+     *
+     * Резолвер знает только граф франшизы AniList и, перерезолвив тайтл, собрал бы список заново —
+     * без них. Пользователь при этом нажал кнопку один раз и вправе рассчитывать, что найденное
+     * никуда не денется. Опознаём их по [SeasonInfo.source]: каталожные источники пишут туда
+     * «AniList»/«Shikimori»/«MAL», источники просмотра — своё имя (см.
+     * [StreamingSeasonDiscovery.STREAMING_SOURCES]).
+     */
+    private fun mergeStreamingSeasons(animeId: String, resolved: List<SeasonInfo>): List<SeasonInfo> {
+        val discovered = store.entryFor(animeId)?.seasons.orEmpty()
+            .filter { it.source in StreamingSeasonDiscovery.STREAMING_SOURCES }
+        if (discovered.isEmpty()) return resolved
+
+        val byNumber = resolved.associateByTo(LinkedHashMap()) { it.seasonNumber }
+        for (season in discovered) {
+            val existing = byNumber[season.seasonNumber]
+            byNumber[season.seasonNumber] = when {
+                // Сезон, которого каталог не знает вовсе, — ровно то, ради чего кнопка и есть.
+                existing == null -> season
+                // Каталожная запись богаче (id, ongoing, заявленный итог), но серий у источника
+                // просмотра может быть больше — берём максимум, остальное каталожное.
+                season.episodes > existing.episodes ->
+                    existing.copy(episodes = season.episodes, source = season.source)
+                else -> existing
+            }
+        }
+        return byNumber.values.sortedBy { it.seasonNumber }
     }
 
     // ==========================================================

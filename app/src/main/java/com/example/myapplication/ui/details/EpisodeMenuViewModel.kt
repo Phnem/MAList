@@ -2,6 +2,7 @@ package com.example.myapplication.ui.details
 
 import android.app.Application
 import android.os.Environment
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.data.models.Anime
@@ -99,6 +100,8 @@ data class EpisodeMenuUiState(
     val qualityChipVersion: Int = 0,
     val streaming: EpisodeKey? = null,
     val resolvingQuality: Boolean = false,
+    /** «Найти ещё» опрашивает источники просмотра прямо сейчас. */
+    val discoveringSeasons: Boolean = false,
 )
 
 sealed interface EpisodeMenuEvent {
@@ -132,6 +135,7 @@ class EpisodeMenuViewModel(
     private val mediaGateway: MediaGateway,
     private val artworkRepository: EpisodeArtworkRepository,
     private val playbackStore: EpisodePlaybackStore,
+    private val seasonDiscovery: com.example.myapplication.domain.seasons.StreamingSeasonDiscovery,
 ) : AndroidViewModel(application) {
 
     private val _state = MutableStateFlow(EpisodeMenuUiState())
@@ -158,6 +162,37 @@ class EpisodeMenuViewModel(
                 }
                 _state.update { it.copy(playback = mapped) }
             }
+        }
+    }
+
+    /**
+     * «Найти ещё»: спросить о сезонах источники просмотра, а не каталожные API.
+     *
+     * Результат кладётся в тот же файловый стор сезонов, на который подписан экран, поэтому
+     * обновлять что-либо здесь не нужно — новые карточки приедут реактивно и в меню серий, и в
+     * карточки сезонов на вкладке «Детали».
+     */
+    fun discoverMoreSeasons(ru: Boolean) {
+        if (_state.value.discoveringSeasons) return
+        _state.update { it.copy(discoveringSeasons = true) }
+        viewModelScope.launch {
+            val outcome = runCatching { seasonDiscovery.discover(anime.id) }
+                .onFailure { Log.w(TAG, "Season discovery failed", it) }
+                .getOrNull()
+            _state.update { it.copy(discoveringSeasons = false) }
+            val message = when (outcome) {
+                is com.example.myapplication.domain.seasons.StreamingSeasonDiscovery.Outcome.Updated ->
+                    if (ru) {
+                        "Найдено сезонов: +${outcome.addedSeasons}, серий: +${outcome.addedEpisodes}"
+                    } else {
+                        "Found +${outcome.addedSeasons} season(s), +${outcome.addedEpisodes} episode(s)"
+                    }
+                com.example.myapplication.domain.seasons.StreamingSeasonDiscovery.Outcome.NothingNew ->
+                    if (ru) "Новых сезонов нет" else "No new seasons"
+                else ->
+                    if (ru) "Источники не нашли этот тайтл" else "Sources don't have this title"
+            }
+            _events.emit(EpisodeMenuEvent.Message(message))
         }
     }
 
@@ -658,6 +693,7 @@ class EpisodeMenuViewModel(
     }
 
     private companion object {
+        const val TAG = "EpisodeMenu"
         val TERMINAL_DOWNLOAD_STATES = setOf("success", "failed", "cancelled")
     }
 }

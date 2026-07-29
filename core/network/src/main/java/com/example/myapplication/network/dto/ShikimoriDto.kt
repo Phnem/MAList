@@ -19,7 +19,16 @@ data class ShikimoriSearchItemDto(
     val description: String? = null,
     val image: ShikimoriImageDto? = null,
     val genres: List<ShikimoriGenreDto>? = null,
+    // Только в detail-ответе (/api/animes/{id}); в списковом поиске студий нет.
+    val studios: List<ShikimoriStudioDto>? = null,
     @SerialName("aired_on") val airedOn: String? = null
+)
+
+@Serializable
+data class ShikimoriStudioDto(
+    val id: Int? = null,
+    val name: String? = null,
+    @SerialName("filtered_name") val filteredName: String? = null
 )
 
 @Serializable

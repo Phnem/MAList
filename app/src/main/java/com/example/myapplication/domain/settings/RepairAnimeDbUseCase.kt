@@ -493,6 +493,9 @@ class RepairAnimeDbUseCase(
             isFavorite = anime.isFavorite,
             selectedTags = tags,
             categoryType = categoryType,
+            // Тип записи «Исправление БД» не пересматривает: `categoryType` оно берёт у кандидатов
+            // из поиска аниме, и без явной передачи манга стала бы аниме на первом же проходе.
+            mediaType = anime.mediaType,
             comment = anime.comment,
             anilistId = newAnilistId,
             malId = newMalId,

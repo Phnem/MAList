@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -128,6 +129,53 @@ class EpisodePlaybackStore(
                 }
             }
         }.distinctUntilChanged()
+    }
+
+    /**
+     * Разовый снимок прогресса по списку тайтлов — для push в облако.
+     *
+     * Ключ хранения — хэш от animeId, перечислить тайтлы по снимку Preferences нельзя, поэтому
+     * список id приходит снаружи (из коллекции). Читаем DataStore ОДИН раз и спрашиваем ключи по
+     * нему, а не по [progressFlow] на каждый тайтл.
+     */
+    suspend fun snapshotAll(animeIds: List<String>): Map<String, Map<PlaybackEpisodeKey, EpisodePlaybackProgress>> {
+        if (animeIds.isEmpty()) return emptyMap()
+        val preferences = dataStore.data.first()
+        return buildMap {
+            for (animeId in animeIds) {
+                val progress = decode(preferences[progressKey(animeId)])
+                if (progress.isNotEmpty()) put(animeId, progress)
+            }
+        }
+    }
+
+    /**
+     * Применение облачных записей поверх локальных: последняя запись выигрывает по [updatedAt].
+     *
+     * @return сколько записей реально применено — вызывающий не знает заранее, сколько строк
+     * окажется старше локальных.
+     */
+    suspend fun mergeRemote(remote: Map<String, Map<PlaybackEpisodeKey, EpisodePlaybackProgress>>): Int {
+        if (remote.isEmpty()) return 0
+        var applied = 0
+        writeMutex.withLock {
+            dataStore.edit { preferences ->
+                for ((animeId, incoming) in remote) {
+                    val preferenceKey = progressKey(animeId)
+                    val current = decode(preferences[preferenceKey]).toMutableMap()
+                    var changed = false
+                    for ((episodeKey, value) in incoming) {
+                        val local = current[episodeKey]
+                        if (local != null && local.updatedAt >= value.updatedAt) continue
+                        current[episodeKey] = value
+                        changed = true
+                        applied++
+                    }
+                    if (changed) preferences[preferenceKey] = encode(current)
+                }
+            }
+        }
+        return applied
     }
 
     fun preferredQualityFlow(animeId: String): Flow<Int?> {

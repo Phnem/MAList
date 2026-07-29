@@ -140,8 +140,37 @@ class ShikimoriRemoteDataSource(
             isOngoing = status?.equals("ongoing", ignoreCase = true),
             airedEpisodes = episodesAired?.takeIf { it > 0 },
             totalEpisodes = episodes?.takeIf { it > 0 },
+            statusRaw = status?.takeIf { it.isNotBlank() },
+            format = kind?.takeIf { it.isNotBlank() },
+            studio = mainStudio(),
+            season = airedOn?.let { seasonOf(it) },
+            seasonYear = airedOn?.let { seasonYearOf(it) },
         )
     }
+
+    /**
+     * Первоисточника Shikimori не отдаёт вообще — карточка «Источник» в RU-режиме остаётся
+     * пустой, пока тайтл не найден на AniList. Студия есть только в detail-ответе.
+     */
+    private fun ShikimoriSearchItemDto.mainStudio(): String? =
+        studios?.firstNotNullOfOrNull { it.filteredName?.takeIf(String::isNotBlank) ?: it.name?.takeIf(String::isNotBlank) }
+
+    /** `aired_on` в формате `2026-01-09` → сезон в кодах AniList, чтобы UI знал один словарь. */
+    private fun seasonOf(airedOn: String): String? = when (monthOf(airedOn)) {
+        12, 1, 2 -> "WINTER"
+        3, 4, 5 -> "SPRING"
+        6, 7, 8 -> "SUMMER"
+        9, 10, 11 -> "FALL"
+        else -> null
+    }
+
+    /** Декабрьский старт — это зима СЛЕДУЮЩЕГО года, как считает и AniList. */
+    private fun seasonYearOf(airedOn: String): Int? {
+        val year = airedOn.take(4).toIntOrNull() ?: return null
+        return if (monthOf(airedOn) == 12) year + 1 else year
+    }
+
+    private fun monthOf(airedOn: String): Int? = airedOn.drop(5).take(2).toIntOrNull()
 
     private fun ShikimoriSearchItemDto.toDomain(): AnimeDetails {
         val desc = description
@@ -162,7 +191,11 @@ class ShikimoriRemoteDataSource(
             rating = score?.toFloatOrNull()?.toInt(),
             posterUrl = posterUrl,
             source = "Shikimori",
-            airedOn = airedOn
+            airedOn = airedOn,
+            format = kind?.takeIf { it.isNotBlank() },
+            studio = mainStudio(),
+            season = airedOn?.let { seasonOf(it) },
+            seasonYear = airedOn?.let { seasonYearOf(it) },
         )
     }
 }

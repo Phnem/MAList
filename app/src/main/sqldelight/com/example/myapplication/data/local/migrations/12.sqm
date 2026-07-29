@@ -1,0 +1,13 @@
+-- Починка типа у уже добавленных тайтлов.
+--
+-- `mediaType` не проставлялся при сохранении вовсе (SaveAnimeUseCase его не передавал), поэтому
+-- всё добавленное из поиска легло в базу как 'ANIME' — включая мангу с Remanga, у которой
+-- `categoryType` при этом честно равен 'MANGA'. Из-за этого Details открывал меню серий вместо глав.
+--
+-- Правим ТОЛЬКО мангу: 'MANGA' в `categoryType` пишут исключительно манга-источники, признак
+-- однозначный. Строки 'SERIES'/'MOVIE' не трогаем — там `categoryType` мог прийти из категории
+-- жанров в AddEdit и типу записи не свидетель.
+UPDATE anime
+SET mediaType = 'MANGA'
+WHERE mediaType = 'ANIME'
+  AND UPPER(TRIM(categoryType)) = 'MANGA';

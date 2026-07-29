@@ -73,6 +73,7 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -89,6 +90,7 @@ import com.example.myapplication.media.ui.StreamPlayerActivity
 import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.ui.shared.theme.MotionTokens
 import com.example.myapplication.ui.shared.theme.SnProFamily
+import com.example.myapplication.utils.performHaptic
 import kotlinx.coroutines.flow.collectLatest
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -291,6 +293,15 @@ fun ModernDetailsEpisodesPage(
                 item(key = "season_gap_${season.seasonNumber}") {
                     Spacer(Modifier.height(12.dp))
                 }
+            }
+
+            item(key = "find_more_seasons") {
+                FindMoreSeasonsButton(
+                    loading = state.discoveringSeasons,
+                    ru = ru,
+                    onClick = { viewModel.discoverMoreSeasons(ru) },
+                    modifier = Modifier.padding(top = 4.dp),
+                )
             }
         }
 
@@ -950,5 +961,63 @@ private fun pluralRuEpisode(value: Int): String {
         mod10 == 1 -> "серия"
         mod10 in 2..4 -> "серии"
         else -> "серий"
+    }
+}
+
+/**
+ * «Найти ещё» — добрать сезоны у источников просмотра там, где каталожные API их не знают
+ * (см. [com.example.myapplication.domain.seasons.StreamingSeasonDiscovery]).
+ *
+ * Оранжевая капсула — тот же язык, что у чипов сезонов на вкладке «Детали»
+ * ([com.example.myapplication.ui.details.SeasonChip]): это действие, ведущее к новым сезонам, а не
+ * тег. Кнопка живёт в конце списка, потому что «показанных сезонов не хватило» видно именно там.
+ */
+@Composable
+private fun FindMoreSeasonsButton(
+    loading: Boolean,
+    ru: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val view = LocalView.current
+    Box(modifier = modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        Row(
+            modifier = Modifier
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primary)
+                .clickable(
+                    enabled = !loading,
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = {
+                        performHaptic(view, "light")
+                        onClick()
+                    },
+                )
+                .padding(horizontal = 22.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (loading) {
+                CircularProgressIndicator(
+                    color = Color.White,
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(Modifier.width(10.dp))
+            }
+            Text(
+                text = when {
+                    loading && ru -> "Ищем…"
+                    loading -> "Searching…"
+                    ru -> "Найти ещё"
+                    else -> "Find more"
+                },
+                style = MaterialTheme.typography.labelLarge.copy(
+                    fontFamily = SnProFamily,
+                    fontWeight = FontWeight.Bold,
+                ),
+                color = Color.White,
+            )
+        }
     }
 }

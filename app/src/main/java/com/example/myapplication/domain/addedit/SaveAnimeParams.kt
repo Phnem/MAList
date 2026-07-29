@@ -1,5 +1,7 @@
 package com.example.myapplication.domain.addedit
 
+import com.example.myapplication.data.models.MediaType
+
 /**
  * Параметры сохранения аниме. Domain-слой не зависит от UI (AddEditUiState).
  */
@@ -20,6 +22,15 @@ data class SaveAnimeParams(
     val isFavorite: Boolean,
     val selectedTags: List<String>,
     val categoryType: String,
+    /**
+     * Тип записи. Пробрасывается явно, чтобы редактирование его не затирало: в AddEdit
+     * `categoryType` — это категория ЖАНРОВ (ANIME/MOVIE/SERIES, «MANGA» там не бывает), и вывод
+     * типа из неё превратил бы мангу в аниме на первом же сохранении.
+     *
+     * null = вызывающий типа не знает; тогда он выводится из [categoryType]
+     * ([MediaType.fromCategoryType]), а если и оттуда не выводится — [MediaType.ANIME].
+     */
+    val mediaType: MediaType? = null,
     val comment: String,
     val anilistId: Int? = null,
     val malId: Int? = null,

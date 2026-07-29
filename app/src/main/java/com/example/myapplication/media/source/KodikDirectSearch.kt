@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Base64
 import android.util.Log
 import com.example.myapplication.data.models.Anime
+import com.example.myapplication.domain.seasons.DiscoveredSeason
 import com.example.myapplication.sync.TitleMatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -65,6 +66,60 @@ class KodikDirectSearch(
             }
             emptyList()
         }
+    }
+
+    /**
+     * Разложение тайтла по сезонам глазами Kodik — для «Найти ещё» (§ [StreamingSeasonDiscovery]).
+     *
+     * Тот же самый поисковый запрос, что и для серий: `with_episodes=true` возвращает
+     * `results[].seasons.{N}.episodes.{M}`, то есть готовую карту «сезон → серии». Каждая озвучка
+     * приходит отдельным `result`, и залиты они по-разному, поэтому по каждому сезону берём
+     * максимум по всем результатам.
+     */
+    suspend fun findSeasons(anime: Anime): List<DiscoveredSeason> {
+        val queries = listOfNotNull(anime.titleRu, anime.title, anime.titleEn)
+            .map(String::trim)
+            .filter(String::isNotBlank)
+            .distinctBy(String::lowercase)
+        if (queries.isEmpty()) return emptyList()
+
+        return withContext(Dispatchers.IO) {
+            val episodesBySeason = LinkedHashMap<Int, Int>()
+            for (query in queries) {
+                val payload = search(query) ?: continue
+                payload.optJSONArray("results").objects()
+                    .filter { result -> score(queries, result) >= TitleMatcher.MATCH_THRESHOLD }
+                    .forEach { result -> collectSeasons(result, episodesBySeason) }
+                if (episodesBySeason.isNotEmpty()) break
+            }
+            episodesBySeason
+                .map { (number, episodes) -> DiscoveredSeason(number, episodes, SOURCE_NAME) }
+                .sortedBy { it.seasonNumber }
+                .also { Log.i(TAG, "Kodik seasons for '${anime.title}': ${it.size}") }
+        }
+    }
+
+    private fun collectSeasons(result: JSONObject, into: MutableMap<Int, Int>) {
+        val seasons = result.optJSONObject("seasons")
+        if (seasons != null) {
+            val keys = seasons.keys()
+            var found = false
+            while (keys.hasNext()) {
+                val key = keys.next()
+                // Сезон «0» у Kodik — спецвыпуски и OVA, в нумерацию сезонов они не входят.
+                val number = key.toIntOrNull()?.takeIf { it > 0 } ?: continue
+                val episodes = seasons.optJSONObject(key)?.optJSONObject("episodes")?.length() ?: 0
+                if (episodes > 0) {
+                    into.merge(number, episodes, ::maxOf)
+                    found = true
+                }
+            }
+            if (found) return
+        }
+        // Без карты серий Kodik всё равно сообщает, до какого сезона/серии докатился релиз.
+        val lastSeason = result.optInt("last_season", 0)
+        val lastEpisode = result.optInt("last_episode", 0)
+        if (lastSeason > 0 && lastEpisode > 0) into.merge(lastSeason, lastEpisode, ::maxOf)
     }
 
     // region Отбор кандидатов
@@ -262,6 +317,8 @@ class KodikDirectSearch(
 
     companion object {
         private const val TAG = "KodikDirectSearch"
+        /** Совпадает со значением в [com.example.myapplication.domain.seasons.StreamingSeasonDiscovery.STREAMING_SOURCES]. */
+        private const val SOURCE_NAME = "Kodik"
         private const val API_ORIGIN = "https://kodik-api.com"
         private const val TOKENS_ASSET = "kodik_tokens.json"
         private const val SEARCH_LIMIT = "100"

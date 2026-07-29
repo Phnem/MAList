@@ -7,8 +7,22 @@ query MediaById($id: Int) {
     }
     description
     type
+    format
+    source
     status
     episodes
+    season
+    seasonYear
+    startDate {
+      year
+      month
+      day
+    }
+    studios(isMain: true) {
+      nodes {
+        name
+      }
+    }
     coverImage {
       large
     }

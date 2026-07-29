@@ -10,8 +10,17 @@ query SearchMedia($q: String) {
       large
     }
     type
+    format
+    source
     status
     episodes
+    season
+    seasonYear
+    studios(isMain: true) {
+      nodes {
+        name
+      }
+    }
     nextAiringEpisode {
       episode
       airingAt

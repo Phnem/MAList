@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -34,6 +35,7 @@ import androidx.compose.ui.zIndex
 import coil3.compose.AsyncImage
 import com.example.myapplication.data.models.Anime
 import com.example.myapplication.data.models.UiStrings
+import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.isAppInDarkTheme
 import com.example.myapplication.data.models.MediaType
 import com.example.myapplication.data.models.typeManga
@@ -209,8 +211,27 @@ fun MediaTypeFilterOverlay(
 // AnimeListActionMenu — Material 3 bottom sheet content (UDF)
 // ==========================================
 
-/** Режим подтверждения: удаление или добавление в избранное. */
-enum class AnimeMenuConfirmMode { DELETE, ADD_TO_FAVORITE }
+/** Режим подтверждения: удаление, добавление в избранное или снятие из избранного. */
+enum class AnimeMenuConfirmMode { DELETE, ADD_TO_FAVORITE, REMOVE_FROM_FAVORITE }
+
+/**
+ * Тексты снятия из избранного — отдельным провайдером, а не полями [UiStrings].
+ *
+ * В UiStrings 252 поля при жёстком потолке 254: 255-й параметр конструктора роняет RELEASE-сборку
+ * `VerifyError` в `<clinit>` (debug при этом собирается и работает). См. [[uistrings-255-param-limit]].
+ */
+private data class FavoriteMenuStrings(val snark: String, val confirm: String)
+
+private fun favoriteMenuStrings(language: AppLanguage): FavoriteMenuStrings = when (language) {
+    AppLanguage.RU -> FavoriteMenuStrings(
+        snark = "Больше не любимое?",
+        confirm = "Убрать",
+    )
+    AppLanguage.EN -> FavoriteMenuStrings(
+        snark = "Not a favorite anymore?",
+        confirm = "Remove",
+    )
+}
 
 /** MVI State for the anime list action menu. */
 data class AnimeMenuState(
@@ -230,9 +251,11 @@ sealed interface AnimeMenuEvent {
 fun AnimeListActionMenu(
     state: AnimeMenuState,
     strings: UiStrings,
+    language: AppLanguage,
     onEvent: (AnimeMenuEvent) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val favStrings = favoriteMenuStrings(language)
     val isDark = isAppInDarkTheme()
     val onCard = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
     val muted = if (isDark) {
@@ -243,18 +266,23 @@ fun AnimeListActionMenu(
     val confirmButtonContainer = when (state.confirmMode) {
         AnimeMenuConfirmMode.DELETE -> OverlayThemeTokens.AccentNeonRed
         AnimeMenuConfirmMode.ADD_TO_FAVORITE -> OverlayThemeTokens.FavoriteConfirmGold
+        // Снятие — не разрушительное действие, поэтому не красный: та же кнопка, но приглушённая.
+        AnimeMenuConfirmMode.REMOVE_FROM_FAVORITE -> OverlayThemeTokens.FavoriteCardBorder
     }
     val confirmButtonContent = when (state.confirmMode) {
         AnimeMenuConfirmMode.DELETE -> Color.White
-        AnimeMenuConfirmMode.ADD_TO_FAVORITE -> OverlayThemeTokens.OnFavoriteConfirmGold
+        AnimeMenuConfirmMode.ADD_TO_FAVORITE,
+        AnimeMenuConfirmMode.REMOVE_FROM_FAVORITE -> OverlayThemeTokens.OnFavoriteConfirmGold
     }
     val confirmLabel = when (state.confirmMode) {
         AnimeMenuConfirmMode.DELETE -> strings.deleteConfirm
         AnimeMenuConfirmMode.ADD_TO_FAVORITE -> strings.addButton
+        AnimeMenuConfirmMode.REMOVE_FROM_FAVORITE -> favStrings.confirm
     }
     val confirmIcon = when (state.confirmMode) {
         AnimeMenuConfirmMode.DELETE -> Icons.Default.Delete
         AnimeMenuConfirmMode.ADD_TO_FAVORITE -> Icons.Rounded.Star
+        AnimeMenuConfirmMode.REMOVE_FROM_FAVORITE -> Icons.Rounded.StarBorder
     }
 
     Column(
@@ -352,6 +380,7 @@ fun AnimeListMenuSheet(
     anime: Anime,
     confirmMode: AnimeMenuConfirmMode,
     strings: UiStrings,
+    language: AppLanguage,
     getImgPath: (String?) -> String?,
     onEvent: (AnimeMenuEvent) -> Unit,
     onDismiss: () -> Unit
@@ -374,13 +403,14 @@ fun AnimeListMenuSheet(
 
     val isDark = isAppInDarkTheme()
     val panelBg = if (isDark) DarkSurface else MaterialTheme.colorScheme.surface
-    val menuState = remember(anime.id, confirmMode, strings.menuDeleteSnark, strings.menuAddFavoriteSnark) {
+    val menuState = remember(anime.id, confirmMode, language, strings.menuDeleteSnark, strings.menuAddFavoriteSnark) {
         AnimeMenuState(
             title = anime.title,
             imageUrl = getImgPath(anime.imageFileName) ?: "",
             statusText = when (confirmMode) {
                 AnimeMenuConfirmMode.DELETE -> strings.menuDeleteSnark
                 AnimeMenuConfirmMode.ADD_TO_FAVORITE -> strings.menuAddFavoriteSnark
+                AnimeMenuConfirmMode.REMOVE_FROM_FAVORITE -> favoriteMenuStrings(language).snark
             },
             confirmMode = confirmMode
         )
@@ -437,6 +467,7 @@ fun AnimeListMenuSheet(
                                     when (confirmMode) {
                                         AnimeMenuConfirmMode.DELETE -> OverlayThemeTokens.AccentNeonRed.copy(alpha = if (isDark) 0.14f else 0.1f)
                                         AnimeMenuConfirmMode.ADD_TO_FAVORITE -> OverlayThemeTokens.FavoriteConfirmGold.copy(alpha = if (isDark) 0.14f else 0.1f)
+                                        AnimeMenuConfirmMode.REMOVE_FROM_FAVORITE -> OverlayThemeTokens.FavoriteCardBorder.copy(alpha = if (isDark) 0.14f else 0.1f)
                                     },
                                     Color.Transparent
                                 ),
@@ -448,6 +479,7 @@ fun AnimeListMenuSheet(
                     AnimeListActionMenu(
                         state = menuState,
                         strings = strings,
+                        language = language,
                         onEvent = { event ->
                             onEvent(event)
                             dismiss()

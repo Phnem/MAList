@@ -242,8 +242,9 @@ fun PlayerScreen(
                 },
             factory = { ctx ->
                 // surface_type по умолчанию = SurfaceView: дешевле по батарее и композитингу, чем
-                // TextureView. Не переводить на TextureView ради блюра — доки плоские, кадр
-                // для их тона снимается отдельно через PixelCopy (см. rememberPlayerAmbient).
+                // TextureView. Не переводить на TextureView ради блюра: кадр для фона доков и так
+                // снимается через PixelCopy раз в секунду (см. rememberPlayerAmbient), а
+                // TextureView платил бы за это каждым кадром воспроизведения.
                 PlayerView(ctx).apply {
                     player = exoPlayer
                     useController = false

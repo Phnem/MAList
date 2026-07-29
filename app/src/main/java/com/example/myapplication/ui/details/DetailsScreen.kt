@@ -24,11 +24,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.rounded.Bookmark
+import androidx.compose.material.icons.rounded.BookmarkBorder
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
-import androidx.compose.material.icons.rounded.MenuBook
+import androidx.compose.material.icons.automirrored.rounded.MenuBook
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.PlayCircleFilled
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -61,6 +64,7 @@ import coil3.request.crossfade
 import com.example.myapplication.data.models.Anime
 import com.example.myapplication.data.models.MediaType
 import com.example.myapplication.manga.ui.MangaChaptersPage
+import com.example.myapplication.manga.ui.rememberMangaContinueReading
 import com.example.myapplication.data.models.RatingScale
 import com.example.myapplication.isAppInDarkTheme
 import com.example.myapplication.network.AppLanguage
@@ -69,6 +73,7 @@ import com.example.myapplication.ui.shared.adaptiveGlassBackdrop
 import com.example.myapplication.ui.shared.rememberAdaptiveGlassEffects
 import com.example.myapplication.ui.shared.theme.MotionTokens
 import com.example.myapplication.ui.shared.components.GrabberHandle
+import com.example.myapplication.ui.shared.theme.BrandOrangeBright
 import com.example.myapplication.ui.shared.theme.SnProFamily
 import com.example.myapplication.utils.performHaptic
 import com.kyant.backdrop.Backdrop
@@ -171,6 +176,14 @@ fun DetailsScreen(
                             performHaptic(view, "light")
                             openEpisodes()
                         },
+                        onToggleFavorite = {
+                            performHaptic(view, if (current.isFavorite) "light" else "success")
+                            viewModel.toggleFavorite()
+                        },
+                        onOpenSeason = {
+                            performHaptic(view, "light")
+                            openEpisodes()
+                        },
                     )
 
                     else -> if (isManga) MangaChaptersPage(
@@ -230,21 +243,43 @@ fun DetailsScreen(
                 .zIndex(4f),
         )
 
-        // «Начать смотреть» относится к сериям; у манги чтение начинается с выбранной главы.
-        if (pagerState.targetPage == 1 && !isManga) {
-            DetailsGlassStartButton(
-                backdrop = backdrop,
-                onClick = {
-                    performHaptic(view, "light")
-                    episodeMenuViewModel.startWatching()
-                },
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(bottom = 16.dp)
-                    .offset(x = 124.dp)
-                    .zIndex(4f),
-            )
+        // Кнопка «продолжить» относится к списку серий/глав, поэтому живёт только на второй
+        // странице. У манги она делает то же самое, что у аниме, — открывает то, на чём читатель
+        // остановился; у манги вдобавок может быть нечего открывать (источник ещё не привязан),
+        // и тогда кнопки просто нет.
+        if (pagerState.targetPage == 1) {
+            val startButtonModifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(bottom = 16.dp)
+                .offset(x = 124.dp)
+                .zIndex(4f)
+            if (isManga) {
+                val continueReading = rememberMangaContinueReading(
+                    animeId = current.id,
+                    animeTitle = displayTitle,
+                    animeTitleEn = current.titleEn,
+                )
+                if (continueReading != null) {
+                    DetailsGlassStartButton(
+                        backdrop = backdrop,
+                        onClick = {
+                            performHaptic(view, "light")
+                            continueReading()
+                        },
+                        modifier = startButtonModifier,
+                    )
+                }
+            } else {
+                DetailsGlassStartButton(
+                    backdrop = backdrop,
+                    onClick = {
+                        performHaptic(view, "light")
+                        episodeMenuViewModel.startWatching()
+                    },
+                    modifier = startButtonModifier,
+                )
+            }
         }
     }
 }
@@ -266,6 +301,8 @@ private fun DetailsInfoPage(
     seasons: List<com.example.myapplication.domain.seasons.SeasonInfo>,
     onWatch: () -> Unit,
     onDownload: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    onOpenSeason: () -> Unit,
 ) {
     val context = LocalContext.current
     val details = (uiState as? DetailsUiState.Success)?.details
@@ -432,11 +469,17 @@ private fun DetailsInfoPage(
 
             Spacer(Modifier.height(18.dp))
 
-            // ——— Действия: Смотреть / Скачать → обе ведут на страницу серий ———
+            // ——— Действия: закладка / Смотреть / Скачать → обе пилюли ведут на страницу серий ———
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                FavoriteButton(
+                    isFavorite = anime.isFavorite,
+                    isDark = isDark,
+                    ru = ru,
+                    onClick = onToggleFavorite,
+                )
                 ActionButton(
                     label = if (ru) "Смотреть" else "Watch",
                     icon = Icons.Rounded.PlayArrow,
@@ -469,6 +512,16 @@ private fun DetailsInfoPage(
 
             Spacer(Modifier.height(24.dp))
 
+            // ——— Информация: сетка 2×N. Пока карточка API не пришла, факты берутся из
+            // локальной записи (счётчик серий), поэтому секция не мигает пустотой. ———
+            val facts = remember(anime, details, ru) { buildDetailFacts(anime, details, ru) }
+            if (facts.isNotEmpty()) {
+                SectionHeader(text = if (ru) "Информация" else "Information", color = onBg)
+                Spacer(Modifier.height(12.dp))
+                DetailFactGrid(facts = facts, isDark = isDark)
+                Spacer(Modifier.height(24.dp))
+            }
+
             // ——— Жанры ———
             val genres = details?.genres?.takeIf { it.isNotEmpty() }
                 ?: anime.tags.takeIf { it.isNotEmpty() }
@@ -495,13 +548,7 @@ private fun DetailsInfoPage(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     seasons.forEach { season ->
-                        SeasonChip(
-                            season = season,
-                            chipBg = chipBg,
-                            numberColor = onBg,
-                            epsColor = muted,
-                            ru = ru,
-                        )
+                        SeasonChip(season = season, ru = ru, onClick = onOpenSeason)
                     }
                 }
                 Spacer(Modifier.height(24.dp))
@@ -639,62 +686,123 @@ private fun DetailsInfoPage(
     }
 }
 
+/** Заголовок секции с оранжевой засечкой слева — секции читаются как разделы, а не как подписи. */
 @Composable
 private fun SectionHeader(text: String, color: Color) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.titleMedium.copy(
-            fontFamily = SnProFamily,
-            fontWeight = FontWeight.Bold,
-        ),
-        color = color,
-    )
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .size(width = 4.dp, height = 18.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(MaterialTheme.colorScheme.primary),
+        )
+        Spacer(Modifier.width(10.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.titleMedium.copy(
+                fontFamily = SnProFamily,
+                fontWeight = FontWeight.Bold,
+            ),
+            color = color,
+        )
+    }
 }
 
 /**
- * Чип сезона: «S2 · 12 эп.», у выходящего сезона — оранжевая точка-пульс статуса.
- * Номер жирный, счётчик приглушён — сканируется взглядом как таблица.
+ * Кнопка «в избранное» — круг того же роста, что и пилюли действий. Тумблер уже есть сквозь весь
+ * стек ([com.example.myapplication.data.repository.AnimeRepository.toggleFavorite]), поэтому здесь
+ * только вид: заполненная закладка на оранжевом при включённом, контурная — при выключенном.
+ */
+@Composable
+private fun FavoriteButton(
+    isFavorite: Boolean,
+    isDark: Boolean,
+    ru: Boolean,
+    onClick: () -> Unit,
+) {
+    val accent = MaterialTheme.colorScheme.primary
+    val bg by animateColorAsState(
+        targetValue = when {
+            isFavorite -> accent
+            isDark -> Color.White.copy(alpha = 0.08f)
+            else -> Color.Black.copy(alpha = 0.06f)
+        },
+        animationSpec = MotionTokens.standard(),
+        label = "favoriteBg",
+    )
+    val tint by animateColorAsState(
+        targetValue = if (isFavorite) Color.White else accent,
+        animationSpec = MotionTokens.standard(),
+        label = "favoriteTint",
+    )
+    Box(
+        modifier = Modifier
+            .size(52.dp)
+            .clip(CircleShape)
+            .background(bg)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = if (isFavorite) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder,
+            contentDescription = when {
+                isFavorite && ru -> "Убрать из избранного"
+                isFavorite -> "Remove from favorites"
+                ru -> "В избранное"
+                else -> "Add to favorites"
+            },
+            tint = tint,
+            modifier = Modifier.size(24.dp),
+        )
+    }
+}
+
+/**
+ * Чип сезона: «▶ S2 · 12 эп.». Залит брендовым оранжевым с иконкой play — чип ведёт на список
+ * серий, и плоская серая пилюля читалась бы как тег, а не как кнопка перехода.
+ * У выходящего сезона фон ярче ([BrandOrangeBright]) — статус виден без отдельного индикатора.
  */
 @Composable
 private fun SeasonChip(
     season: com.example.myapplication.domain.seasons.SeasonInfo,
-    chipBg: Color,
-    numberColor: Color,
-    epsColor: Color,
     ru: Boolean,
+    onClick: () -> Unit,
 ) {
+    val fill = if (season.ongoing) BrandOrangeBright else MaterialTheme.colorScheme.primary
     Row(
         modifier = Modifier
             .clip(CircleShape)
-            .background(chipBg)
-            .padding(horizontal = 12.dp, vertical = 7.dp),
+            .background(fill)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            )
+            .padding(start = 10.dp, end = 14.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (season.ongoing) {
-            Box(
-                modifier = Modifier
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary),
-            )
-            Spacer(Modifier.width(6.dp))
-        }
+        Icon(
+            imageVector = Icons.Rounded.PlayCircleFilled,
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(Modifier.width(7.dp))
         Text(
-            text = "S${season.seasonNumber}",
+            text = if (ru) {
+                "S${season.seasonNumber} · ${season.episodes} эп."
+            } else {
+                "S${season.seasonNumber} · ${season.episodes} ep."
+            },
             style = MaterialTheme.typography.labelLarge.copy(
                 fontFamily = SnProFamily,
                 fontWeight = FontWeight.Bold,
             ),
-            color = numberColor,
-        )
-        Spacer(Modifier.width(5.dp))
-        Text(
-            text = if (ru) "· ${season.episodes} эп." else "· ${season.episodes} ep.",
-            style = MaterialTheme.typography.labelLarge.copy(
-                fontFamily = SnProFamily,
-                fontWeight = FontWeight.Medium,
-            ),
-            color = epsColor,
+            color = Color.White,
         )
     }
 }
@@ -883,7 +991,7 @@ private fun DetailsMiniDock(
             onClick = { onSelect(0) },
         )
         MiniDockItem(
-            icon = if (isManga) Icons.Rounded.MenuBook else Icons.Rounded.PlayArrow,
+            icon = if (isManga) Icons.AutoMirrored.Rounded.MenuBook else Icons.Rounded.PlayArrow,
             label = when {
                 isManga && ru -> "Главы"
                 isManga -> "Chapters"

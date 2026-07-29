@@ -2,6 +2,7 @@ package com.example.myapplication.media.source
 
 import android.util.Log
 import com.example.myapplication.data.models.Anime
+import com.example.myapplication.domain.seasons.DiscoveredSeason
 import com.example.myapplication.domain.seasons.SeasonInfo
 import com.example.myapplication.sync.TitleMatcher
 import io.ktor.client.HttpClient
@@ -83,6 +84,39 @@ class JutSuSource(
         Log.w(TAG, "No sources for $slug ep=$episodeNumber season=$season")
         return emptyList()
     }
+
+    /**
+     * Сезоны и число серий по странице тайтла — для «Найти ещё»
+     * (§ [com.example.myapplication.domain.seasons.StreamingSeasonDiscovery]).
+     *
+     * Страница тайтла на jut.su — это полное оглавление: ссылки вида `/slug/season-2/episode-5.html`
+     * (у первого сезона префикс сезона опускается). Номера серий сплошные с единицы, поэтому
+     * максимальный номер в сезоне и есть число серий; отдельный запрос на каждую серию не нужен.
+     */
+    suspend fun findSeasons(anime: Anime): List<DiscoveredSeason> = runCatching {
+        val base = activeBaseUrl()
+        val query = anime.titleRu?.takeIf { it.isNotBlank() }
+            ?: anime.title.takeIf { it.isNotBlank() }
+            ?: anime.titleEn
+            ?: return emptyList()
+        val titleUrl = resolveTitleUrl(query, anime, base) ?: return emptyList()
+        val slug = titleUrl.trimEnd('/').substringAfterLast('/')
+        if (slug.isBlank() || slug in NON_TITLE_SLUGS) return emptyList()
+
+        val html = getText(titleUrl, extraHeaders = mapOf("Referer" to "$base/"))
+        val episodesBySeason = HashMap<Int, Int>()
+        Jsoup.parse(html, titleUrl).select("a[href*=episode-]").forEach { element ->
+            val href = element.attr("href")
+            val episode = EPISODE_HREF.find(href)?.groupValues?.get(1)?.toIntOrNull() ?: return@forEach
+            // Ссылка без «season-N» ведёт в первый сезон — так устроены URL самого сайта.
+            val season = SEASON_HREF.find(href)?.groupValues?.get(1)?.toIntOrNull() ?: 1
+            if (season > 0 && episode > 0) episodesBySeason.merge(season, episode, ::maxOf)
+        }
+        episodesBySeason
+            .map { (number, episodes) -> DiscoveredSeason(number, episodes, SOURCE_NAME) }
+            .sortedBy { it.seasonNumber }
+            .also { Log.i(TAG, "jut.su seasons for '$slug': ${it.size}") }
+    }.onFailure { Log.i(TAG, "findSeasons: ${it.message}") }.getOrElse { emptyList() }
 
     private suspend fun resolveTitleUrl(query: String, anime: Anime, base: String): String? = runCatching {
         val enc = URLEncoder.encode(query, "UTF-8")
@@ -194,6 +228,11 @@ class JutSuSource(
     companion object {
         private const val TAG = "JutSuSource"
         const val DEFAULT_BASE_URL = "https://jut.su"
+
+        /** Совпадает со значением в `StreamingSeasonDiscovery.STREAMING_SOURCES`. */
+        private const val SOURCE_NAME = "jut.su"
+        private val EPISODE_HREF = Regex("""episode-(\d+)\.html""", RegexOption.IGNORE_CASE)
+        private val SEASON_HREF = Regex("""season-(\d+)""", RegexOption.IGNORE_CASE)
 
         /** Хост без схемы, пути и порта-мусора: «https://Mirror.example/x» → «mirror.example». */
         private fun hostOf(url: String): String =

@@ -20,34 +20,54 @@ import androidx.compose.runtime.withFrameNanos
  * `LaunchedEffect` на КАЖДОЕ меню отдельно — поэтому каждое новое меню воспроизводило баг заново.
  *
  * Здесь это одно централизованное восстановление: когда [overlayActive] уходит из true в false
- * (закрылся последний оверлей над доком), мы по кадрам перемонтируем запись ([onRemount]
- * инкрементит `key(...)` над `LazyColumn`) и «пинаем» скролл на пиксель туда-обратно — это и есть
- * та самая реальная инвалидация, что заставляет `layerBackdrop` перезаписаться.
+ * (закрылся последний оверлей над доком), мы перемонтируем запись ([onRemount] инкрементит
+ * `key(...)` над `LazyColumn`) и «пинаем» скролл на пиксель туда-обратно.
+ *
+ * **Почему [effectsSettled], а не просто пара кадров.** Оверлей закрывается не мгновенно:
+ * `blurAmount` и «вдавливание» — это анимации на ПРЕДКАХ узла `layerBackdrop`, живущие ещё
+ * ~300 мс после того, как флаг стал false. Перезапись, сделанная в этом окне, попадает под всё
+ * тот же `RenderEffect` и портится ровно так же, а после конца анимации никто уже ничего не
+ * инвалидирует — стекло остаётся плоским до первого касания. Это и была «иногда»: успеет
+ * анимация доиграть до перезаписи или нет, зависело от кадра. Поэтому восстановление ждёт,
+ * пока предки реально успокоятся.
  *
  * **Правило для новых меню:** не пиши свой фикс. Просто добавь флаг нового оверлея в общий
- * `overlayActive` на стороне вызова (там же, где `shouldBlur` / `anyHomeSheetOpen`) — и стекло
- * восстановится само. См. [[layerbackdrop-invalidation-gotcha]].
+ * `overlayActive` на стороне вызова (там же, где `shouldBlur` / `anyHomeSheetOpen`), а любую
+ * новую анимацию НАД `layerBackdrop` — в `effectsSettled`. См. [[layerbackdrop-invalidation-gotcha]].
+ *
+ * @param effectsSettled все анимации над `layerBackdrop` доиграли (блюр = 0, вдавливание = 0).
  */
 @Composable
 fun GlassBackdropRecovery(
     overlayActive: Boolean,
+    effectsSettled: Boolean,
     listState: LazyListState,
     onRemount: () -> Unit,
 ) {
-    var wasActive by remember { mutableStateOf(false) }
+    var recoveryPending by remember { mutableStateOf(false) }
+    // Восстановление ставится в очередь на открытии оверлея, а исполняется, когда он закрылся
+    // И предки backdrop перестали анимироваться.
+    val shouldRecover = recoveryPending && !overlayActive && effectsSettled
+
     LaunchedEffect(overlayActive) {
-        if (overlayActive) {
-            wasActive = true
-            return@LaunchedEffect
-        }
-        if (!wasActive) return@LaunchedEffect
-        wasActive = false
-        // Ждём, пока анимация закрытия отпустит предков backdrop, затем форсим перезапись.
-        repeat(2) { withFrameNanos { } }
+        if (overlayActive) recoveryPending = true
+    }
+
+    LaunchedEffect(shouldRecover) {
+        if (!shouldRecover) return@LaunchedEffect
+        // Кадр на то, чтобы предки отрисовались уже без renderEffect/clip, и только потом запись.
+        withFrameNanos { }
         onRemount()
         withFrameNanos { }
-        listState.scrollBy(1f)
-        withFrameNanos { }
-        listState.scrollBy(-1f)
+        // Скролл-пинок — вторая линия обороны на случай, если перемонтирования не хватило.
+        // Список может быть короче экрана: тогда scrollBy честно съест 0 и это не ошибка.
+        runCatching {
+            listState.scrollBy(1f)
+            withFrameNanos { }
+            listState.scrollBy(-1f)
+        }
+        // Флаг снимаем ПОСЛЕДНИМ: он входит в ключ этого же эффекта, и сброс в начале отменил бы
+        // корутину на первом же withFrameNanos, не доведя восстановление до конца.
+        recoveryPending = false
     }
 }

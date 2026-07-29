@@ -11,6 +11,7 @@ import com.example.myapplication.network.TraceMoeRemoteDataSource
 import com.example.myapplication.network.VetroApiService
 import com.example.myapplication.network.WebLinkResolver
 import com.example.myapplication.network.KtorWebLinkResolver
+import com.example.myapplication.network.mangadex.MangaDexRemoteDataSource
 import com.example.myapplication.network.remanga.RemangaRemoteDataSource
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
@@ -82,6 +83,7 @@ val coreNetworkModule = module {
     single { KitsuRemoteDataSource(get<HttpClient>(), get(rateBurst)) }
     single { AnilibriaRemoteDataSource(get<HttpClient>(), get(rateBurst)) }
     single { RemangaRemoteDataSource(get<HttpClient>()) }
+    single { MangaDexRemoteDataSource(get<HttpClient>(), get(rateBurst)) }
     /**
      * Отдельный клиент для скрапа/резолва одобренных сайтов: браузерный User-Agent (без плагина
      * UserAgent, чтобы не слать VetroApp/1.0), короткие таймауты, редиректы по умолчанию.
@@ -114,6 +116,7 @@ val coreNetworkModule = module {
             kitsu = get(),
             anilibria = get(),
             remanga = get(),
+            mangaDex = get(),
             heavyRate = get(rateHeavy),
             searchRate = get(rateSearch),
             burstRate = get(rateBurst)

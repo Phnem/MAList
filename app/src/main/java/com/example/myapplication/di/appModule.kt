@@ -76,6 +76,17 @@ val appModule = module {
             store = get(),
         )
     }
+    // «Найти ещё»: сезоны глазами источников ПРОСМОТРА — там, где каталожные API их не знают.
+    // Запускается только по кнопке, поэтому в фоновом резолвере его нет.
+    single {
+        com.example.myapplication.domain.seasons.StreamingSeasonDiscovery(
+            kodikDirectSearch = get(),
+            jutSuSource = get(),
+            animeHeavenSource = get(),
+            localDataSource = get(),
+            store = get(),
+        )
+    }
     // Local player (isolated feature — remove these lines to unwire it).
     single { com.example.myapplication.localplayer.data.LocalSourceStore(androidContext()) }
     single {
@@ -113,6 +124,12 @@ val appModule = module {
         )
     }
     single { com.example.myapplication.manga.domain.DetectReaderMode(client = get()) }
+    single {
+        com.example.myapplication.manga.domain.MangaPagePrefetcher(
+            context = androidContext(),
+            pageResolver = get(),
+        )
+    }
     single(named("manga_rate")) {
         // MangaDex: 5 req/s на IP; держимся вдвое ниже потолка — главы всё равно грузим пачками.
         com.example.myapplication.network.TokenBucketRateLimiter(

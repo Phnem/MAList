@@ -76,11 +76,17 @@ class AnimeRepository(
                 if (filterTags.isEmpty()) seq
                 else seq.filter { it.tags.containsAll(filterTags) }
             }
-        return when (sortOption) {
+        val sorted = when (sortOption) {
             SortOption.RATING -> if (sortAscending) filtered.sortedBy { it.rating } else filtered.sortedByDescending { it.rating }
             SortOption.EPISODES -> if (sortAscending) filtered.sortedBy { it.episodes } else filtered.sortedByDescending { it.episodes }
             SortOption.TITLE -> if (sortAscending) filtered.sortedBy { it.title } else filtered.sortedByDescending { it.title }
-        }.toList()
+        }
+        // Избранное всегда сверху, поверх любой сортировки. Категорию учитывать не нужно: список
+        // сюда приходит уже отфильтрованным по mediaType (`observeAllAnime(filterType)`), поэтому
+        // в «Манге» наверх всплывает избранная манга, а в «Все» — всё избранное разом.
+        // sortedByDescending стабильна, так что внутри обеих групп порядок сортировки сохраняется,
+        // и снятая «звезда» возвращает тайтл ровно на своё место.
+        return sorted.sortedByDescending { it.isFavorite }.toList()
     }
 
     fun getAnimeById(id: String): Anime? = localDataSource.getAnimeById(id)

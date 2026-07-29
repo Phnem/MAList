@@ -2,6 +2,7 @@ package com.example.myapplication.media.source
 
 import android.util.Log
 import com.example.myapplication.data.models.Anime
+import com.example.myapplication.domain.seasons.DiscoveredSeason
 import com.example.myapplication.domain.seasons.SeasonInfo
 import com.example.myapplication.sync.TitleMatcher
 import io.ktor.client.HttpClient
@@ -96,6 +97,33 @@ class AnimeHeavenSource(
                 lazy = false,
             )
         )
+    }
+
+    /**
+     * Seasons the site actually carries — for "Find more"
+     * (see [com.example.myapplication.domain.seasons.StreamingSeasonDiscovery]).
+     *
+     * Seasons here are separate site entries, so there is no season list to parse: we probe season
+     * numbers upwards and stop at the first gap. [MAX_PROBED_SEASONS] caps a franchise that keeps
+     * matching (long-running shows with many entries) — beyond it the request count stops being
+     * worth one button press.
+     */
+    suspend fun findSeasons(anime: Anime): List<DiscoveredSeason> {
+        val titles = listOfNotNull(
+            anime.titleEn?.takeIf { it.isNotBlank() },
+            anime.title.takeIf { it.isNotBlank() },
+        ).filter { it.hasLatin() }.distinctBy { it.lowercase() }
+        if (titles.isEmpty()) return emptyList()
+
+        val seasons = ArrayList<DiscoveredSeason>()
+        for (season in 1..MAX_PROBED_SEASONS) {
+            val entry = findEntry(titles, season) ?: break
+            val episodes = episodeKeys(entry.id).keys.maxOrNull() ?: break
+            if (episodes <= 0) break
+            seasons += DiscoveredSeason(season, episodes, SOURCE_NAME)
+        }
+        Log.i(TAG, "AnimeHeaven seasons for \"${titles.first()}\": ${seasons.size}")
+        return seasons
     }
 
     // ==========================================================
@@ -270,6 +298,11 @@ class AnimeHeavenSource(
         private const val MAX_QUERIES = 3
         private const val MAX_CANDIDATES = 24
         private const val CACHE_TTL_MS = 10 * 60 * 1000L
+
+        /** Matches `StreamingSeasonDiscovery.STREAMING_SOURCES`. */
+        private const val SOURCE_NAME = "AnimeHeaven"
+        /** Season probing is one search + one title page each — cap it. */
+        private const val MAX_PROBED_SEASONS = 8
 
         /** "… Season 2", "… The Final Season" (unnumbered → not a marker). */
         private val SEASON_WORD = Regex("""\bseason\s+(\d{1,2})\b""", RegexOption.IGNORE_CASE)

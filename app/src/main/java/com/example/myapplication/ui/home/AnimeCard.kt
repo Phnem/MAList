@@ -52,6 +52,7 @@ import com.example.myapplication.ui.shared.fluidClickable
 import com.example.myapplication.ui.shared.theme.BrandOrangeBright
 import com.example.myapplication.ui.shared.theme.SnProFamily
 import com.example.myapplication.ui.shared.theme.LightBorder
+import com.example.myapplication.ui.shared.theme.OverlayThemeTokens
 import com.example.myapplication.data.models.RatingScale
 import com.example.myapplication.ui.shared.theme.getRatingColor
 import kotlinx.collections.immutable.PersistentList
@@ -88,6 +89,8 @@ data class AnimeCardState(
     val episodesCount: Int,
     val imagePath: String?,
     val mediaTypeLabel: String,
+    /** Избранное: карточка поднята в начало списка и обведена рамкой, чтобы это было видно. */
+    val isFavorite: Boolean = false,
     /** Найденные прямые ссылки по одобренным сайтам (для языка [language]). */
     val webLinks: List<com.example.myapplication.domain.enrichment.weblinks.ResolvedWebLink> = emptyList(),
     val language: com.example.myapplication.network.AppLanguage = com.example.myapplication.network.AppLanguage.EN,
@@ -187,7 +190,14 @@ fun SharedTransitionScope.OneUiAnimeCard(
     modifier: Modifier = Modifier
 ) {
     val isDark = isAppInDarkTheme()
-    val borderStroke = if (isDark) Color.White.copy(alpha = 0.15f) else LightBorder
+    val borderStroke = when {
+        state.isFavorite -> OverlayThemeTokens.FavoriteCardBorder
+        isDark -> Color.White.copy(alpha = 0.15f)
+        else -> LightBorder
+    }
+    // Рамка избранного заметно толще обычной кромки: на 1dp персиковый читался бы как чуть
+    // подсвеченный край, а не как метка.
+    val borderWidth = if (state.isFavorite) 2.dp else 1.dp
     val cardBg = if (isDark) Color(0xFF1C1C1C) else MaterialTheme.colorScheme.surface
     val cardShadowColor = if (isDark) Color.Black.copy(alpha = 0.5f) else Color.Black.copy(alpha = 0.08f)
     val subtitleColor = if (isDark) Color(0xFFA7A7A7) else Color(0xFF8E8E93)
@@ -212,7 +222,7 @@ fun SharedTransitionScope.OneUiAnimeCard(
             .clip(RoundedCornerShape(24.dp))
             .background(cardBg)
             .border(
-                BorderStroke(1.dp, borderStroke),
+                BorderStroke(borderWidth, borderStroke),
                 RoundedCornerShape(24.dp)
             )
     ) {

@@ -73,7 +73,12 @@ class AniListRemoteDataSource(
                 rating = rating,
                 posterUrl = media.coverImage?.extraLarge ?: media.coverImage?.large,
                 source = "AniList",
-                airedOn = airedOn
+                airedOn = airedOn,
+                format = media.format?.rawValue,
+                sourceMaterial = media.source?.rawValue,
+                studio = media.studios?.nodes?.firstNotNullOfOrNull { it?.name },
+                season = media.season?.rawValue,
+                seasonYear = media.seasonYear,
             )
         }
     }
@@ -139,7 +144,13 @@ class AniListRemoteDataSource(
                 rating = media.averageScore,
                 source = "AniList",
                 categoryType = "ANIME",
-                externalId = media.id?.toString()
+                externalId = media.id?.toString(),
+                statusRaw = media.status?.rawValue,
+                format = media.format?.rawValue,
+                sourceMaterial = media.source?.rawValue,
+                studio = media.studios?.nodes?.firstNotNullOfOrNull { it?.name },
+                season = media.season?.rawValue,
+                seasonYear = media.seasonYear,
             )
         }
     }

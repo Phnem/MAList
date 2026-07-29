@@ -24,6 +24,14 @@ data class ChapterReadingProgress(
      * с начала — иначе список глав терял бы галочки от одного случайного возврата назад.
      */
     val read: Boolean = false,
+    /**
+     * Докрутка внутри страницы [pageIndex], 0..1 от её высоты — только для вебтун-ленты, где одна
+     * «страница» бывает в несколько экранов и постраничной точности не хватает.
+     *
+     * `null` = не задано: постраничный режим сюда ничего не пишет, и старые записи (до появления
+     * поля) читаются как «с начала страницы».
+     */
+    val scrollOffsetFraction: Float? = null,
     val updatedAt: Long = 0L,
 ) {
     val fraction: Float
@@ -160,6 +168,8 @@ class MangaReadingStore(
         chapterKey: String,
         pageIndex: Int,
         pageCount: Int,
+        /** Докрутка внутри страницы; `null` из постраничного режима — там её не бывает. */
+        scrollOffsetFraction: Float? = null,
     ) {
         if (pageCount <= 0) return
         val page = pageIndex.coerceIn(0, pageCount - 1)
@@ -169,6 +179,7 @@ class MangaReadingStore(
                 pageIndex = page,
                 pageCount = pageCount,
                 read = current[chapterKey]?.read == true || page >= pageCount - 1,
+                scrollOffsetFraction = scrollOffsetFraction?.coerceIn(0f, 1f),
                 updatedAt = System.currentTimeMillis(),
             )
             snapshot.withProgress(current)
@@ -192,6 +203,56 @@ class MangaReadingStore(
             }
             snapshot.withProgress(current)
         }
+    }
+
+    /**
+     * Разовый снимок прогресса по списку тайтлов — для push в облако. Ключ хранения — хэш от
+     * animeId, поэтому список id приходит снаружи (из коллекции): по снимку Preferences тайтлы
+     * не перечислить. Настройки ридера (режим/направление/обрезка) в синк не едут — они про
+     * конкретный экран устройства, а не про прогресс.
+     */
+    suspend fun snapshotAll(animeIds: List<String>): Map<String, Map<String, ChapterReadingProgress>> {
+        if (animeIds.isEmpty()) return emptyMap()
+        val preferences = dataStore.data.first()
+        return buildMap {
+            for (animeId in animeIds) {
+                val progress = decode(preferences[progressKey(animeId)])
+                if (progress.isNotEmpty()) put(animeId, progress)
+            }
+        }
+    }
+
+    /**
+     * Применение облачных записей поверх локальных: последняя запись выигрывает по `updatedAt`.
+     * Отметка `read` при этом липкая и на merge — она не снимается более новой записью с
+     * `read = false` (перечитывание с начала не должно гасить галочку на другом устройстве).
+     *
+     * @return сколько записей реально применено.
+     */
+    suspend fun mergeRemote(remote: Map<String, Map<String, ChapterReadingProgress>>): Int {
+        if (remote.isEmpty()) return 0
+        var applied = 0
+        writeMutex.withLock {
+            dataStore.edit { preferences ->
+                for ((animeId, incoming) in remote) {
+                    val preferenceKey = progressKey(animeId)
+                    val snapshot = decodeSnapshot(preferences[preferenceKey])
+                    val current = snapshot.progress().toMutableMap()
+                    var changed = false
+                    for ((chapterKey, value) in incoming) {
+                        val local = current[chapterKey]
+                        if (local != null && local.updatedAt >= value.updatedAt) continue
+                        current[chapterKey] = value.copy(read = value.read || local?.read == true)
+                        changed = true
+                        applied++
+                    }
+                    if (changed) {
+                        preferences[preferenceKey] = json.encodeToString(snapshot.withProgress(current))
+                    }
+                }
+            }
+        }
+        return applied
     }
 
     /**

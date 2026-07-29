@@ -1,11 +1,16 @@
 package com.example.myapplication.manga.ui
 
+import android.content.Intent
+import androidx.core.net.toUri
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,15 +21,20 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.DownloadDone
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.rounded.ArrowDownward
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.DownloadDone
+import androidx.compose.material.icons.rounded.Extension
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -37,27 +47,52 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import com.example.myapplication.isAppInDarkTheme
 import com.example.myapplication.manga.data.DownloadProgress
 import com.example.myapplication.manga.domain.MangaChapter
 import com.example.myapplication.manga.domain.MangaItem
 import com.example.myapplication.manga.source.MangaSourceResults
 import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.ui.shared.theme.BrandOrange
+import com.example.myapplication.ui.shared.theme.MotionTokens
+import com.example.myapplication.ui.shared.theme.SnProFamily
+import com.example.myapplication.ui.shared.theme.SquircleCornerShape
 import com.example.myapplication.ui.shared.theme.SquircleShape
+import com.example.myapplication.utils.performHaptic
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
+
+/** Каталог расширений Mihon — временная замена внутреннему экрану, пока нет `mihon-compat`. */
+private const val MIHON_EXTENSIONS_URL = "https://github.com/keiyoushi/extensions"
+
+/**
+ * Запас снизу под плавающий мини-док Details (56dp + 16dp отступ + навигационная полоса).
+ *
+ * Общая константа, а не число по месту: список глав её учитывал, а выбор источника — нет, и
+ * последняя строка выбора («Расширения Mihon») уезжала ровно под док, где её нельзя ни прочесть,
+ * ни нажать.
+ */
+private val DockClearance = 120.dp
 
 /**
  * Вкладка «Главы» в Details для тайтлов с [com.example.myapplication.data.models.MediaType.MANGA].
@@ -105,6 +140,8 @@ fun MangaChaptersPage(
                         animeId = animeId,
                         chapter = chapter,
                         // Платные главы в ридер не отдаём: «следующая» не должна упираться в замок.
+                        // Порядок здесь канонический (по возрастанию), а не тот, в котором список
+                        // показан: «следующая глава» в ридере не зависит от сортировки на экране.
                         chapters = current.chapters.filterNot { it.paid },
                     )
                 },
@@ -138,6 +175,8 @@ fun MangaChaptersPage(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.clickable { viewModel.unbind() },
                 )
+                Spacer(Modifier.height(16.dp))
+                MihonExtensionsButton(ru = ru)
             }
         }
     }
@@ -198,14 +237,13 @@ private fun SourcePickerContent(
                 fontSize = 14.sp,
                 modifier = Modifier.padding(16.dp),
             )
-            return@Column
         }
 
         LazyColumn(
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            contentPadding = PaddingValues(
                 start = 16.dp,
                 end = 16.dp,
-                bottom = 24.dp,
+                bottom = DockClearance,
             ),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -223,7 +261,48 @@ private fun SourcePickerContent(
                     SearchResultRow(item = item, onClick = { onPick(item) })
                 }
             }
+            item(key = "mihon_extensions") {
+                Box(modifier = Modifier.padding(top = 16.dp)) {
+                    MihonExtensionsButton(ru = ru)
+                }
+            }
         }
+    }
+}
+
+/**
+ * Ссылка на каталог расширений Mihon. Пока внутреннего экрана расширений нет, отдаём страницу
+ * внешнему браузеру — иначе тупик: нужного источника нет, и добавить его неоткуда.
+ */
+@Composable
+private fun MihonExtensionsButton(ru: Boolean) {
+    val context = LocalContext.current
+    Row(
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+            .clickable {
+                runCatching {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, MIHON_EXTENSIONS_URL.toUri()))
+                }
+            }
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.Extension,
+            contentDescription = null,
+            tint = BrandOrange,
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = if (ru) "Расширения Mihon" else "Mihon extensions",
+            color = MaterialTheme.colorScheme.onSurface,
+            fontFamily = SnProFamily,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
     }
 }
 
@@ -274,6 +353,20 @@ private fun SearchResultRow(item: MangaItem, onClick: () -> Unit) {
     }
 }
 
+// ==========================================
+// Список глав
+// ==========================================
+
+/** Фильтр списка. «Загруженные» — то, что лежит файлами, а не то, что качается прямо сейчас. */
+private enum class ChapterFilter { All, Unread, Downloaded }
+
+/** Один том (или весь список, если томов у источника нет) вместе с его главами. */
+private data class ChapterGroup(
+    val key: String,
+    val label: String?,
+    val chapters: List<MangaChapter>,
+)
+
 @Composable
 private fun ChaptersContent(
     state: MangaLibraryUiState.Chapters,
@@ -285,56 +378,84 @@ private fun ChaptersContent(
     onRefresh: () -> Unit,
     onChangeSource: () -> Unit,
 ) {
+    val isDark = isAppInDarkTheme()
+    var filter by rememberSaveable { mutableStateOf(ChapterFilter.All) }
+    // По умолчанию сверху свежие главы: у долгих тайтлов иначе первое, что видит читатель, —
+    // пролог десятилетней давности.
+    var newestFirst by rememberSaveable { mutableStateOf(true) }
+    var collapsed by remember(state.binding.mangaKey) { mutableStateOf(emptySet<String>()) }
+
+    fun isRead(chapter: MangaChapter) = state.progress[chapter.key]?.read == true
+    fun isDownloaded(chapter: MangaChapter) = chapter.key in state.downloadedKeys
+
+    val unreadCount = state.chapters.count { !isRead(it) }
+    val downloadedCount = state.chapters.count { isDownloaded(it) }
+
+    val visible = state.chapters.filter { chapter ->
+        when (filter) {
+            ChapterFilter.All -> true
+            ChapterFilter.Unread -> !isRead(chapter)
+            ChapterFilter.Downloaded -> isDownloaded(chapter)
+        }
+    }
+    val ordered = if (newestFirst) visible.asReversed() else visible
+    val groups = remember(ordered, ru) { groupByVolume(ordered, ru) }
+
     Column(modifier = Modifier.fillMaxSize()) {
+        ChaptersHeader(
+            state = state,
+            ru = ru,
+            isDark = isDark,
+            onRefresh = onRefresh,
+            onChangeSource = onChangeSource,
+        )
+
+        // ——— Фильтры + направление сортировки ———
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 16.dp, end = 8.dp, top = 8.dp),
+                .padding(top = 12.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = state.binding.title,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FilterPill(
+                    label = if (ru) "Все главы" else "All chapters",
+                    count = state.chapters.size,
+                    selected = filter == ChapterFilter.All,
+                    isDark = isDark,
+                    onClick = { filter = ChapterFilter.All },
                 )
-                Text(
-                    text = if (ru) {
-                        "${state.chapters.size} гл. · ${state.binding.sourceId}"
-                    } else {
-                        "${state.chapters.size} ch. · ${state.binding.sourceId}"
-                    },
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp,
+                FilterPill(
+                    label = if (ru) "Непрочитанные" else "Unread",
+                    count = unreadCount,
+                    selected = filter == ChapterFilter.Unread,
+                    isDark = isDark,
+                    onClick = { filter = ChapterFilter.Unread },
                 )
-            }
-            if (state.refreshing) {
-                CircularProgressIndicator(
-                    color = BrandOrange,
-                    strokeWidth = 2.dp,
-                    modifier = Modifier.size(18.dp),
-                )
-            } else {
-                IconButton(onClick = onRefresh) {
-                    Icon(
-                        Icons.Filled.Refresh,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            IconButton(onClick = onChangeSource) {
-                Icon(
-                    Icons.Filled.SwapHoriz,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                FilterPill(
+                    label = if (ru) "Загруженные" else "Downloaded",
+                    count = downloadedCount,
+                    selected = filter == ChapterFilter.Downloaded,
+                    isDark = isDark,
+                    onClick = { filter = ChapterFilter.Downloaded },
                 )
             }
+            SortButton(
+                newestFirst = newestFirst,
+                isDark = isDark,
+                ru = ru,
+                onClick = { newestFirst = !newestFirst },
+                modifier = Modifier.padding(end = 16.dp),
+            )
         }
 
+        // ——— Языки источника ———
         if (state.availableLanguages.size > 1) {
             Row(
                 modifier = Modifier
@@ -358,46 +479,396 @@ private fun ChaptersContent(
             }
         }
 
+        if (visible.isEmpty()) {
+            Text(
+                text = when (filter) {
+                    ChapterFilter.Unread -> if (ru) "Всё прочитано" else "Everything is read"
+                    ChapterFilter.Downloaded -> if (ru) "Нет загруженных глав" else "No downloaded chapters"
+                    ChapterFilter.All -> if (ru) "Глав нет" else "No chapters"
+                },
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontFamily = SnProFamily,
+                fontSize = 14.sp,
+                modifier = Modifier.padding(24.dp),
+            )
+            return@Column
+        }
+
         LazyColumn(
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            contentPadding = PaddingValues(
                 start = 16.dp,
                 end = 16.dp,
-                bottom = 24.dp,
+                top = 8.dp,
+                bottom = DockClearance,
             ),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            items(state.chapters, key = { it.key }) { chapter ->
-                ChapterRow(
-                    chapter = chapter,
-                    progressFraction = state.progress[chapter.key]?.fraction ?: 0f,
-                    read = state.progress[chapter.key]?.read == true,
-                    downloaded = chapter.key in state.downloadedKeys,
-                    downloading = state.downloading[chapter.key],
-                    ru = ru,
-                    onClick = { onOpen(chapter) },
-                    onToggleRead = { onToggleRead(chapter, it) },
-                    onToggleDownload = { onToggleDownload(chapter) },
-                )
+            groups.forEach { group ->
+                val isCollapsed = group.key in collapsed
+                if (group.label != null) {
+                    item(key = "vol_${group.key}") {
+                        VolumeHeader(
+                            label = group.label,
+                            coverUrl = state.binding.coverUrl,
+                            total = group.chapters.size,
+                            read = group.chapters.count { isRead(it) },
+                            collapsed = isCollapsed,
+                            isDark = isDark,
+                            ru = ru,
+                            onToggle = {
+                                collapsed = if (isCollapsed) collapsed - group.key else collapsed + group.key
+                            },
+                            onDownloadAll = {
+                                group.chapters
+                                    .filterNot { it.paid || isDownloaded(it) }
+                                    .filter { state.downloading[it.key] == null }
+                                    .forEach(onToggleDownload)
+                            },
+                        )
+                    }
+                }
+                if (isCollapsed) return@forEach
+                itemsIndexed(
+                    items = group.chapters,
+                    key = { _, chapter -> "${group.key}_${chapter.key}" },
+                ) { index, chapter ->
+                    ChapterRow(
+                        chapter = chapter,
+                        shape = groupRowShape(index, group.chapters.size, group.label != null),
+                        progressFraction = state.progress[chapter.key]?.fraction ?: 0f,
+                        read = isRead(chapter),
+                        downloaded = isDownloaded(chapter),
+                        downloading = state.downloading[chapter.key],
+                        isDark = isDark,
+                        ru = ru,
+                        onClick = { onOpen(chapter) },
+                        onToggleRead = { onToggleRead(chapter, it) },
+                        onToggleDownload = { onToggleDownload(chapter) },
+                    )
+                }
             }
         }
     }
 }
 
-@Composable
-private fun LanguageChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    Text(
-        text = label,
-        color = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-        fontSize = 12.sp,
-        fontWeight = FontWeight.SemiBold,
-        modifier = Modifier
-            .clip(SquircleShape(10.dp))
-            .background(
-                if (selected) BrandOrange else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+/**
+ * Тома идут отдельными карточками; если источник томов не проставил — весь список одной
+ * карточкой без заголовка. Главы без тома у источника с томами собираются в «Прочее»:
+ * прятать их нельзя, а вклеивать в чужой том — врать.
+ */
+private fun groupByVolume(chapters: List<MangaChapter>, ru: Boolean): List<ChapterGroup> {
+    if (chapters.none { it.volume != null }) {
+        return listOf(ChapterGroup(key = "all", label = null, chapters = chapters))
+    }
+    return chapters
+        .groupBy { it.volume }
+        .map { (volume, items) ->
+            val number = volume?.let { v ->
+                if (v == v.toLong().toDouble()) v.toLong().toString() else v.toString()
+            }
+            ChapterGroup(
+                key = number ?: "extra",
+                label = when {
+                    number != null && ru -> "Том $number"
+                    number != null -> "Vol. $number"
+                    ru -> "Прочее"
+                    else -> "Other"
+                },
+                chapters = items,
             )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+        }
+}
+
+/** Первая и последняя строки группы скругляются наружу — группа читается одной карточкой. */
+private fun groupRowShape(index: Int, size: Int, insideVolume: Boolean): Shape {
+    val big = 18.dp
+    val small = 4.dp
+    // У тома верх карточки уже скруглён шапкой, поэтому первая строка под ней — почти прямая.
+    val top = if (index == 0 && !insideVolume) big else small
+    val bottom = if (index == size - 1) big else small
+    return SquircleCornerShape(topStart = top, topEnd = top, bottomEnd = bottom, bottomStart = bottom)
+}
+
+@Composable
+private fun ChaptersHeader(
+    state: MangaLibraryUiState.Chapters,
+    ru: Boolean,
+    isDark: Boolean,
+    onRefresh: () -> Unit,
+    onChangeSource: () -> Unit,
+) {
+    val volumes = state.chapters.mapNotNull { it.volume }
+    val volumeRange = if (volumes.isNotEmpty()) {
+        val min = volumes.min()
+        val max = volumes.max()
+        val fmt = { v: Double -> if (v == v.toLong().toDouble()) v.toLong().toString() else v.toString() }
+        if (min == max) {
+            if (ru) "Том ${fmt(min)}" else "Vol. ${fmt(min)}"
+        } else {
+            if (ru) "Том ${fmt(min)}–${fmt(max)}" else "Vol. ${fmt(min)}–${fmt(max)}"
+        }
+    } else {
+        null
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 8.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = state.binding.title,
+                color = MaterialTheme.colorScheme.onBackground,
+                fontFamily = SnProFamily,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                MetaPill(
+                    text = if (ru) {
+                        "${state.chapters.size} ${chapterPlural(state.chapters.size)}"
+                    } else {
+                        "${state.chapters.size} ch."
+                    },
+                    isDark = isDark,
+                )
+                volumeRange?.let { MetaPill(text = it, isDark = isDark) }
+                MetaPill(text = state.binding.sourceId, isDark = isDark)
+            }
+        }
+        if (state.refreshing) {
+            CircularProgressIndicator(
+                color = BrandOrange,
+                strokeWidth = 2.dp,
+                modifier = Modifier
+                    .padding(12.dp)
+                    .size(18.dp),
+            )
+        } else {
+            IconButton(onClick = onRefresh) {
+                Icon(
+                    Icons.Rounded.Refresh,
+                    contentDescription = if (ru) "Обновить оглавление" else "Refresh chapters",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        IconButton(onClick = onChangeSource) {
+            Icon(
+                Icons.Rounded.SwapHoriz,
+                contentDescription = if (ru) "Сменить источник" else "Change source",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun MetaPill(text: String, isDark: Boolean) {
+    Text(
+        text = text,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        fontFamily = SnProFamily,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.Medium,
+        maxLines = 1,
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(if (isDark) Color.White.copy(alpha = 0.07f) else Color.Black.copy(alpha = 0.05f))
+            .padding(horizontal = 11.dp, vertical = 6.dp),
     )
+}
+
+/** Выбранный фильтр — контрастная пилюля (белая в тёмной теме), остальные приглушены. */
+@Composable
+private fun FilterPill(
+    label: String,
+    count: Int,
+    selected: Boolean,
+    isDark: Boolean,
+    onClick: () -> Unit,
+) {
+    val bg = when {
+        selected && isDark -> Color.White
+        selected -> Color.Black
+        isDark -> Color.White.copy(alpha = 0.07f)
+        else -> Color.Black.copy(alpha = 0.05f)
+    }
+    val fg = when {
+        selected && isDark -> Color.Black
+        selected -> Color.White
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Text(
+        text = "$label ($count)",
+        color = fg,
+        fontFamily = SnProFamily,
+        fontSize = 13.sp,
+        fontWeight = FontWeight.SemiBold,
+        maxLines = 1,
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(bg)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            )
+            .padding(horizontal = 14.dp, vertical = 9.dp),
+    )
+}
+
+@Composable
+private fun SortButton(
+    newestFirst: Boolean,
+    isDark: Boolean,
+    ru: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val rotation by animateFloatAsState(
+        targetValue = if (newestFirst) 0f else 180f,
+        animationSpec = MotionTokens.standard(),
+        label = "chapterSortArrow",
+    )
+    Box(
+        modifier = modifier
+            .size(38.dp)
+            .clip(CircleShape)
+            .background(if (isDark) Color.White.copy(alpha = 0.07f) else Color.Black.copy(alpha = 0.05f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.ArrowDownward,
+            contentDescription = if (ru) "Порядок глав" else "Chapter order",
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .size(18.dp)
+                .graphicsLayer { rotationZ = rotation },
+        )
+    }
+}
+
+/**
+ * Шапка тома: обложка тайтла, номер, прогресс чтения, «скачать весь том» и сворачивание.
+ * Обложка здесь — тайтловая, а не томовая: своих обложек томов источники не отдают.
+ */
+@Composable
+private fun VolumeHeader(
+    label: String,
+    coverUrl: String?,
+    total: Int,
+    read: Int,
+    collapsed: Boolean,
+    isDark: Boolean,
+    ru: Boolean,
+    onToggle: () -> Unit,
+    onDownloadAll: () -> Unit,
+) {
+    val view = LocalView.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(SquircleCornerShape(18.dp, 18.dp, 4.dp, 4.dp))
+            .background(if (isDark) Color.White.copy(alpha = 0.06f) else Color.Black.copy(alpha = 0.045f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onToggle,
+            )
+            .padding(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        AsyncImage(
+            model = coverUrl,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(width = 42.dp, height = 56.dp)
+                .clip(SquircleShape(10.dp))
+                .background(Color.Black.copy(alpha = 0.25f)),
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = label,
+                color = MaterialTheme.colorScheme.onBackground,
+                fontFamily = SnProFamily,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+            )
+            Spacer(Modifier.height(3.dp))
+            Text(
+                text = if (ru) {
+                    "$total ${chapterPlural(total)} · Прочитано $read/$total"
+                } else {
+                    "$total ch. · Read $read/$total"
+                },
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontFamily = SnProFamily,
+                fontSize = 12.sp,
+                maxLines = 1,
+            )
+        }
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(BrandOrange.copy(alpha = 0.16f))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                ) {
+                    performHaptic(view, "light")
+                    onDownloadAll()
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Download,
+                contentDescription = if (ru) "Скачать том" else "Download volume",
+                tint = BrandOrange,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(if (isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.06f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            val rotation by animateFloatAsState(
+                targetValue = if (collapsed) 180f else 0f,
+                animationSpec = MotionTokens.standard(),
+                label = "volumeChevron",
+            )
+            Icon(
+                imageVector = Icons.Rounded.KeyboardArrowUp,
+                contentDescription = if (collapsed) {
+                    if (ru) "Развернуть том" else "Expand volume"
+                } else {
+                    if (ru) "Свернуть том" else "Collapse volume"
+                },
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .size(20.dp)
+                    .graphicsLayer { rotationZ = rotation },
+            )
+        }
+    }
 }
 
 /**
@@ -414,27 +885,25 @@ private fun DownloadButton(
 ) {
     IconButton(onClick = onClick) {
         when {
-            downloading != null -> Box(contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(
-                    progress = { downloading.fraction },
-                    color = BrandOrange,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                    strokeWidth = 2.dp,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
+            downloading != null -> CircularProgressIndicator(
+                progress = { downloading.fraction },
+                color = BrandOrange,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                strokeWidth = 2.dp,
+                modifier = Modifier.size(20.dp),
+            )
 
             downloaded -> Icon(
-                imageVector = Icons.Filled.DownloadDone,
+                imageVector = Icons.Rounded.DownloadDone,
                 contentDescription = if (ru) "Удалить загрузку" else "Delete download",
                 tint = BrandOrange,
                 modifier = Modifier.size(20.dp),
             )
 
             else -> Icon(
-                imageVector = Icons.Filled.Download,
+                imageVector = Icons.Rounded.Download,
                 contentDescription = if (ru) "Скачать главу" else "Download chapter",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                tint = BrandOrange.copy(alpha = 0.85f),
                 modifier = Modifier.size(20.dp),
             )
         }
@@ -444,53 +913,74 @@ private fun DownloadButton(
 @Composable
 private fun ChapterRow(
     chapter: MangaChapter,
+    shape: Shape,
     progressFraction: Float,
     read: Boolean,
     downloaded: Boolean,
     downloading: DownloadProgress?,
+    isDark: Boolean,
     ru: Boolean,
     onClick: () -> Unit,
     onToggleRead: (Boolean) -> Unit,
     onToggleDownload: () -> Unit,
 ) {
+    val rowBg = if (isDark) Color.White.copy(alpha = 0.045f) else Color.Black.copy(alpha = 0.035f)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(SquircleShape(12.dp))
+            .clip(shape)
+            .background(rowBg)
             .clickable(enabled = !chapter.paid, onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 10.dp),
+            .padding(start = 14.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = chapter.readerTitle(ru),
+                text = chapter.listTitle(ru),
                 color = if (read || chapter.paid) {
                     MaterialTheme.colorScheme.onSurfaceVariant
                 } else {
-                    MaterialTheme.colorScheme.onSurface
+                    MaterialTheme.colorScheme.onBackground
                 },
+                fontFamily = SnProFamily,
                 fontSize = 14.sp,
+                fontWeight = if (read) FontWeight.Medium else FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            val subtitle = listOfNotNull(
-                chapter.language?.uppercase(),
-                chapter.scanlator,
-                chapter.pageCount.takeIf { it > 0 }?.let { if (ru) "$it стр." else "$it p." },
-                if (downloaded) (if (ru) "офлайн" else "offline") else null,
-            ).joinToString(" · ")
-            if (subtitle.isNotBlank()) {
-                Text(
-                    text = subtitle,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+            Spacer(Modifier.height(3.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Оранжевая точка = глава ещё не прочитана; у прочитанных её роль берёт галочка.
+                if (!read && !chapter.paid) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(BrandOrange),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                }
+                val subtitle = listOfNotNull(
+                    chapter.language?.uppercase(),
+                    chapter.scanlator,
+                    chapter.pageCount.takeIf { it > 0 }?.let { if (ru) "$it стр." else "$it p." },
+                    formatChapterDate(chapter.publishedAt, ru),
+                    if (downloaded) (if (ru) "офлайн" else "offline") else null,
+                ).joinToString(" • ")
+                if (subtitle.isNotBlank()) {
+                    Text(
+                        text = subtitle,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontFamily = SnProFamily,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
             // Полосу тянем только для начатых-недочитанных: у прочитанных её роль берёт галочка.
             if (progressFraction > 0f && !read) {
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(5.dp))
                 LinearProgressIndicator(
                     progress = { progressFraction },
                     color = BrandOrange,
@@ -502,17 +992,9 @@ private fun ChapterRow(
             }
         }
         Spacer(Modifier.width(4.dp))
-        if (!chapter.paid) {
-            DownloadButton(
-                downloaded = downloaded,
-                downloading = downloading,
-                ru = ru,
-                onClick = onToggleDownload,
-            )
-        }
         if (chapter.paid) {
             Icon(
-                imageVector = Icons.Filled.Lock,
+                imageVector = Icons.Rounded.Lock,
                 contentDescription = if (ru) "Платная глава" else "Paid chapter",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                 modifier = Modifier
@@ -520,18 +1002,76 @@ private fun ChapterRow(
                     .size(18.dp),
             )
         } else {
+            DownloadButton(
+                downloaded = downloaded,
+                downloading = downloading,
+                ru = ru,
+                onClick = onToggleDownload,
+            )
             IconButton(onClick = { onToggleRead(!read) }) {
                 Icon(
-                    imageVector = Icons.Filled.CheckCircle,
-                    contentDescription = null,
+                    imageVector = Icons.Rounded.Check,
+                    contentDescription = if (ru) "Отметить прочитанной" else "Mark as read",
                     tint = if (read) {
-                        BrandOrange
+                        MaterialTheme.colorScheme.onSurfaceVariant
                     } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.28f)
                     },
                     modifier = Modifier.size(20.dp),
                 )
             }
         }
     }
+}
+
+@Composable
+private fun LanguageChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    Text(
+        text = label,
+        color = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+        fontFamily = SnProFamily,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(
+                if (selected) BrandOrange else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+    )
+}
+
+/** «Глава 179 — Эпилог»: в списке место есть, в доке ридера — нет, поэтому формат свой. */
+private fun MangaChapter.listTitle(ru: Boolean): String {
+    val number = numberLabel?.let { if (ru) "Глава $it" else "Chapter $it" }
+    val name = title?.takeIf { it.isNotBlank() }
+    return listOfNotNull(number, name).joinToString(" — ")
+        .ifBlank { if (ru) "Глава" else "Chapter" }
+}
+
+private fun chapterPlural(count: Int): String {
+    val mod100 = count % 100
+    if (mod100 in 11..14) return "глав"
+    return when (count % 10) {
+        1 -> "глава"
+        2, 3, 4 -> "главы"
+        else -> "глав"
+    }
+}
+
+private val RuDateFormatter: DateTimeFormatter =
+    DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.forLanguageTag("ru"))
+private val EnDateFormatter: DateTimeFormatter =
+    DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.ENGLISH)
+
+/** `publishedAt == 0` = источник даты не отдал; тогда в подписи её просто нет. */
+private fun formatChapterDate(publishedAt: Long, ru: Boolean): String? {
+    if (publishedAt <= 0L) return null
+    return runCatching {
+        Instant.ofEpochMilli(publishedAt)
+            .atZone(ZoneId.systemDefault())
+            .toLocalDate()
+            .format(if (ru) RuDateFormatter else EnDateFormatter)
+    }.getOrNull()
 }

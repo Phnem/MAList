@@ -283,7 +283,10 @@ class SyncRepository(
                         isPrivate = if (remote.is_private) 1L else 0L,
                         encryptionIv = remote.encryption_iv,
                         deletedAt = remote.deleted_at,
-                        mediaType = remote.media_type,
+                        // Облако полно строк, выгруженных до починки типа: `media_type` там 'ANIME'
+                        // даже у манги. Чиним на входе тем же правилом, что и миграция 12.sqm,
+                        // иначе первый же pull возвращал бы мангу обратно в аниме.
+                        mediaType = normalizeRemoteMediaType(remote.media_type, remote.category_type),
                         title_en = remote.title_en,
                         title_en_checked_at = remote.title_en_checked_at,
                         title_ru = remote.title_ru,
@@ -412,5 +415,15 @@ class SyncRepository(
         /** Легаси 5-звёздочный рейтинг (1..9) → хранимые единицы 10-балльной шкалы (×20). */
         private fun normalizeRemoteRating(rating: Int): Long =
             if (rating in 1..9) (rating * 20L).coerceAtMost(100L) else rating.toLong()
+
+        /**
+         * Тип записи из облака с починкой легаси-строк: до фикса `media_type` выгружался всегда
+         * 'ANIME', тогда как `category_type` у манги честно равен 'MANGA'. Правило то же, что в
+         * миграции 12.sqm — правим только мангу, признак однозначный.
+         */
+        private fun normalizeRemoteMediaType(mediaType: String, categoryType: String): String =
+            if (mediaType.equals("ANIME", ignoreCase = true) &&
+                categoryType.trim().equals("MANGA", ignoreCase = true)
+            ) "MANGA" else mediaType
     }
 }

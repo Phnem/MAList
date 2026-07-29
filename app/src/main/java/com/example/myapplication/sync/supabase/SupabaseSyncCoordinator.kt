@@ -26,6 +26,7 @@ class SupabaseSyncCoordinator(
     private val supabase: io.github.jan.supabase.SupabaseClient,
     private val collectionImageRestoreCoordinator: CollectionImageRestoreCoordinator,
     private val apiKeySyncRepository: ApiKeySyncRepository,
+    private val progressSyncRepository: ProgressSyncRepository,
 ) {
     private val workManager = WorkManager.getInstance(context)
     private val _isSyncing = MutableStateFlow(false)
@@ -111,6 +112,9 @@ class SupabaseSyncCoordinator(
                 val pull = syncRepository.pullRemoteChanges()
                 // E2EE-синк ключей AI Connect (best-effort, не влияет на статус синка коллекции).
                 apiKeySyncRepository.sync()
+                // Прогресс просмотра/чтения — тоже best-effort и после коллекции: строки прогресса
+                // ссылаются на тайтлы по id, и приезжать им логично уже к подтянутой коллекции.
+                progressSyncRepository.sync()
                 if (includeCloudImageRestore) {
                     collectionImageRestoreCoordinator.restoreFromCloudIfNeeded()
                 }

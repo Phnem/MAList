@@ -62,15 +62,18 @@ import com.kyant.backdrop.effects.vibrancy
  * раскладка чтения, обрезка полей.
  *
  * Материал тот же, что у шапок Details и дока на главном
- * ([com.example.myapplication.ui.shared.components.GlassMenuHeader]), но тона зашиты тёмными:
- * ридер всегда на чёрном фоне независимо от темы приложения, и светлое стекло на странице манги
- * читалось бы как засвет.
+ * ([com.example.myapplication.ui.shared.components.GlassMenuHeader]), но тона не из темы
+ * приложения, а из [ambient] — по яркости страницы под доком (см. [rememberReaderAmbient]).
+ * Зашитые тёмные тона тут не работают: страницы манги почти сплошь белые, и белые иконки на них
+ * пропадали.
  *
  * @param backdrop слой со страницами под доком — его док преломляет.
+ * @param ambient тон стекла и иконок под текущую страницу.
  */
 @Composable
 fun ReaderDock(
     backdrop: Backdrop,
+    ambient: ReaderAmbient,
     mode: MangaReaderMode,
     direction: PageDirection,
     cropBorders: Boolean,
@@ -93,15 +96,16 @@ fun ReaderDock(
                     blur(12f.dp.toPx())
                     lens(8f.dp.toPx(), 40f.dp.toPx())
                 },
-                onDrawSurface = { drawRect(DockTint) },
+                onDrawSurface = { drawRect(ambient.tint) },
             )
-            .border(0.5.dp, DockBorder, shape)
+            .border(0.5.dp, ambient.border, shape)
             .padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         DockButton(
             icon = Icons.AutoMirrored.Filled.List,
             label = if (ru) "Главы" else "Chapters",
+            contentColor = ambient.content,
             onClick = onChapters,
         )
         DockButton(
@@ -109,6 +113,7 @@ fun ReaderDock(
             // куда уезжает страница при свайпе.
             icon = layoutIcon(mode, direction),
             label = layoutLabel(mode, direction, ru),
+            contentColor = ambient.content,
             onClick = {
                 val (nextMode, nextDirection) = nextLayout(mode, direction)
                 onLayoutChange(nextMode, nextDirection)
@@ -117,6 +122,7 @@ fun ReaderDock(
         DockButton(
             icon = Icons.Filled.Crop,
             label = if (ru) "Обрезать поля" else "Crop borders",
+            contentColor = ambient.content,
             active = cropBorders,
             onClick = onToggleCrop,
         )
@@ -127,6 +133,7 @@ fun ReaderDock(
 private fun DockButton(
     icon: ImageVector,
     label: String,
+    contentColor: Color,
     onClick: () -> Unit,
     active: Boolean = false,
 ) {
@@ -145,7 +152,9 @@ private fun DockButton(
         Icon(
             imageVector = icon,
             contentDescription = label,
-            tint = if (active) BrandOrange else Color.White,
+            // Активное состояние остаётся брендовым в обоих тонах: оранжевый достаточно тёмный,
+            // чтобы читаться и на белой странице, и на чёрной.
+            tint = if (active) BrandOrange else contentColor,
             modifier = Modifier.size(22.dp),
         )
     }
@@ -305,7 +314,3 @@ private fun layoutLabel(mode: MangaReaderMode, direction: PageDirection, ru: Boo
 
 private val DockHeight = 44.dp
 private val DockButtonSize = 38.dp
-
-/** Тона зашиты тёмными: под доком всегда страница манги на чёрном, а не фон приложения. */
-private val DockTint = Color.White.copy(alpha = 0.10f)
-private val DockBorder = Color.White.copy(alpha = 0.20f)

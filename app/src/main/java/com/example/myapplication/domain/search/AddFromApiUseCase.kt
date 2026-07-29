@@ -1,5 +1,6 @@
 package com.example.myapplication.domain.search
 
+import com.example.myapplication.data.models.MediaType
 import com.example.myapplication.data.models.RatingScale
 import com.example.myapplication.data.repository.GenreRepository
 import com.example.myapplication.data.repository.ImageStorageRepository
@@ -72,6 +73,9 @@ class AddFromApiUseCase(
             isFavorite = false,
             selectedTags = selectedTags,
             categoryType = result.categoryType,
+            // `categoryType` выдачи поиска уже проштампован разделом, в котором тайтл нашли
+            // (см. ApiService.searchApi) — отсюда и берётся тип записи.
+            mediaType = MediaType.fromCategoryType(result.categoryType),
             comment = "",
             anilistId = result.externalId?.toIntOrNull().takeIf { result.source.equals("AniList", ignoreCase = true) },
             malId = effectiveMalId,

@@ -118,7 +118,7 @@ private fun isRuLocale() = Locale.getDefault().language == "ru"
 private data class SeekBurst(val forward: Boolean, val steps: Int)
 
 /**
- * Кастомный скин контролов поверх видео: плоские доки ([ambientDockSurface]) + белая полоса
+ * Кастомный скин контролов поверх видео: матовые доки ([ambientDockSurface]) + белая полоса
  * с оранжевым бегунком. Автоскрытие 3.5 c, тап по видео — показать/скрыть, дабл-тап по краю —
  * перемотка с накоплением (2 тапа = 10 c, 3 = 20 c, …), замок — заблокировать жесты.
  */
@@ -282,7 +282,7 @@ fun PlayerControlsOverlay(
                     contentDescription = if (isRuLocale()) "Разблокировать" else "Unlock",
                     tint = ambient.topContent,
                     onClick = { locked = false; showUnlockHint = false; controlsVisible = true },
-                    modifier = Modifier.ambientDockSurface(Capsule, ambient.topTint),
+                    modifier = Modifier.ambientDockSurface(Capsule, ambient.topTint, ambient.topBackdrop),
                 )
             }
             return@Box
@@ -303,6 +303,7 @@ fun PlayerControlsOverlay(
         if (skipVisible) {
             SkipButton(
                 tint = ambient.bottomTint,
+                backdrop = ambient.bottomBackdrop,
                 content = ambient.bottomContent,
                 onClick = onSkip,
                 modifier = Modifier
@@ -351,7 +352,9 @@ fun PlayerControlsOverlay(
                 // Левая пилюля в weight-контейнере → правая пилюля всегда прижата к углу.
                 Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                     Row(
-                        modifier = Modifier.ambientDockSurface(Capsule, ambient.topTint).padding(start = 6.dp, end = 16.dp),
+                        modifier = Modifier
+                            .ambientDockSurface(Capsule, ambient.topTint, ambient.topBackdrop)
+                            .padding(start = 6.dp, end = 16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         TransportIcon(
@@ -375,7 +378,9 @@ fun PlayerControlsOverlay(
                 Spacer(Modifier.width(10.dp))
 
                 Row(
-                    modifier = Modifier.ambientDockSurface(Capsule, ambient.topTint).padding(horizontal = 4.dp),
+                    modifier = Modifier
+                        .ambientDockSurface(Capsule, ambient.topTint, ambient.topBackdrop)
+                        .padding(horizontal = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     DockIconButton(
@@ -448,7 +453,9 @@ fun PlayerControlsOverlay(
                         )
                         Spacer(Modifier.weight(1f))
                         Row(
-                            modifier = Modifier.ambientDockSurface(Capsule, ambient.bottomTint).padding(horizontal = 4.dp),
+                            modifier = Modifier
+                                .ambientDockSurface(Capsule, ambient.bottomTint, ambient.bottomBackdrop)
+                                .padding(horizontal = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             DockIconButton(
@@ -747,13 +754,14 @@ private fun SeekRipple(burst: SeekBurst, modifier: Modifier = Modifier) {
 @Composable
 private fun SkipButton(
     tint: Color,
+    backdrop: DockBackdrop?,
     content: Color,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
         modifier = modifier
-            .ambientDockSurface(Capsule, tint)
+            .ambientDockSurface(Capsule, tint, backdrop)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,

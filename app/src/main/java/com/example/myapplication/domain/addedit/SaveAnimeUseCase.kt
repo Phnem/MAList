@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import com.example.myapplication.data.local.AnimeLocalDataSource
 import com.example.myapplication.data.local.DevPreferencesKeys
 import com.example.myapplication.data.models.Anime
+import com.example.myapplication.data.models.MediaType
 import com.example.myapplication.data.repository.ImageStorageRepository
 import com.example.myapplication.domain.IdGenerator
 import com.example.myapplication.domain.enrichment.CollectionEnrichmentCoordinator
@@ -38,6 +39,12 @@ class SaveAnimeUseCase(
             isFavorite = params.isFavorite,
             tags = params.selectedTags.toImmutableList(),
             categoryType = params.categoryType,
+            // Тип записи решает, что откроется в Details — главы или серии. Раньше он тут не
+            // проставлялся вовсе и всегда оставался ANIME по умолчанию Anime(), поэтому манга из
+            // поиска попадала в коллекцию как аниме.
+            mediaType = params.mediaType
+                ?: MediaType.fromCategoryType(params.categoryType)
+                ?: MediaType.ANIME,
             comment = params.comment,
             anilistId = params.anilistId,
             malId = params.malId,

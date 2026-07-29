@@ -49,6 +49,7 @@ val supabaseModule = org.koin.dsl.module {
             supabase = get(),
             collectionImageRestoreCoordinator = get(),
             apiKeySyncRepository = get(),
+            progressSyncRepository = get(),
         )
     }
 
@@ -62,6 +63,9 @@ val supabaseModule = org.koin.dsl.module {
     single { SyncPassphraseStore(androidContext()) }
     single { SyncPassphraseManager(get(), get(), get(), get()) }
     single { ApiKeySyncRepository(get(), get(), get(), get(), get()) }
+
+    // Прогресс просмотра/чтения: DataStore ↔ Supabase.
+    single { ProgressSyncRepository(androidContext(), get(), get(), get(), get(), get()) }
 }
 
 class AuthRepository(

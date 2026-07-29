@@ -26,6 +26,7 @@ class VetroApiService(
     private val kitsu: KitsuRemoteDataSource,
     private val anilibria: AnilibriaRemoteDataSource,
     private val remanga: com.example.myapplication.network.remanga.RemangaRemoteDataSource,
+    private val mangaDex: com.example.myapplication.network.mangadex.MangaDexRemoteDataSource,
     private val heavyRate: TokenBucketRateLimiter,
     private val searchRate: TokenBucketRateLimiter,
     private val burstRate: TokenBucketRateLimiter
@@ -164,12 +165,18 @@ class VetroApiService(
             searchRate.acquire()
             val q = query.trim()
             if (q.isEmpty()) return@runCatching emptyList<ApiSearchResult>()
-            when (contentType) {
+            val results = when (contentType) {
                 AppContentType.ANIME -> searchAnimeApis(q, language)
                 AppContentType.MANGA -> searchMangaApis(q, language)
                 AppContentType.MOVIE -> filterAndRankByQuery(q, searchTmdbMovie(q))
                 AppContentType.SERIES -> filterAndRankByQuery(q, searchTmdbTv(q))
             }
+            // Что найдено в разделе «Манга» — манга, и так по каждому разделу. Тип берём из
+            // раздела, а не из ответа источника: Shikimori проставляет "ANIME" и результатам
+            // /api/mangas, из-за чего добавленная манга попадала в коллекцию как аниме и
+            // открывала меню серий вместо глав. См. [AppContentType.categoryTypeName].
+            val categoryType = contentType.categoryTypeName()
+            results.map { if (it.categoryType == categoryType) it else it.copy(categoryType = categoryType) }
         }
     }
 
@@ -530,6 +537,12 @@ class VetroApiService(
                 // Jikan знает статус и план серий, но не «сколько вышло сейчас».
                 isOngoing = obj["airing"]?.jsonPrimitive?.booleanOrNull,
                 totalEpisodes = episodes.takeIf { it > 0 },
+                statusRaw = obj["status"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() },
+                format = type.takeIf { it.isNotBlank() },
+                sourceMaterial = obj.jikanSourceMaterial(),
+                studio = obj.jikanStudio(),
+                season = obj.jikanSeason(),
+                seasonYear = obj["year"]?.jsonPrimitive?.intOrNull,
             )
         }
     }.getOrElse { emptyList() }
@@ -560,12 +573,17 @@ class VetroApiService(
         val remangaRes = remanga.searchManga(query, 6)
         remangaRes.forEach { addIfNew(it) }
 
-        // 2. Shikimori (Fallback 1)
+        // 2. MangaDex — второй источник, у которого главы реально читаются в приложении
+        //    (Shikimori и AniList ниже дают только карточку тайтла). Свой лимит он держит сам.
+        val mangaDexRes = mangaDex.searchManga(query, 20, language)
+        filterAndRankByQuery(query, mangaDexRes).take(6).forEach { addIfNew(it) }
+
+        // 3. Shikimori (Fallback 1)
         val shikiRes = shikimori.searchManga(query, 30, language).getOrNull() ?: emptyList()
         val shikiRanked = filterAndRankByQuery(query, shikiRes).take(3)
         shikiRanked.forEach { addIfNew(it) }
-        
-        // 3. AniList (Fallback 2)
+
+        // 4. AniList (Fallback 2)
         val aniRes = aniList.searchAnime(query, 30, language, isManga = true).getOrNull() ?: emptyList()
         val aniRanked = filterAndRankByQuery(query, aniRes).take(3)
         aniRanked.forEach { addIfNew(it) }
@@ -666,8 +684,30 @@ class VetroApiService(
                 ?: obj["mal_id"]?.jsonPrimitive?.content,
             isOngoing = obj["airing"]?.jsonPrimitive?.booleanOrNull,
             totalEpisodes = episodes.takeIf { it > 0 },
+            statusRaw = obj["status"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() },
+            format = type.takeIf { it.isNotBlank() },
+            sourceMaterial = obj.jikanSourceMaterial(),
+            studio = obj.jikanStudio(),
+            season = obj.jikanSeason(),
+            seasonYear = obj["year"]?.jsonPrimitive?.intOrNull,
         )
     }.getOrNull()
+
+    /** Jikan пишет первоисточник человекочитаемо («Light novel») — приводим к кодам AniList. */
+    private fun kotlinx.serialization.json.JsonObject.jikanSourceMaterial(): String? =
+        this["source"]?.jsonPrimitive?.content
+            ?.takeIf { it.isNotBlank() && !it.equals("Unknown", ignoreCase = true) }
+            ?.trim()
+            ?.uppercase()
+            ?.replace(' ', '_')
+            ?.replace('-', '_')
+
+    private fun kotlinx.serialization.json.JsonObject.jikanStudio(): String? =
+        this["studios"]?.jsonArray
+            ?.firstNotNullOfOrNull { it.jsonObject["name"]?.jsonPrimitive?.content?.takeIf(String::isNotBlank) }
+
+    private fun kotlinx.serialization.json.JsonObject.jikanSeason(): String? =
+        this["season"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }?.uppercase()
 
     private fun parseJikanTitles(obj: kotlinx.serialization.json.JsonObject): EnrichedTitles? {
         val titleJp = obj["title"]?.jsonPrimitive?.content
