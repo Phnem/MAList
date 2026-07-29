@@ -227,6 +227,42 @@ class MangaReadingStore(
     }
 
     /**
+     * Отметить прочитанными сразу несколько глав — главы до самой дальней прочитанной
+     * (`chaptersToMarkRead`).
+     *
+     * Одним обновлением снимка, а не циклом по [setRead]: на тайтле в девяносто глав это была бы
+     * сотня записей в DataStore подряд, каждая со своей сериализацией и своим коллектором.
+     *
+     * Уже существующие записи не трогаются: у главы, которую пользователь читал, есть своя
+     * страница и время, и затирать их пересчитанными «с конца» нельзя.
+     */
+    suspend fun markReadBulk(animeId: String, chapterKeys: Collection<String>) {
+        if (chapterKeys.isEmpty()) return
+        updateSnapshot(animeId) { snapshot ->
+            val current = snapshot.progress().toMutableMap()
+            // Время последнего чтения тайтла, а не «сейчас». По нему считается признак «вышли
+            // новые главы»: проставь мы текущую метку, сегодняшняя дата оказалась бы позже даты
+            // выхода любой главы, и метка новых глав погасла бы у всей коллекции разом.
+            val stamp = current.values
+                .filter { it.read }
+                .maxOfOrNull { it.updatedAt }
+                ?: System.currentTimeMillis()
+            for (key in chapterKeys) {
+                val existing = current[key]
+                if (existing?.read == true) continue
+                val count = existing?.pageCount ?: 0
+                current[key] = ChapterReadingProgress(
+                    pageIndex = (count - 1).coerceAtLeast(0),
+                    pageCount = count,
+                    read = true,
+                    updatedAt = existing?.updatedAt ?: stamp,
+                )
+            }
+            snapshot.withProgress(current)
+        }
+    }
+
+    /**
      * Разовый снимок прогресса по списку тайтлов — для push в облако. Ключ хранения — хэш от
      * animeId, поэтому список id приходит снаружи (из коллекции): по снимку Preferences тайтлы
      * не перечислить. Настройки ридера (режим/направление/обрезка) в синк не едут — они про

@@ -7,6 +7,11 @@ import com.example.myapplication.manga.data.ChapterReadingProgress
  * вышли ли новые. Та же роль, что у прогресса серий у аниме, только единица счёта — глава.
  */
 data class MangaReadingSummary(
+    /**
+     * Длина прочитанного отрезка оглавления, а не число отметок: прочитана 16-я глава — значит,
+     * прочитаны и все до неё. Отдельными отметками помечена бывает пара глав из середины, и
+     * счёт по ним показывал бы «1 / 92» человеку, который дочитал до шестнадцатой.
+     */
     val readChapters: Int,
     /**
      * Сколько глав в оглавлении источника. `null` = оглавление неизвестно (тайтл не открывали,
@@ -44,10 +49,58 @@ fun chaptersForLanguage(
     ?: chapters
 
 /**
+ * Граница прочитанного — номер самой дальней главы с отметкой «прочитано».
+ *
+ * По номеру, а не по позиции в списке: порядок глав задаёт источник, и завязываться на него значит
+ * получить другой ответ, стоит списку прийти перевёрнутым. `null` = прочитанных нумерованных глав
+ * нет (или не прочитано вообще ничего).
+ */
+private fun readingFrontier(
+    chapters: List<MangaChapter>,
+    readKeys: Set<String>,
+): Double? = chapters
+    .filter { it.key in readKeys }
+    .mapNotNull { it.number }
+    .maxOrNull()
+
+/**
+ * Лежит ли глава внутри прочитанного отрезка.
+ *
+ * Ненумерованные главы (пролог, экстра) в отрезок не попадают: их место в оглавлении определяется
+ * датой, а не номером, и «всё до неё» для них не определено — такие считаются прочитанными только
+ * по собственной отметке.
+ */
+private fun MangaChapter.isWithinFrontier(frontier: Double?, readKeys: Set<String>): Boolean {
+    val n = number ?: return key in readKeys
+    return frontier != null && n <= frontier
+}
+
+/**
+ * Ключи глав, которые прочитаны по границе, но отметки не имеют.
+ *
+ * Нужны, чтобы список глав не расходился с числом на карточке: карточка считает по отрезку, а
+ * галочки стоят только там, где пользователь дочитал до последней страницы. Пустой список = чинить
+ * нечего, писать в хранилище не нужно.
+ *
+ * @param chapters оглавление, уже суженное до нужного языка ([chaptersForLanguage]).
+ */
+fun chaptersToMarkRead(
+    chapters: List<MangaChapter>,
+    progress: Map<String, ChapterReadingProgress>,
+): List<String> {
+    val readKeys = progress.filterValues { it.read }.keys
+    if (chapters.isEmpty() || readKeys.isEmpty()) return emptyList()
+    val frontier = readingFrontier(chapters, readKeys) ?: return emptyList()
+    return chapters
+        .filter { it.key !in readKeys && it.isWithinFrontier(frontier, readKeys) }
+        .map { it.key }
+}
+
+/**
  * Прогресс чтения по главам.
  *
- * Прочитанной считается только глава с липкой отметкой [ChapterReadingProgress.read] — открытая,
- * но не дочитанная в счёт не идёт.
+ * Прочитанным считается отрезок оглавления до самой дальней главы с липкой отметкой
+ * [ChapterReadingProgress.read] включительно. Открытая, но не дочитанная глава границу не двигает.
  *
  * **Новыми** считаются главы, опубликованные ПОЗЖЕ последнего чтения этого тайтла и ещё не
  * прочитанные. Просто непрочитанная глава новой не является: иначе метка горела бы на каждом
@@ -72,7 +125,8 @@ fun summarizeMangaReading(
     }
     // Считаем по оглавлению, а не по отметкам: после смены источника или языка в прогрессе
     // остаются ключи глав, которых в текущем списке нет, и счётчик уехал бы за знаменатель.
-    val readInToc = chapters.count { it.key in readKeys }
+    val frontier = readingFrontier(chapters, readKeys)
+    val readInToc = chapters.count { it.isWithinFrontier(frontier, readKeys) }
     val lastReadAt = progress
         .filterValues { it.read }
         .values

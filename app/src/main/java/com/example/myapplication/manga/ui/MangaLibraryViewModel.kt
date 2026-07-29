@@ -13,6 +13,7 @@ import com.example.myapplication.manga.data.MangaReadingStore
 import com.example.myapplication.manga.domain.MangaChapter
 import com.example.myapplication.manga.domain.MangaItem
 import com.example.myapplication.manga.domain.chaptersForLanguage
+import com.example.myapplication.manga.domain.chaptersToMarkRead
 import com.example.myapplication.manga.download.MangaDownloadWorker
 import com.example.myapplication.manga.source.MangaSourceEngine
 import com.example.myapplication.manga.source.MangaSourceResults
@@ -227,6 +228,11 @@ class MangaLibraryViewModel(
                 val current = _state.value
                 if (current is MangaLibraryUiState.Chapters) {
                     _state.value = current.copy(progress = progress)
+                    // Прочитал 16-ю — значит прочитал и все до неё. Догоняем отметки, чтобы список
+                    // глав не расходился со счётом на карточке. Само себя останавливает: после
+                    // записи поток отдаёт уже полный прогресс, и чинить становится нечего.
+                    val missing = chaptersToMarkRead(current.chapters, progress)
+                    if (missing.isNotEmpty()) readingStore.markReadBulk(animeId, missing)
                 }
             }
         }
