@@ -123,7 +123,6 @@ val appModule = module {
             downloadStore = get(),
         )
     }
-    single { com.example.myapplication.manga.domain.DetectReaderMode(client = get()) }
     single {
         com.example.myapplication.manga.domain.MangaPagePrefetcher(
             context = androidContext(),

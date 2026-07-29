@@ -152,7 +152,6 @@ val viewModelModule = module {
             initialChapterKey = chapterKey,
             pageResolver = get(),
             readingStore = get(),
-            detectReaderMode = get(),
             prefetcher = get(),
         )
     }

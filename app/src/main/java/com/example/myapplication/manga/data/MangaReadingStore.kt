@@ -146,14 +146,6 @@ class MangaReadingStore(
             .distinctUntilChanged()
     }
 
-    /**
-     * Выбран ли режим у ЭТОГО тайтла. По [readerModeFlow] это не видно: он уже подмешивает дефолт,
-     * и «пользователь выбрал Paged» неотличимо от «никто ничего не выбирал». Нужно автодетекту —
-     * он имеет право высказаться только там, где выбора ещё не было.
-     */
-    suspend fun hasExplicitMode(animeId: String): Boolean =
-        decodeSnapshot(dataStore.data.first()[progressKey(animeId)]).mode != null
-
     suspend fun setReaderMode(animeId: String, mode: MangaReaderMode) {
         updateSnapshot(animeId) { it.copy(mode = mode) }
     }
@@ -326,10 +318,18 @@ class MangaReadingStore(
         }
     }
 
+    /**
+     * Дефолт режима: вертикальная лента.
+     *
+     * Раньше здесь был `Paged` плюс автодетект по пропорциям первой страницы. Автодетект убран
+     * (он решал за читателя и иногда решал не так), а дефолтом стал тот режим, которым читают:
+     * вертикальный свайп. Старый глобальный ключ по-прежнему уважается — тайтлы, открытые до
+     * разделения настройки на per-title, не должны перескочить на другой режим.
+     */
     private fun legacyMode(preferences: Preferences): MangaReaderMode =
         when (preferences[READER_MODE_KEY]) {
-            MangaReaderMode.Webtoon.name -> MangaReaderMode.Webtoon
-            else -> MangaReaderMode.Paged
+            MangaReaderMode.Paged.name -> MangaReaderMode.Paged
+            else -> MangaReaderMode.Webtoon
         }
 
     private fun decodeSnapshot(raw: String?): ReadingSnapshot {

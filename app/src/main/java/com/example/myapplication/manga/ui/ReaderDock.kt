@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapplication.manga.data.ChapterReadingProgress
 import com.example.myapplication.manga.data.MangaReaderMode
+import com.example.myapplication.manga.domain.nextReaderLayout
 import com.example.myapplication.manga.data.PageDirection
 import com.example.myapplication.manga.domain.MangaChapter
 import com.example.myapplication.ui.shared.components.GrabberReservedTop
@@ -115,7 +116,7 @@ fun ReaderDock(
             label = layoutLabel(mode, direction, ru),
             contentColor = ambient.content,
             onClick = {
-                val (nextMode, nextDirection) = nextLayout(mode, direction)
+                val (nextMode, nextDirection) = nextReaderLayout(mode, direction)
                 onLayoutChange(nextMode, nextDirection)
             },
         )
@@ -284,20 +285,6 @@ private fun ChapterSheetRow(
             )
         }
     }
-}
-
-/**
- * Цикл одной кнопки: Вебтун → Классика (справа налево) → Комикс (слева направо) → Вебтун.
- * Из «комикса» в вебтун уходим, не сбрасывая направление: в ленте оно всё равно не видно,
- * а лишняя запись зря пересобрала бы состояние.
- */
-private fun nextLayout(
-    mode: MangaReaderMode,
-    direction: PageDirection,
-): Pair<MangaReaderMode, PageDirection> = when {
-    mode == MangaReaderMode.Webtoon -> MangaReaderMode.Paged to PageDirection.Rtl
-    direction == PageDirection.Rtl -> MangaReaderMode.Paged to PageDirection.Ltr
-    else -> MangaReaderMode.Webtoon to direction
 }
 
 private fun layoutIcon(mode: MangaReaderMode, direction: PageDirection): ImageVector = when {

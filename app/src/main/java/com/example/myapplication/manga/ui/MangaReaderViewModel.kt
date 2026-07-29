@@ -6,7 +6,6 @@ import com.example.myapplication.manga.data.ChapterReadingProgress
 import com.example.myapplication.manga.data.MangaReaderMode
 import com.example.myapplication.manga.data.MangaReadingStore
 import com.example.myapplication.manga.data.PageDirection
-import com.example.myapplication.manga.domain.DetectReaderMode
 import com.example.myapplication.manga.domain.MangaChapter
 import com.example.myapplication.manga.domain.MangaPage
 import com.example.myapplication.manga.domain.MangaPagePrefetcher
@@ -50,7 +49,6 @@ class MangaReaderViewModel(
     initialChapterKey: String,
     private val pageResolver: MangaPageResolver,
     private val readingStore: MangaReadingStore,
-    private val detectReaderMode: DetectReaderMode,
     private val prefetcher: MangaPagePrefetcher,
 ) : ViewModel() {
 
@@ -68,11 +66,10 @@ class MangaReaderViewModel(
     /** Последняя записанная страница: по ней отличаем смену страницы от докрутки внутри неё. */
     private var lastSavedPage: Int = -1
 
-    /** Автодетект — разовое событие на сессию ридера, а не проверка при каждой смене главы. */
-    private var detectAttempted = false
-
     val readerMode: StateFlow<MangaReaderMode> = readingStore.readerModeFlow(animeId)
-        .stateIn(viewModelScope, SharingStarted.Eagerly, MangaReaderMode.Paged)
+        // Стартовое значение до первой эмиссии потока — тот же дефолт, что в хранилище:
+        // вертикальная лента. Разойдись они, ридер моргал бы постраничным режимом на открытии.
+        .stateIn(viewModelScope, SharingStarted.Eagerly, MangaReaderMode.Webtoon)
 
     val pageDirection: StateFlow<PageDirection> = readingStore.directionFlow(animeId)
         .stateIn(viewModelScope, SharingStarted.Eagerly, PageDirection.Rtl)
@@ -116,7 +113,6 @@ class MangaReaderViewModel(
                 hasPrevious = currentIndex > 0,
                 hasNext = currentIndex < chapters.lastIndex,
             )
-            autoDetectLayout(pages)
             // Первый прогрев — сразу после открытия: ждать свайпа значит показать спиннер на нём.
             prefetch(pages, startPage)
         }
@@ -134,27 +130,6 @@ class MangaReaderViewModel(
                 fromPage = fromPage,
                 nextChapter = chapters.getOrNull(currentIndex + 1),
             )
-        }
-    }
-
-    /**
-     * Подобрать режим по пропорциям страницы — но только тайтлу, которому его ещё не выбирали:
-     * ручной выбор автодетект не перетирает.
-     *
-     * Отдельной корутиной, а не внутри [load]: глава уже показана, и переключение на вебтун
-     * догоняет её через секунду-другую вместо того, чтобы задерживать открытие.
-     */
-    private fun autoDetectLayout(pages: List<MangaPage>) {
-        if (detectAttempted) return
-        detectAttempted = true
-        viewModelScope.launch {
-            if (readingStore.hasExplicitMode(animeId)) return@launch
-            // Результат пишем даже когда он совпал с дефолтом: так выбор становится явным и
-            // детект больше не гоняется при каждом открытии тайтла.
-            val detected = detectReaderMode(pages) ?: return@launch
-            if (!readingStore.hasExplicitMode(animeId)) {
-                readingStore.setReaderMode(animeId, detected)
-            }
         }
     }
 
