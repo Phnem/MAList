@@ -135,6 +135,13 @@ fun PlayerControlsOverlay(
     hasPrev: Boolean,
     hasNext: Boolean,
     /**
+     * Чем переключать серию. Локальный плеер их не передаёт: у него серии лежат в плейлисте
+     * ExoPlayer, и переключение — это шаг по плейлисту. У стримингового плеера плейлиста нет,
+     * соседняя серия резолвится снаружи, поэтому он подставляет свои обработчики.
+     */
+    onPrev: (() -> Unit)? = null,
+    onNext: (() -> Unit)? = null,
+    /**
      * Состояние зума видео. Поднято в хост, потому что жест ловится здесь (оверлей поверх видео),
      * а трансформация применяется там — к самой поверхности плеера.
      */
@@ -437,7 +444,9 @@ fun PlayerControlsOverlay(
             exit = fadeOut(MotionTokens.dialogExit()),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(28.dp)) {
-                TransportIcon(Icons.Rounded.SkipPrevious, 56.dp, 34.dp, enabled = hasPrev) { player.seekToPreviousMediaItem() }
+                TransportIcon(Icons.Rounded.SkipPrevious, 56.dp, 34.dp, enabled = hasPrev) {
+                    if (onPrev != null) onPrev() else player.seekToPreviousMediaItem()
+                }
                 Box(Modifier.size(72.dp), contentAlignment = Alignment.Center) {
                     if (isBuffering) {
                         CircularProgressIndicator(color = Color.White, strokeWidth = 3.dp, modifier = Modifier.size(46.dp))
@@ -448,7 +457,9 @@ fun PlayerControlsOverlay(
                         ) { if (isPlaying) player.pause() else player.play() }
                     }
                 }
-                TransportIcon(Icons.Rounded.SkipNext, 56.dp, 34.dp, enabled = hasNext) { player.seekToNextMediaItem() }
+                TransportIcon(Icons.Rounded.SkipNext, 56.dp, 34.dp, enabled = hasNext) {
+                    if (onNext != null) onNext() else player.seekToNextMediaItem()
+                }
             }
         }
 

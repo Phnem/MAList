@@ -17,11 +17,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -47,6 +49,8 @@ import com.example.myapplication.data.models.Anime
 import com.example.myapplication.domain.seasons.SeasonInfo
 import com.example.myapplication.localplayer.ui.LocalPlayerViewModel
 import com.example.myapplication.media.MediaGateway
+import com.example.myapplication.media.episode.EpisodeRange
+import com.example.myapplication.media.episode.EpisodeStreamResolver
 import com.example.myapplication.media.player.HeaderResolvingPlayerFactory
 import com.example.myapplication.media.source.flattenVideosWithSource
 import com.example.myapplication.media.player.VetroVideoCache
@@ -108,23 +112,39 @@ class StreamPlayerActivity : ComponentActivity() {
         val malId = intent.getIntExtra(EXTRA_MAL_ID, -1).takeIf { it > 0 }
         val anilistId = intent.getIntExtra(EXTRA_ANILIST_ID, -1).takeIf { it > 0 }
         val season = intent.getIntExtra(EXTRA_SEASON, 1).coerceAtLeast(1)
-        val episode = intent.getIntExtra(EXTRA_EPISODE, 1).coerceAtLeast(1)
+        val initialEpisode = intent.getIntExtra(EXTRA_EPISODE, 1).coerceAtLeast(1)
         val seasonInfo = intent.getStringExtra(EXTRA_SEASON_JSON)?.let {
             runCatching { json.decodeFromString(SeasonInfo.serializer(), it) }.getOrNull()
         }
+        // Сколько серий в сезоне доступно; null = не разрешено. Не то же самое, что «серий нет».
+        val availableEpisodes = seasonInfo?.episodes
+        val episodeResolver = episodeResolver(
+            animeId = animeId,
+            animeTitle = animeTitle,
+            animeTitleEn = animeTitleEn,
+            animeTitleRu = animeTitleRu,
+            malId = malId,
+            anilistId = anilistId,
+            seasonInfo = seasonInfo,
+        )
 
         activeAnimeId = animeId
         activeSeason = season
-        activeEpisode = episode
+        activeEpisode = initialEpisode
 
         setContent {
             OneUiTheme {
                 val scope = rememberCoroutineScope()
+                // Серия — наблюдаемое состояние, а не прочитанное из интента один раз: её меняют
+                // кнопки «предыдущая»/«следующая», и вместе с ней обязаны переехать прогресс,
+                // заголовок, сегменты автоскипа и резолв запасных ссылок.
+                var episode by remember { mutableIntStateOf(initialEpisode) }
                 val autoSkip by settings.data
                     .map { it[LocalPlayerViewModel.AUTO_SKIP_KEY] ?: false }
                     .collectAsState(initial = false)
-                val stored by playbackStore.episodeFlow(animeId, season, episode)
-                    .collectAsState(initial = null)
+                val stored by remember(animeId, season, episode) {
+                    playbackStore.episodeFlow(animeId, season, episode)
+                }.collectAsState(initial = null)
                 var candidates by remember { mutableStateOf(initialVideos) }
                 var currentIndex by remember { mutableIntStateOf(0) }
                 var current by remember { mutableStateOf(video) }
@@ -136,6 +156,15 @@ class StreamPlayerActivity : ComponentActivity() {
                 var manualSwitchFallback by remember { mutableStateOf<VetroVideo?>(null) }
                 var failedRenditionUrls by remember { mutableStateOf<Set<String>>(emptySet()) }
                 var landscape by rememberSaveable { mutableStateOf(true) }
+                // Номер серии, которая сейчас резолвится. Он же — защёлка от гонки: пока не null,
+                // повторные нажатия ничего не запускают.
+                var switchingTo by remember { mutableStateOf<Int?>(null) }
+                var failedSwitchTarget by remember { mutableStateOf<Int?>(null) }
+                var switchError by remember { mutableStateOf<String?>(null) }
+
+                // Прогресс пишется под текущую серию и после переключения — тоже (onStop читает
+                // именно эти поля).
+                LaunchedEffect(episode) { activeEpisode = episode }
 
                 BackHandler { finish() }
                 DisposableEffect(landscape) {
@@ -181,25 +210,23 @@ class StreamPlayerActivity : ComponentActivity() {
                     retrying = true
                     playbackError = null
                     resumePosition = player.currentPosition.coerceAtLeast(0L)
+                    val refreshingEpisode = episode
                     scope.launch {
                         val refreshed = resolveReplacement(
-                            animeId = animeId,
-                            animeTitle = animeTitle,
-                            animeTitleEn = animeTitleEn,
-                            animeTitleRu = animeTitleRu,
-                            malId = malId,
-                            anilistId = anilistId,
-                            episode = episode,
-                            seasonInfo = seasonInfo,
+                            resolver = episodeResolver,
+                            episode = refreshingEpisode,
                             previous = current,
                             excludedUrls = candidates.mapTo(mutableSetOf()) { it.url },
                         )
                         retrying = false
+                        // Пока обновляли ссылку, пользователь мог уйти на соседнюю серию: результат
+                        // относится к прошлой и подменять им уже играющую новую нельзя.
+                        if (episode != refreshingEpisode) return@launch
                         if (refreshed != null) {
                             VetroVideoCache.put(
                                 VetroVideoCache.key(
                                     animeId,
-                                    episode,
+                                    refreshingEpisode,
                                     "best",
                                     refreshed.label,
                                 ),
@@ -212,6 +239,62 @@ class StreamPlayerActivity : ComponentActivity() {
                         } else {
                             playbackError = "Источник больше не отвечает. Попробуйте ещё раз."
                         }
+                    }
+                }
+
+                /**
+                 * Переключение на соседнюю серию (FR-2). Текущее воспроизведение не трогаем, пока
+                 * новая ссылка не готова: плеер пересобирается только по факту успешного резолва,
+                 * а неудача оставляет серию играть и показывает сообщение.
+                 */
+                fun switchToEpisode(target: Int?) {
+                    if (target == null || target == episode || switchingTo != null) return
+                    switchingTo = target
+                    switchError = null
+                    failedSwitchTarget = null
+                    val leavingEpisode = episode
+                    val leavingPosition = player.currentPosition.coerceAtLeast(0L)
+                    val leavingDuration = player.duration
+                    val preferredResolution = current.resolution ?: DEFAULT_RESOLUTION
+                    scope.launch {
+                        // Прогресс уходящей серии дописываем ДО подмены: плеер будет пересоздан под
+                        // новую ссылку, и его позиция пропадёт вместе с ним.
+                        if (leavingDuration > 0L) {
+                            playbackStore.saveProgress(
+                                animeId = animeId,
+                                season = season,
+                                episode = leavingEpisode,
+                                positionMs = leavingPosition,
+                                durationMs = leavingDuration,
+                            )
+                        }
+                        val resolved = runCatching {
+                            episodeResolver.resolve(target, preferredResolution)
+                        }.getOrDefault(emptyList())
+                        val best = resolved.firstOrNull()
+                        if (best == null) {
+                            // «Ссылку достать не удалось» — не то же самое, что «серии нет»:
+                            // кнопка останется активной, попытку можно повторить.
+                            switchError = "Не удалось получить ссылку на серию $target"
+                            failedSwitchTarget = target
+                            switchingTo = null
+                            return@launch
+                        }
+                        VetroVideoCache.put(
+                            VetroVideoCache.key(animeId, target, "best", best.label),
+                            best,
+                        )
+                        candidates = resolved
+                        currentIndex = 0
+                        failedRenditionUrls = emptySet()
+                        manualSwitchFallback = null
+                        automaticRetries = 0
+                        playbackError = null
+                        resumePosition = 0L
+                        storedResumeApplied = false
+                        episode = target
+                        current = best.copy(resolvedAt = System.currentTimeMillis())
+                        switchingTo = null
                     }
                 }
 
@@ -335,9 +418,22 @@ class StreamPlayerActivity : ComponentActivity() {
                         onEnterPip = ::enterPip,
                         onRotate = { landscape = !landscape },
                         onBack = { finish() },
+                        hasPrevEpisode = EpisodeRange.hasPrevious(episode) && switchingTo == null,
+                        hasNextEpisode = EpisodeRange.hasNext(episode, availableEpisodes) &&
+                            switchingTo == null,
+                        onPrevEpisode = { switchToEpisode(EpisodeRange.previousOf(episode)) },
+                        onNextEpisode = {
+                            switchToEpisode(EpisodeRange.nextOf(episode, availableEpisodes))
+                        },
                     )
 
-                    if (retrying || playbackError != null) {
+                    val busyText = when {
+                        retrying -> "Обновляем ссылку на поток…"
+                        switchingTo != null -> "Загружаем серию $switchingTo…"
+                        else -> null
+                    }
+                    val errorText = playbackError ?: switchError
+                    if (busyText != null || errorText != null) {
                         Column(
                             modifier = Modifier
                                 .align(Alignment.Center)
@@ -347,22 +443,39 @@ class StreamPlayerActivity : ComponentActivity() {
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
                             Text(
-                                text = if (retrying) {
-                                    "Обновляем ссылку на поток…"
-                                } else {
-                                    playbackError.orEmpty()
-                                },
+                                text = busyText ?: errorText.orEmpty(),
                                 color = Color.White,
                                 style = MaterialTheme.typography.bodyLarge,
                             )
-                            if (!retrying) {
-                                Button(
-                                    onClick = {
-                                        automaticRetries = 0
-                                        refreshStream()
+                            if (busyText == null) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Button(
+                                        onClick = {
+                                            val retryTarget = failedSwitchTarget
+                                            if (retryTarget != null) {
+                                                switchError = null
+                                                failedSwitchTarget = null
+                                                switchToEpisode(retryTarget)
+                                            } else {
+                                                automaticRetries = 0
+                                                refreshStream()
+                                            }
+                                        }
+                                    ) {
+                                        Text("Повторить")
                                     }
-                                ) {
-                                    Text("Повторить")
+                                    // Ошибка переключения не должна запирать экран: текущая серия
+                                    // играет, сообщение можно просто закрыть.
+                                    if (failedSwitchTarget != null) {
+                                        TextButton(
+                                            onClick = {
+                                                switchError = null
+                                                failedSwitchTarget = null
+                                            }
+                                        ) {
+                                            Text("Закрыть", color = Color.White)
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -412,18 +525,19 @@ class StreamPlayerActivity : ComponentActivity() {
         }
     }
 
-    private suspend fun resolveReplacement(
+    /**
+     * Резолв ссылок для произвольной серии этого сезона. Один и тот же путь обслуживает и
+     * пересборку протухшей ссылки текущей серии, и переход на соседнюю (TICKET-03).
+     */
+    private fun episodeResolver(
         animeId: String,
         animeTitle: String,
         animeTitleEn: String?,
         animeTitleRu: String?,
         malId: Int?,
         anilistId: Int?,
-        episode: Int,
         seasonInfo: SeasonInfo?,
-        previous: VetroVideo,
-        excludedUrls: Set<String>,
-    ): VetroVideo? {
+    ): EpisodeStreamResolver = EpisodeStreamResolver { episode, preferredResolution ->
         val anime = Anime(
             id = animeId,
             title = seasonInfo?.title?.takeIf { it.isNotBlank() } ?: animeTitle,
@@ -438,14 +552,23 @@ class StreamPlayerActivity : ComponentActivity() {
             malId = seasonInfo?.malId ?: malId,
         )
         val videos = flattenVideosWithSource(mediaGateway.resolveHosters(anime, episode, seasonInfo))
-        val preferredResolution = previous.resolution ?: 1080
-        return rankVideosForResolution(videos, preferredResolution)
-            .firstOrNull { it.url !in excludedUrls }
+        rankVideosForResolution(videos, preferredResolution)
     }
+
+    private suspend fun resolveReplacement(
+        resolver: EpisodeStreamResolver,
+        episode: Int,
+        previous: VetroVideo,
+        excludedUrls: Set<String>,
+    ): VetroVideo? = resolver
+        .resolve(episode, previous.resolution ?: DEFAULT_RESOLUTION)
+        .firstOrNull { it.url !in excludedUrls }
 
     companion object {
         private const val TAG = "StreamPlayer"
         private const val MAX_AUTOMATIC_RETRIES = 8
+        /** К чему тянемся, если у текущей ссылки разрешение неизвестно. */
+        private const val DEFAULT_RESOLUTION = 1080
         private const val EXTRA_VIDEO_JSON = "video_json"
         private const val EXTRA_VIDEOS_JSON = "videos_json"
         private const val EXTRA_ANIME_ID = "anime_id"

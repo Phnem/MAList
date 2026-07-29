@@ -62,6 +62,14 @@ fun StreamPlayerSurface(
     onEnterPip: () -> Unit,
     onRotate: () -> Unit,
     onBack: () -> Unit,
+    /**
+     * Есть ли соседняя серия ПО НОМЕРУ (`EpisodeRange`). Доступность её ссылки — другое состояние:
+     * поверхность о ней не знает, резолв живёт в активности.
+     */
+    hasPrevEpisode: Boolean = false,
+    hasNextEpisode: Boolean = false,
+    onPrevEpisode: () -> Unit = {},
+    onNextEpisode: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val skipProvider = koinInject<SkipSegmentProvider>()
@@ -185,8 +193,10 @@ fun StreamPlayerSurface(
         }
     }
 
-    // FR-3a: сбрасывается при смене серии (TICKET-03 переиспользует этот же сброс).
+    // FR-3a: новая серия не должна открываться увеличенной. Поверхность при смене серии не
+    // пересоздаётся (меняется только url и номер), поэтому сброс явный.
     val zoomState = remember { PlayerZoomState() }
+    LaunchedEffect(episodeNumber) { zoomState.reset() }
 
     ImmersivePlayerWindow(enabled = !isInPip)
 
@@ -242,8 +252,10 @@ fun StreamPlayerSurface(
                 position = position,
                 buffered = buffered,
                 duration = duration,
-                hasPrev = false,
-                hasNext = false,
+                hasPrev = hasPrevEpisode,
+                hasNext = hasNextEpisode,
+                onPrev = onPrevEpisode,
+                onNext = onNextEpisode,
                 zoomState = zoomState,
                 audioTracks = audioTracks,
                 speed = speed,
