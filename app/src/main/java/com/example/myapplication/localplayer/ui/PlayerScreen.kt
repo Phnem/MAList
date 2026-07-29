@@ -67,6 +67,12 @@ fun PlayerScreen(
     malId: Int?,
     anilistId: Int?,
     autoSkipEnabled: Boolean,
+    /**
+     * Включать следующую серию по концу текущей. У локального плеера серии лежат плейлистом в
+     * ExoPlayer, и переход по концу — его штатное поведение; настройка его не воспроизводит, а
+     * гасит, иначе получилось бы два независимых механизма перехода на одну кнопку.
+     */
+    autoNextEnabled: Boolean = true,
     isInPip: Boolean,
     onEnterPip: () -> Unit,
     onRotate: () -> Unit,
@@ -107,6 +113,11 @@ fun PlayerScreen(
     // Новая серия не должна открываться обрезанной — положение кадра переживать переключение не
     // обязано.
     androidx.compose.runtime.LaunchedEffect(currentIndex) { fit = VideoFit.ORIGINAL }
+    androidx.compose.runtime.LaunchedEffect(autoNextEnabled) {
+        // Выключенная настройка = остановиться на последнем кадре серии, а не поехать дальше по
+        // плейлисту. Кнопка «дальше» при этом продолжает работать.
+        exoPlayer.pauseAtEndOfMediaItems = !autoNextEnabled
+    }
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
     var videoAspect by remember { mutableFloatStateOf(16f / 9f) }
     // Сюрфейс плеера — источник кадра для тона доков (PixelCopy), см. rememberPlayerAmbient.

@@ -749,16 +749,22 @@ fun getCollectionEnrichmentStrings(lang: AppLanguage): CollectionEnrichmentStrin
 data class PlayerSettingsStrings(
     val autoSkipTitle: String,
     val autoSkipSubtitle: String,
+    val autoNextTitle: String,
+    val autoNextSubtitle: String,
 )
 
 private val RussianPlayerSettingsStrings = PlayerSettingsStrings(
     autoSkipTitle = "Автопропуск",
     autoSkipSubtitle = "Молча перематывать опенинг, эндинг и рекап. Выключено — плеер показывает кнопку «Пропустить»",
+    autoNextTitle = "Следующая серия",
+    autoNextSubtitle = "Включать следующую серию, когда текущая доиграла. Выключено — плеер останавливается на последнем кадре",
 )
 
 private val EnglishPlayerSettingsStrings = PlayerSettingsStrings(
     autoSkipTitle = "Auto-skip",
     autoSkipSubtitle = "Skip openings, endings and recaps silently. When off, the player offers a Skip button instead",
+    autoNextTitle = "Next episode",
+    autoNextSubtitle = "Start the next episode when the current one ends. When off, the player stops on the last frame",
 )
 
 fun getPlayerSettingsStrings(lang: AppLanguage): PlayerSettingsStrings = when (lang) {

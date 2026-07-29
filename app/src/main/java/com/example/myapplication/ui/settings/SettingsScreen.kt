@@ -57,6 +57,7 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.FastForward
+import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.outlined.BrightnessAuto
 import androidx.compose.material.icons.outlined.Category
@@ -461,6 +462,24 @@ fun SettingsScreen(
                                                 onCheckedChange = {
                                                     performHaptic(view, "light")
                                                     viewModel.setAutoSkipSegments(it)
+                                                },
+                                            )
+                                        },
+                                    )
+                                },
+                                {
+                                    IosRow(
+                                        title = playerSettingsStrings.autoNextTitle,
+                                        subtitle = playerSettingsStrings.autoNextSubtitle,
+                                        isDark = isDark,
+                                        icon = Icons.Filled.SkipNext,
+                                        iconWell = false,
+                                        trailing = {
+                                            IosSwitch(
+                                                checked = uiState.autoNextEpisode,
+                                                onCheckedChange = {
+                                                    performHaptic(view, "light")
+                                                    viewModel.setAutoNextEpisode(it)
                                                 },
                                             )
                                         },

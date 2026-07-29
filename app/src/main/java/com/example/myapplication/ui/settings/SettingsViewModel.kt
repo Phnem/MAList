@@ -111,6 +111,7 @@ private fun mergeSettingsUi(
         devHideShareButton = prefs[KEY_DEV_HIDE_SHARE] ?: false,
         devFpsOverlay = prefs[KEY_DEV_FPS_OVERLAY] ?: false,
         autoSkipSegments = prefs[LocalPlayerViewModel.AUTO_SKIP_KEY] ?: false,
+        autoNextEpisode = prefs[LocalPlayerViewModel.AUTO_NEXT_KEY] ?: true,
         devAdaptiveGlassScroll = prefs[DevPreferencesKeys.ADAPTIVE_GLASS_SCROLL] ?: false,
         devGithubUpdatesEnabled = githubUpdatesEnabled,
         isExportingLogs = t.isExportingLogs,
@@ -307,6 +308,13 @@ class SettingsViewModel(
     fun setAutoSkipSegments(enabled: Boolean) {
         viewModelScope.launch {
             settingsDataStore.edit { it[LocalPlayerViewModel.AUTO_SKIP_KEY] = enabled }
+        }
+    }
+
+    /** Единственный писатель [LocalPlayerViewModel.AUTO_NEXT_KEY] — по тем же причинам. */
+    fun setAutoNextEpisode(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsDataStore.edit { it[LocalPlayerViewModel.AUTO_NEXT_KEY] = enabled }
         }
     }
 

@@ -51,6 +51,7 @@ import com.example.myapplication.localplayer.ui.LocalPlayerViewModel
 import com.example.myapplication.media.MediaGateway
 import com.example.myapplication.media.episode.EpisodeRange
 import com.example.myapplication.media.episode.EpisodeStreamResolver
+import com.example.myapplication.media.episode.shouldAutoAdvance
 import com.example.myapplication.media.player.HeaderResolvingPlayerFactory
 import com.example.myapplication.media.source.flattenVideosWithSource
 import com.example.myapplication.media.player.VetroVideoCache
@@ -142,6 +143,9 @@ class StreamPlayerActivity : ComponentActivity() {
                 val autoSkip by settings.data
                     .map { it[LocalPlayerViewModel.AUTO_SKIP_KEY] ?: false }
                     .collectAsState(initial = false)
+                val autoNext by settings.data
+                    .map { it[LocalPlayerViewModel.AUTO_NEXT_KEY] ?: true }
+                    .collectAsState(initial = true)
                 val stored by remember(animeId, season, episode) {
                     playbackStore.episodeFlow(animeId, season, episode)
                 }.collectAsState(initial = null)
@@ -376,6 +380,20 @@ class StreamPlayerActivity : ComponentActivity() {
                                         durationMs = player.duration,
                                     )
                                 }
+                            }
+                            // Автопереход — тот же путь, что кнопка «дальше»: своей ветки резолва у
+                            // него нет, иначе автоматика и кнопка разъехались бы в поведении
+                            // (сообщение об ошибке, запись прогресса уходящей серии, гонки).
+                            if (
+                                playbackState == Player.STATE_ENDED &&
+                                shouldAutoAdvance(
+                                    enabled = autoNext,
+                                    durationMs = player.duration,
+                                    hasNext = EpisodeRange.hasNext(episode, availableEpisodes),
+                                    switching = switchingTo != null,
+                                )
+                            ) {
+                                switchToEpisode(EpisodeRange.nextOf(episode, availableEpisodes))
                             }
                         }
                     }

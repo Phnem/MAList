@@ -20,6 +20,8 @@ data class SettingsUiState(
      * ровно так его и трактуют оба плеера.
      */
     val autoSkipSegments: Boolean = false,
+    /** Включать следующую серию по концу текущей. По умолчанию ВКЛ — см. `AUTO_NEXT_KEY`. */
+    val autoNextEpisode: Boolean = true,
     val devAdaptiveGlassScroll: Boolean = false,
     val devGithubUpdatesEnabled: Boolean = false,
     val isExportingLogs: Boolean = false,

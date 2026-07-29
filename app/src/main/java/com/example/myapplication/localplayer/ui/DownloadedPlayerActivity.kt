@@ -83,6 +83,9 @@ class DownloadedPlayerActivity : ComponentActivity() {
                 val autoSkip by settings.data
                     .map { it[LocalPlayerViewModel.AUTO_SKIP_KEY] ?: false }
                     .collectAsState(initial = false)
+                val autoNext by settings.data
+                    .map { it[LocalPlayerViewModel.AUTO_NEXT_KEY] ?: true }
+                    .collectAsState(initial = true)
                 var landscape by rememberSaveable { mutableStateOf(true) }
                 BackHandler { finish() }
                 DisposableEffect(landscape) {
@@ -107,6 +110,7 @@ class DownloadedPlayerActivity : ComponentActivity() {
                         malId = malId,
                         anilistId = anilistId,
                         autoSkipEnabled = autoSkip,
+                        autoNextEnabled = autoNext,
                         isInPip = pipState.value,
                         onEnterPip = ::enterPip,
                         onRotate = { landscape = !landscape },

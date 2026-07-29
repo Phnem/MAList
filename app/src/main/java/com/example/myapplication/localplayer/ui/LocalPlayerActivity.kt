@@ -278,6 +278,7 @@ private fun LocalPlayerHost(
 
     if (playing != null && library != null) {
         val autoSkip by viewModel.autoSkipEnabled.collectAsStateWithLifecycle()
+        val autoNext by viewModel.autoNextEnabled.collectAsStateWithLifecycle()
         // Плеер стартует в горизонтали; кнопка поворота переключает портрет/горизонт.
         var landscape by rememberSaveable { mutableStateOf(true) }
         DisposableEffect(Unit) {
@@ -290,6 +291,7 @@ private fun LocalPlayerHost(
             malId = viewModel.malId,
             anilistId = viewModel.anilistId,
             autoSkipEnabled = autoSkip,
+            autoNextEnabled = autoNext,
             isInPip = isInPip.value,
             onEnterPip = onEnterPip,
             onRotate = { landscape = !landscape; onSetOrientation(landscape) },
