@@ -142,10 +142,10 @@ fun PlayerControlsOverlay(
     onPrev: (() -> Unit)? = null,
     onNext: (() -> Unit)? = null,
     /**
-     * Состояние зума видео. Поднято в хост, потому что жест ловится здесь (оверлей поверх видео),
-     * а трансформация применяется там — к самой поверхности плеера.
+     * Арбитраж щипка против однопальцевых жестов. Поднято в хост, потому что жест ловится здесь
+     * (оверлей поверх видео), а положение кадра применяется там — к самой поверхности плеера.
      */
-    zoomState: PlayerZoomState,
+    pinchState: PlayerPinchState,
     audioTracks: List<AudioTrackOption>,
     speed: Float,
     fit: VideoFit,
@@ -156,7 +156,12 @@ fun PlayerControlsOverlay(
     onEnterPip: () -> Unit,
     onSelectSpeed: (Float) -> Unit,
     onSelectAudio: (AudioTrackOption) -> Unit,
-    onCycleFit: () -> Unit,
+    /**
+     * Положение кадра. Один вход и для кнопки в доке, и для щипка: пользователь потребовал, чтобы
+     * жест работал «прям 1в1» с кнопкой, а два входа в одно состояние гарантированно разъехались
+     * бы при первой же правке.
+     */
+    onSetFit: (VideoFit) -> Unit,
     onControlsVisibleChange: (Boolean) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
@@ -254,21 +259,20 @@ fun PlayerControlsOverlay(
                     onVideoTap(up.position.x, size.width)
                 }
             }
-            // Зум идёт ПЕРЕД перемоткой: он потребляет событие при двух пальцах, и до
+            // Щипок идёт ПЕРЕД перемоткой: он потребляет событие при двух пальцах, и до
             // detectHorizontalDragGestures мультитач тогда не доходит.
-            .playerZoomGestures(zoomState, enabled = !locked)
-            .pointerInput(locked, duration, zoomState) {
+            .playerFitGestures(pinchState, enabled = !locked, onFit = onSetFit)
+            .pointerInput(locked, duration, pinchState) {
                 if (locked) return@pointerInput
                 var startPos = 0L
                 var target = 0L
-                // Драг, начавшийся при мультитаче, в дебаунсе после pinch'а или на увеличенном
-                // кадре, перемоткой не является. Решение принимается на onDragStart и держится
-                // весь драг: переобуться в середине свайпа — это ровно тот скачок, ради которого
-                // ось и лочат.
+                // Драг, начавшийся при мультитаче или в дебаунсе после щипка, перемоткой не
+                // является. Решение принимается на onDragStart и держится весь драг: переобуться
+                // в середине свайпа — это ровно тот скачок, ради которого ось и лочат.
                 var blocked = false
                 detectHorizontalDragGestures(
                     onDragStart = {
-                        blocked = zoomState.swipesBlocked() || zoomState.isZoomed
+                        blocked = pinchState.swipesBlocked()
                         if (!blocked) {
                             startPos = player.currentPosition
                             target = startPos
@@ -286,11 +290,7 @@ fun PlayerControlsOverlay(
                     },
                     onHorizontalDrag = { change, dragAmount ->
                         if (blocked) {
-                            // На увеличенном кадре тот же жест — панорама по нему.
-                            if (zoomState.isZoomed) {
-                                zoomState.pan(dragAmount, 0f, size)
-                                change.consume()
-                            }
+                            // Ничего: жест принадлежит щипку, а не перемотке.
                         } else {
                             change.consume()
                             val msPerPx = 120_000f / size.width.coerceAtLeast(1)
@@ -519,7 +519,11 @@ fun PlayerControlsOverlay(
                                 if (fit == VideoFit.CROP) Icons.Rounded.CropFree else Icons.Rounded.AspectRatio,
                                 contentDescription = if (isRuLocale()) "Формат кадра" else "Aspect",
                                 tint = ambient.bottomContent,
-                                onClick = onCycleFit,
+                                onClick = {
+                                    onSetFit(
+                                        if (fit == VideoFit.CROP) VideoFit.ORIGINAL else VideoFit.CROP
+                                    )
+                                },
                             )
                         }
                     }

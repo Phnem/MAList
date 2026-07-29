@@ -1,59 +1,55 @@
 package com.example.myapplication.localplayer.ui
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
- * Ограничители зума плеера.
+ * Правило жеста разворота кадра.
  *
- * Чистая арифметика вынесена из жестового кода: сам жест на JVM не проверить, а вот «кадр не
- * уезжает за край» и «масштаб не уходит в бесконечность» проверить обязательно — иначе
- * пользователь утаскивает картинку в пустоту и не может вернуть.
+ * Сам жест на JVM не проверить, а вот «щипок переводит кадр ровно в одно из двух положений и не
+ * срабатывает от дрожания пальцев» проверить обязательно: произвольный масштаб пользователь уже
+ * отверг, и вернуть его случайным порогом нельзя.
  */
 class PlayerZoomTest {
 
     @Test
-    fun scale_stays_within_bounds() {
-        assertEquals(MIN_PLAYER_SCALE, clampPlayerScale(0.1f), 0.001f)
-        assertEquals(MAX_PLAYER_SCALE, clampPlayerScale(99f), 0.001f)
-        assertEquals(2f, clampPlayerScale(2f), 0.001f)
+    fun pinch_out_asks_for_the_cropped_frame() {
+        assertEquals(VideoFit.CROP, pinchFitTarget(PINCH_FIT_RATIO))
+        assertEquals(VideoFit.CROP, pinchFitTarget(2f))
     }
 
     @Test
-    fun unzoomed_frame_cannot_be_dragged_at_all() {
-        // На масштабе 1 двигать нечего: любой сдвиг открыл бы чёрную полосу у края.
-        assertEquals(0f, clampPlayerOffset(500f, scale = 1f, containerSize = 1080f), 0.001f)
-        assertEquals(0f, clampPlayerOffset(-500f, scale = 1f, containerSize = 1080f), 0.001f)
+    fun pinch_in_asks_for_the_original_frame() {
+        assertEquals(VideoFit.ORIGINAL, pinchFitTarget(1f / PINCH_FIT_RATIO))
+        assertEquals(VideoFit.ORIGINAL, pinchFitTarget(0.4f))
     }
 
     @Test
-    fun offset_is_capped_by_the_overhang() {
-        // При масштабе 2 за края уходит ровно половина ширины — значит и сдвиг не больше половины.
-        val max = clampPlayerOffset(Float.MAX_VALUE, scale = 2f, containerSize = 1000f)
-        assertEquals(500f, max, 0.001f)
-        assertEquals(-500f, clampPlayerOffset(-Float.MAX_VALUE, scale = 2f, containerSize = 1000f), 0.001f)
+    fun small_pinch_changes_nothing() {
+        // Пальцы почти всегда чуть расходятся при обычном касании двумя точками — на таком
+        // движении кадр перестраиваться не должен.
+        assertNull(pinchFitTarget(1f))
+        assertNull(pinchFitTarget(1.05f))
+        assertNull(pinchFitTarget(0.95f))
     }
 
     @Test
-    fun offset_within_bounds_is_untouched() {
-        assertEquals(120f, clampPlayerOffset(120f, scale = 2f, containerSize = 1000f), 0.001f)
+    fun threshold_is_symmetric() {
+        // Порог «наружу» и «внутрь» — одно и то же движение пальцев в разные стороны. Разъехавшись,
+        // они дали бы жест, который легко увеличивает и с трудом уменьшает.
+        assertEquals(VideoFit.CROP, pinchFitTarget(PINCH_FIT_RATIO))
+        assertEquals(VideoFit.ORIGINAL, pinchFitTarget(1f / PINCH_FIT_RATIO))
+        assertNull(pinchFitTarget(PINCH_FIT_RATIO - 0.01f))
+        assertNull(pinchFitTarget(1f / (PINCH_FIT_RATIO - 0.01f)))
     }
 
     @Test
-    fun zero_container_does_not_produce_nan() {
-        // Первый кадр может прийти с нулевым размером — деления и NaN тут быть не должно.
-        assertEquals(0f, clampPlayerOffset(50f, scale = 3f, containerSize = 0f), 0.001f)
-    }
-
-    @Test
-    fun zoomed_flag_has_a_tolerance() {
-        // Точное сравнение с 1f после серии умножений почти никогда не срабатывает,
-        // и кадр «залипал» бы в режиме pan на масштабе 1.0000001.
-        assertFalse(isPlayerZoomed(1f))
-        assertFalse(isPlayerZoomed(1.001f))
-        assertTrue(isPlayerZoomed(1.2f))
+    fun degenerate_zoom_is_ignored() {
+        // calculateZoom() отдаёт 0 или бесконечность, когда указатели совпали в точке.
+        assertNull(pinchFitTarget(0f))
+        assertNull(pinchFitTarget(Float.NaN))
+        assertNull(pinchFitTarget(Float.POSITIVE_INFINITY))
     }
 
     @Test

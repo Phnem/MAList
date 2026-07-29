@@ -100,12 +100,13 @@ fun PlayerScreen(
     var duration by remember { mutableLongStateOf(0L) }
     var currentIndex by remember { mutableIntStateOf(startIndex.coerceAtLeast(0)) }
 
-    // FR-3a: новая серия не должна открываться увеличенной — зум переживать переключение не обязан.
-    val zoomState = remember { PlayerZoomState() }
-    androidx.compose.runtime.LaunchedEffect(currentIndex) { zoomState.reset() }
+    val pinchState = remember { PlayerPinchState() }
     var audioTracks by remember { mutableStateOf<List<AudioTrackOption>>(emptyList()) }
     var speed by remember { mutableStateOf(1f) }
     var fit by remember { mutableStateOf(VideoFit.ORIGINAL) }
+    // Новая серия не должна открываться обрезанной — положение кадра переживать переключение не
+    // обязано.
+    androidx.compose.runtime.LaunchedEffect(currentIndex) { fit = VideoFit.ORIGINAL }
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
     var videoAspect by remember { mutableFloatStateOf(16f / 9f) }
     // Сюрфейс плеера — источник кадра для тона доков (PixelCopy), см. rememberPlayerAmbient.
@@ -241,12 +242,10 @@ fun PlayerScreen(
                 .fillMaxSize()
                 .onSizeChanged { viewportSize = it }
                 .graphicsLayer {
-                    // Зум жестом домножается на существующий масштаб «вписывания», а не заменяет
-                    // его: иначе переключение fit сбрасывало бы увеличение и наоборот.
-                    scaleX = animatedVideoScale * zoomState.scale
-                    scaleY = animatedVideoScale * zoomState.scale
-                    translationX = zoomState.offsetX
-                    translationY = zoomState.offsetY
+                    // Единственный источник масштаба — положение кадра. Щипок и кнопка в доке
+                    // меняют его же, поэтому перемножать здесь больше нечего.
+                    scaleX = animatedVideoScale
+                    scaleY = animatedVideoScale
                 },
             factory = { ctx ->
                 // surface_type по умолчанию = SurfaceView: дешевле по батарее и композитингу, чем
@@ -303,7 +302,7 @@ fun PlayerScreen(
                 duration = duration,
                 hasPrev = currentIndex > 0,
                 hasNext = currentIndex < episodes.lastIndex,
-                zoomState = zoomState,
+                pinchState = pinchState,
                 audioTracks = audioTracks,
                 speed = speed,
                 fit = fit,
@@ -314,7 +313,7 @@ fun PlayerScreen(
                 onEnterPip = onEnterPip,
                 onSelectSpeed = { s -> speed = s; exoPlayer.playbackParameters = PlaybackParameters(s) },
                 onSelectAudio = { opt -> exoPlayer.applyAudioOverride(opt) },
-                onCycleFit = { fit = if (fit == VideoFit.ORIGINAL) VideoFit.CROP else VideoFit.ORIGINAL },
+                onSetFit = { fit = it },
             )
         }
     }

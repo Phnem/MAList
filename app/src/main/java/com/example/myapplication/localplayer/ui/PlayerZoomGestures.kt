@@ -3,34 +3,27 @@ package com.example.myapplication.localplayer.ui
 import android.os.SystemClock
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
-import androidx.compose.ui.input.pointer.util.VelocityTracker1D
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 
 /**
- * Состояние зума видео и арбитраж жестов плеера.
+ * Арбитраж жестов плеера: щипок двумя пальцами против однопальцевых свайпов и тапов.
  *
- * Разведение жестов сделано по схеме, которую используют MX Player / VLC / Just Player
- * (вводные пользователя, решение D-5 в MASTER_PLAN):
+ * Свободного зума у плеера нет — щипок переводит кадр ровно в одно из двух положений [VideoFit],
+ * тем же путём, что кнопка разворота в доке. Состояние здесь остаётся только для арбитража:
  *
- * 1. **Число пальцев — первичный фильтр.** Зум требует минимум двух указателей; пока опущен
+ * 1. **Число пальцев — первичный фильтр.** Щипок требует минимум двух указателей; пока опущен
  *    второй, однопальцевые свайпы блокируются флагом [multiTouchActive].
- * 2. **Состояние зума меняет трактовку драга.** При [isZoomed] однопальцевое перетаскивание —
- *    это панорама по увеличенному кадру, а не перемотка.
- * 3. **Debounce после pinch.** Пальцы отрываются не одновременно, и оставшийся указатель успевает
- *    проехать десяток пикселей уже как «драг» — поэтому [swipesBlocked] держит свайпы
- *    выключенными ещё [POST_PINCH_LOCK_MS] после завершения pinch'а.
+ * 2. **Debounce после щипка.** Пальцы отрываются не одновременно, и оставшийся указатель успевает
+ *    проехать десяток пикселей уже как «драг» — поэтому [swipesBlocked] держит свайпы выключенными
+ *    ещё [POST_PINCH_LOCK_MS] после завершения жеста.
  *
  * Ось драга ([dominantDragAxis]) и зональность экрана ([verticalZoneAt]) живут в `PlayerZoom.kt`
  * вместе с остальной чистой арифметикой — они понадобятся, когда в плеере появятся вертикальные
@@ -38,24 +31,13 @@ import androidx.compose.foundation.gestures.calculateZoom
  * и залочивать ось не от чего.
  */
 @Stable
-class PlayerZoomState {
-
-    var scale by mutableFloatStateOf(MIN_PLAYER_SCALE)
-        private set
-
-    var offsetX by mutableFloatStateOf(0f)
-        private set
-
-    var offsetY by mutableFloatStateOf(0f)
-        private set
+class PlayerPinchState {
 
     /** Опущено больше одного указателя — однопальцевые обработчики обязаны молчать. */
     var multiTouchActive by mutableStateOf(false)
         internal set
 
     private var pinchEndedAt by mutableLongStateOf(0L)
-
-    val isZoomed: Boolean get() = isPlayerZoomed(scale)
 
     /**
      * Должны ли однопальцевые свайпы (перемотка) сейчас игнорироваться.
@@ -66,48 +48,35 @@ class PlayerZoomState {
     fun swipesBlocked(): Boolean =
         multiTouchActive || SystemClock.uptimeMillis() - pinchEndedAt < POST_PINCH_LOCK_MS
 
-    internal fun applyTransform(zoomChange: Float, pan: Offset, container: IntSize) {
-        scale = clampPlayerScale(scale * zoomChange)
-        // Сдвиг пересчитывается под НОВЫЙ масштаб: если сначала подвинуть, а потом уменьшить,
-        // кадр останется съехавшим за край.
-        offsetX = clampPlayerOffset(offsetX + pan.x, scale, container.width.toFloat())
-        offsetY = clampPlayerOffset(offsetY + pan.y, scale, container.height.toFloat())
-    }
-
-    /** Панорама одним пальцем по уже увеличенному кадру. */
-    internal fun pan(dx: Float, dy: Float, container: IntSize) {
-        offsetX = clampPlayerOffset(offsetX + dx, scale, container.width.toFloat())
-        offsetY = clampPlayerOffset(offsetY + dy, scale, container.height.toFloat())
-    }
-
     internal fun notePinchEnded() {
         pinchEndedAt = SystemClock.uptimeMillis()
-    }
-
-    /** Сброс при смене серии (FR-3a): новая серия не должна открываться увеличенной. */
-    fun reset() {
-        scale = MIN_PLAYER_SCALE
-        offsetX = 0f
-        offsetY = 0f
-        multiTouchActive = false
     }
 }
 
 /**
- * Пинч-зум и панорама поверх видео.
+ * Щипок по видео: разведение пальцев разворачивает кадр по ширине, сведение возвращает исходный —
+ * ровно то же, что делает кнопка в доке, и ровно в те же два положения.
  *
- * Событие потребляется только когда пальцев больше одного (заведомо pinch) либо кадр уже
- * увеличен (тогда таскание — панорама). Штатный `Modifier.transformable` здесь не годится по той
- * же причине, что и в ридере манги: он построен на `detectTransformGestures`, который считает
- * панорамой и одиночный палец и потребляет событие, — перемотка перестала бы работать вовсе.
+ * Событие потребляется только при двух и более указателях (заведомо щипок): одиночный палец обязан
+ * уйти в перемотку и тапы. Штатный `Modifier.transformable` здесь не годится по той же причине,
+ * что и в ридере манги: он построен на `detectTransformGestures`, который считает панорамой и
+ * одиночный палец и потребляет событие, — перемотка перестала бы работать вовсе.
+ *
+ * @param onFit вызывается один раз на каждое пересечение порога; повторный щипок в ту же сторону
+ *   просто просит то же положение, в котором кадр уже находится.
  */
-fun Modifier.playerZoomGestures(
-    state: PlayerZoomState,
+fun Modifier.playerFitGestures(
+    state: PlayerPinchState,
     enabled: Boolean = true,
+    onFit: (VideoFit) -> Unit,
 ): Modifier = if (!enabled) this else pointerInput(state, enabled) {
     awaitEachGesture {
         awaitFirstDown(requireUnconsumed = false)
         var sawMultiTouch = false
+        // Накапливаем изменение за жест: одиночное событие приносит доли процента, и порог по нему
+        // не взять. После срабатывания счётчик обнуляется — внутри того же щипка можно свести
+        // пальцы обратно и вернуть кадр.
+        var totalZoom = 1f
         do {
             val event = awaitPointerEvent()
             if (event.changes.any { it.isConsumed }) break
@@ -116,21 +85,26 @@ fun Modifier.playerZoomGestures(
             if (pressed >= 2) {
                 sawMultiTouch = true
                 state.multiTouchActive = true
+            } else {
+                // Один палец — не наше дело: пусть уходит в перемотку и тапы.
+                continue
             }
-
-            // Один палец на неувеличенном кадре — не наше дело: пусть уходит в перемотку и тапы.
-            if (pressed < 2 && !state.isZoomed) continue
 
             val zoom = event.calculateZoom()
-            val pan = event.calculatePan()
-            if (zoom != 1f || pan != Offset.Zero) {
-                state.applyTransform(zoom, pan, size)
-                event.changes.forEach { if (it.positionChanged()) it.consume() }
+            if (zoom != 1f && zoom.isFinite() && zoom > 0f) {
+                totalZoom *= zoom
+                pinchFitTarget(totalZoom)?.let {
+                    onFit(it)
+                    totalZoom = 1f
+                }
             }
+            // Потребляем всё движение двумя пальцами, а не только сработавшее: иначе остаток
+            // щипка доедет до detectHorizontalDragGestures и превратится в перемотку.
+            event.changes.forEach { if (it.positionChanged()) it.consume() }
         } while (event.changes.any { it.pressed })
 
         state.multiTouchActive = false
-        // Метку ставим только если pinch реально был: иначе обычный тап глушил бы перемотку
+        // Метку ставим только если щипок реально был: иначе обычный тап глушил бы перемотку
         // на POST_PINCH_LOCK_MS после каждого касания.
         if (sawMultiTouch) state.notePinchEnded()
     }

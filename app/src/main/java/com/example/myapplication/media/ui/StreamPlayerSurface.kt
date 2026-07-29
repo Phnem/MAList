@@ -35,7 +35,7 @@ import com.example.myapplication.localplayer.domain.SkipSegmentProvider
 import com.example.myapplication.localplayer.ui.AudioTrackOption
 import com.example.myapplication.localplayer.ui.ImmersivePlayerWindow
 import com.example.myapplication.localplayer.ui.PlayerControlsOverlay
-import com.example.myapplication.localplayer.ui.PlayerZoomState
+import com.example.myapplication.localplayer.ui.PlayerPinchState
 import com.example.myapplication.localplayer.ui.VideoFit
 import com.example.myapplication.localplayer.ui.isDrmProtected
 import com.example.myapplication.localplayer.ui.rememberPlayerAmbient
@@ -193,10 +193,10 @@ fun StreamPlayerSurface(
         }
     }
 
-    // FR-3a: новая серия не должна открываться увеличенной. Поверхность при смене серии не
-    // пересоздаётся (меняется только url и номер), поэтому сброс явный.
-    val zoomState = remember { PlayerZoomState() }
-    LaunchedEffect(episodeNumber) { zoomState.reset() }
+    // Новая серия не должна открываться обрезанной. Поверхность при смене серии не пересоздаётся
+    // (меняются только url и номер), поэтому сброс явный.
+    val pinchState = remember { PlayerPinchState() }
+    LaunchedEffect(episodeNumber) { fit = VideoFit.ORIGINAL }
 
     ImmersivePlayerWindow(enabled = !isInPip)
 
@@ -206,12 +206,10 @@ fun StreamPlayerSurface(
                 .fillMaxSize()
                 .onSizeChanged { viewportSize = it }
                 .graphicsLayer {
-                    // Зум жестом домножается на существующий масштаб «вписывания», а не заменяет
-                    // его: иначе переключение fit сбрасывало бы увеличение и наоборот.
-                    scaleX = animatedVideoScale * zoomState.scale
-                    scaleY = animatedVideoScale * zoomState.scale
-                    translationX = zoomState.offsetX
-                    translationY = zoomState.offsetY
+                    // Единственный источник масштаба — положение кадра. Щипок и кнопка в доке
+                    // меняют его же, поэтому перемножать здесь больше нечего.
+                    scaleX = animatedVideoScale
+                    scaleY = animatedVideoScale
                 },
             factory = { context ->
                 // SurfaceView (значение surface_type по умолчанию) — не менять на TextureView:
@@ -256,7 +254,7 @@ fun StreamPlayerSurface(
                 hasNext = hasNextEpisode,
                 onPrev = onPrevEpisode,
                 onNext = onNextEpisode,
-                zoomState = zoomState,
+                pinchState = pinchState,
                 audioTracks = audioTracks,
                 speed = speed,
                 fit = fit,
@@ -277,9 +275,7 @@ fun StreamPlayerSurface(
                         player.applyStreamAudioOverride(option)
                     }
                 },
-                onCycleFit = {
-                    fit = if (fit == VideoFit.ORIGINAL) VideoFit.CROP else VideoFit.ORIGINAL
-                },
+                onSetFit = { fit = it },
             )
         }
     }

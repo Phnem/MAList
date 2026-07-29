@@ -3,15 +3,21 @@ package com.example.myapplication.localplayer.ui
 import kotlin.math.abs
 
 /**
- * Арифметика зума плеера — без Compose и без Android, чтобы её можно было покрыть обычным тестом.
+ * Арифметика жестов плеера — без Compose и без Android, чтобы её можно было покрыть обычным тестом.
  *
- * Сам жест на JVM не проверить, а вот «кадр не уезжает за край» и «масштаб не уходит в
- * бесконечность» проверить обязательно: ошибка здесь оставляет пользователя с картинкой,
- * утащенной в пустоту, без способа вернуть её на место.
+ * Свободного масштаба у плеера нет: у кадра ровно два положения ([VideoFit]), и щипок — второй вход
+ * в то же состояние, что кнопка разворота в доке. Поэтому здесь живёт не «во сколько раз увеличить»,
+ * а «в какую сторону пользователь развёл пальцы и достаточно ли решительно».
  */
 
-const val MIN_PLAYER_SCALE = 1f
-const val MAX_PLAYER_SCALE = 4f
+/**
+ * Во сколько раз должно измениться расстояние между пальцами, чтобы кадр перестроился.
+ *
+ * Порог, а не любое изменение: два пальца почти никогда не опускаются на экран строго одновременно
+ * и на неизменное расстояние, и без запаса кадр перещёлкивался бы от простого касания двумя
+ * точками.
+ */
+const val PINCH_FIT_RATIO = 1.15f
 
 /** Порог, после которого ось драга считается выбранной (см. [dominantDragAxis]). */
 const val DRAG_AXIS_THRESHOLD_DP = 12f
@@ -31,30 +37,18 @@ enum class DragAxis { Undecided, Horizontal, Vertical }
 /** Что регулирует вертикальный свайп — зависит от половины экрана, где он начат. */
 enum class VerticalZone { Brightness, Volume }
 
-fun clampPlayerScale(requested: Float): Float =
-    requested.coerceIn(MIN_PLAYER_SCALE, MAX_PLAYER_SCALE)
-
 /**
- * Ограничивает сдвиг по одной оси половиной «свеса» — той части кадра, которая при текущем
- * масштабе вышла за пределы контейнера.
+ * В какое положение просит перевести кадр щипок, накопивший изменение [totalZoom].
  *
- * На масштабе 1 свеса нет, поэтому и сдвиг нулевой: любое смещение открыло бы пустоту у края.
+ * `null` = ни в какое: движение не дотянуло до порога. Вырожденные значения (ноль, бесконечность,
+ * NaN) `calculateZoom()` отдаёт, когда указатели сошлись в одну точку, — они тоже ничего не меняют.
  */
-fun clampPlayerOffset(offset: Float, scale: Float, containerSize: Float): Float {
-    if (containerSize <= 0f) return 0f
-    val overhang = (containerSize * scale - containerSize) / 2f
-    if (overhang <= 0f) return 0f
-    return offset.coerceIn(-overhang, overhang)
+fun pinchFitTarget(totalZoom: Float): VideoFit? = when {
+    !totalZoom.isFinite() || totalZoom <= 0f -> null
+    totalZoom >= PINCH_FIT_RATIO -> VideoFit.CROP
+    totalZoom <= 1f / PINCH_FIT_RATIO -> VideoFit.ORIGINAL
+    else -> null
 }
-
-/**
- * Считается ли кадр увеличенным.
- *
- * С допуском, а не сравнением с 1f: масштаб набегает произведением множителей жеста, и точное
- * единичное значение после pinch'а туда-обратно практически недостижимо — кадр залипал бы в
- * режиме перетаскивания на масштабе вроде 1.0000001, отбирая у пользователя перемотку.
- */
-fun isPlayerZoomed(scale: Float): Boolean = scale > MIN_PLAYER_SCALE + 0.01f
 
 /**
  * Выбирает доминирующую ось драга — но только после того, как палец прошёл [thresholdPx].
