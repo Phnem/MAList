@@ -383,7 +383,11 @@ private fun ChaptersContent(
     // По умолчанию сверху свежие главы: у долгих тайтлов иначе первое, что видит читатель, —
     // пролог десятилетней давности.
     var newestFirst by rememberSaveable { mutableStateOf(true) }
-    var collapsed by remember(state.binding.mangaKey) { mutableStateOf(emptySet<String>()) }
+    // Хранится «что развёрнуто», а не «что свёрнуто»: у тайтла на десятки томов развёрнутый
+    // по умолчанию список — это сотни строк, через которые надо пролистать до нужного тома.
+    // При обратном хранении дефолт пришлось бы набивать ключами всех групп, и он бы разъезжался
+    // при каждой смене фильтра.
+    var expanded by remember(state.binding.mangaKey) { mutableStateOf(emptySet<String>()) }
 
     fun isRead(chapter: MangaChapter) = state.progress[chapter.key]?.read == true
     fun isDownloaded(chapter: MangaChapter) = chapter.key in state.downloadedKeys
@@ -504,7 +508,11 @@ private fun ChaptersContent(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             groups.forEach { group ->
-                val isCollapsed = group.key in collapsed
+                // Группа без заголовка — это тайтл, у которого источник не проставил тома
+                // (groupByVolume отдаёт одну группу с label = null). Свернуть её нечем: заголовка
+                // с переключателем у неё нет. Поэтому она всегда развёрнута, иначе свёрнутый
+                // по умолчанию список спрятал бы вообще все главы без способа его открыть.
+                val isExpanded = group.label == null || group.key in expanded
                 if (group.label != null) {
                     item(key = "vol_${group.key}") {
                         VolumeHeader(
@@ -512,11 +520,11 @@ private fun ChaptersContent(
                             coverUrl = state.binding.coverUrl,
                             total = group.chapters.size,
                             read = group.chapters.count { isRead(it) },
-                            collapsed = isCollapsed,
+                            collapsed = !isExpanded,
                             isDark = isDark,
                             ru = ru,
                             onToggle = {
-                                collapsed = if (isCollapsed) collapsed - group.key else collapsed + group.key
+                                expanded = if (isExpanded) expanded - group.key else expanded + group.key
                             },
                             onDownloadAll = {
                                 group.chapters
@@ -527,7 +535,7 @@ private fun ChaptersContent(
                         )
                     }
                 }
-                if (isCollapsed) return@forEach
+                if (!isExpanded) return@forEach
                 itemsIndexed(
                     items = group.chapters,
                     key = { _, chapter -> "${group.key}_${chapter.key}" },
@@ -544,6 +552,14 @@ private fun ChaptersContent(
                         onClick = { onOpen(chapter) },
                         onToggleRead = { onToggleRead(chapter, it) },
                         onToggleDownload = { onToggleDownload(chapter) },
+                        // Строки тома появляются и исчезают анимированно, а не рывком. Пружина —
+                        // seasonExpansion: тома здесь ровно то же, что сезоны в Details, и
+                        // разъезжаться в моциях этим двум спискам незачем.
+                        modifier = Modifier.animateItem(
+                            fadeInSpec = MotionTokens.seasonExpansion(),
+                            placementSpec = MotionTokens.seasonExpansion(),
+                            fadeOutSpec = MotionTokens.seasonExpansion(),
+                        ),
                     )
                 }
             }
@@ -923,10 +939,11 @@ private fun ChapterRow(
     onClick: () -> Unit,
     onToggleRead: (Boolean) -> Unit,
     onToggleDownload: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val rowBg = if (isDark) Color.White.copy(alpha = 0.045f) else Color.Black.copy(alpha = 0.035f)
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(shape)
             .background(rowBg)

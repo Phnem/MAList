@@ -2,10 +2,10 @@
 
 ## Workflow
 
-Current workflow state: READY_FOR_IMPLEMENTATION
-Current ticket: None
-Last completed ticket: None
-Next eligible ticket: TICKET-01
+Current workflow state: IMPLEMENTING_TICKET
+Current ticket: TICKET-02
+Last completed ticket: TICKET-01
+Next eligible ticket: TICKET-03
 Last updated: 2026-07-29
 
 ## Goal
@@ -72,7 +72,7 @@ Last updated: 2026-07-29
 
 | ID | Пункт | Название | Status | Blocked by | Commit | Review |
 |---|---|---|---|---|---|---|
-| TICKET-01 | 1 | Шапка ридера не под вырезом камеры | PENDING | — | | |
+| TICKET-01 | 1 | Шапка ридера не под вырезом камеры | DONE¹ | — | `79a9d92` | без блокирующих |
 | TICKET-02 | 10 | Тома свёрнуты по умолчанию + анимация | PENDING | — | | |
 | TICKET-03 | 4 | Фон выпадающего меню серий `#333333` | PENDING | — | | |
 | TICKET-04 | 5 | Насыщенные цвета категорий и сортировки | PENDING | — | | |
@@ -81,6 +81,8 @@ Last updated: 2026-07-29
 | TICKET-07 | 8 | «0» → «N/A» в поиске | PENDING | — | | |
 | TICKET-08 | 9 | Мгновенная кнопка + дедупликация | PENDING | TICKET-07 | | |
 | TICKET-09 | 2 | Прогресс манги на карточке | PENDING | TICKET-05 | | |
+
+¹ Код-критерии выполнены и скомпилированы; визуальное подтверждение на устройстве с вырезом — за пользователем, отмечено в тикете как невыполнимая мной проверка.
 
 Пункт 11 (ссылка на README) — не тикет, а обязательство финального отчёта. Отслеживается в чек-листе приёмки.
 
