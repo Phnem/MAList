@@ -2,13 +2,13 @@
 
 ## Original goal
 
-Семь пунктов правок пользователя от 2026-07-29 — хвосты после прогонов `vetro-todo` и
+Восемь пунктов правок пользователя от 2026-07-29 (восьмой добавлен после приёмки первых семи) — хвосты после прогонов `vetro-todo` и
 `vetro-player`. Дословный исходник: [`spec-source.md`](./spec-source.md).
 
 ## Canonical artifacts
 
 - [`MASTER_PLAN.md`](./MASTER_PLAN.md) — состояние, решения, риски.
-- [`spec.md`](./spec.md) — FR-1…FR-7, AC-1…AC-11.
+- [`spec.md`](./spec.md) — FR-1…FR-8, AC-1…AC-12.
 - [`architecture/INITIAL_REVIEW.md`](./architecture/INITIAL_REVIEW.md).
 - [`reviews/final-review.md`](./reviews/final-review.md) — аудит требование за требованием.
 - [`EXECUTION_LOG.md`](./EXECUTION_LOG.md), тикеты в `issues/`.
@@ -29,6 +29,7 @@
 | TICKET-05 | 4 анимация томов | `b13168e` | DONE |
 | TICKET-06 | 5 оформление меню глав | `d711da8` | DONE |
 | TICKET-07 | 7 порядок раскладок | `76c0b66` | DONE |
+| TICKET-08 | 8 удержание = 2× | `b05629e` | DONE_WITH_DEVIATIONS |
 
 ## Active ticket
 
@@ -43,7 +44,7 @@
 
 ## Decisions that must be preserved
 
-D-1…D-7 в `MASTER_PLAN.md`. Два из них отменяют более ранние решения:
+D-1…D-8 в `MASTER_PLAN.md`. Два из них отменяют более ранние решения:
 
 - **D-5 отменяет D-2 прогона `vetro-player`**: свободного зума в плеере больше нет, у кадра два
   положения. Возвращать свободный зум без нового решения пользователя нельзя.
@@ -60,6 +61,8 @@ D-1…D-7 в `MASTER_PLAN.md`. Два из них отменяют более р
 - Прогресс манги считается по **номеру** главы: главы без номера в отрезок не входят.
 - Градиент экранов живёт только в `IosDesign.screenGradient` — новые экраны обязаны брать его
   оттуда, а не копировать `colorStops`.
+- Тапы и удержание в плеере распознаёт ОДИН `pointerInput`. Новый однопальцевый жест туда же:
+  отдельный распознаватель на том же касании отнимет либо тап, либо удержание.
 
 ## Current repository state
 
@@ -68,14 +71,14 @@ D-1…D-7 в `MASTER_PLAN.md`. Два из них отменяют более р
 
 ## Relevant commits
 
-`70f83cf`, `63dd9df`, `2152f98`, `074be39`, `b13168e`, `d711da8`, `76c0b66` + докоммиты плана.
+`70f83cf`, `63dd9df`, `2152f98`, `074be39`, `b13168e`, `d711da8`, `76c0b66`, `b05629e` + докоммиты плана.
 
 ## Verification already performed
 
 - `.\gradlew.bat :app:compileDebugKotlin` — зелёный после каждого тикета.
-- `.\gradlew.bat :app:testDebugUnitTest` — 156 тестов (было 133 до пакета), 1 падение:
+- `.\gradlew.bat :app:testDebugUnitTest` — 159 тестов (было 133 до пакета), 1 падение:
   `StatsRatingBucketTest.buckets_continuous_noGaps` — существовавший дефект, не регрессия.
-- `.\gradlew.bat :app:assembleDebug` — `BUILD SUCCESSFUL in 46s`.
+- `.\gradlew.bat :app:assembleDebug` — `BUILD SUCCESSFUL` (46s, повторно 28s после TICKET-08).
 
 ## Known failures or blockers
 
@@ -89,7 +92,7 @@ D-1…D-7 в `MASTER_PLAN.md`. Два из них отменяют более р
 
 ## Exact recommended next action
 
-Дать пользователю посмотреть сборку и собрать замечания по семи пунктам. Из них семь визуальных и
-жестовых проверок я выполнить не могу — они перечислены в `reviews/final-review.md` как
-`NOT_VERIFIED`. После его ответа — либо итерация по конкретным пунктам, либо переход к хвостам
-прошлых прогонов.
+Дать пользователю посмотреть сборку и собрать замечания по восьми пунктам. Визуальные и жестовые
+проверки я выполнить не могу — они перечислены в `reviews/final-review.md` как `NOT_VERIFIED`, для
+пункта 8 добавляется проверка «дабл-тап справа не сломался». После его ответа — либо итерация по
+конкретным пунктам, либо переход к хвостам прошлых прогонов.
