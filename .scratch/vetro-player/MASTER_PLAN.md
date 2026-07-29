@@ -4,8 +4,8 @@
 
 Current workflow state: READY_FOR_IMPLEMENTATION
 Current ticket: None
-Last completed ticket: None
-Next eligible ticket: TICKET-01
+Last completed ticket: TICKET-01
+Next eligible ticket: TICKET-02
 Last updated: 2026-07-29
 
 ## Goal
@@ -73,10 +73,12 @@ Last updated: 2026-07-29
 
 | ID | Пункт | Название | Status | Blocked by | Commit | Review |
 |---|---|---|---|---|---|---|
-| TICKET-01 | 1 | Переключатель автопропуска в настройках | PENDING | — | | |
+| TICKET-01 | 1 | Переключатель автопропуска в настройках | DONE¹ | — | `4772aa1` | без блокирующих |
 | TICKET-02 | 3 | Зум двумя пальцами и панорамирование | PENDING | — | | |
 | TICKET-03 | 2 | Кнопки серий в стриминговом плеере | PENDING | TICKET-02 | | |
 | TICKET-04 | 4 | Переделка загрузки | NEEDS_USER_DECISION | описание пользователя | | |
+
+¹ Код-критерии выполнены; фактическую перемотку сегмента на реальном видео подтверждает пользователь — записано в тикете как невыполнимая мной проверка.
 
 Ребро TICKET-02 → TICKET-03 — из-за общего файла `StreamPlayerSurface.kt`.
 
