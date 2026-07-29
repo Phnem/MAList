@@ -2,7 +2,12 @@ package com.example.myapplication.manga.ui
 
 import android.content.Intent
 import androidx.core.net.toUri
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -513,8 +518,43 @@ private fun ChaptersContent(
                 // с переключателем у неё нет. Поэтому она всегда развёрнута, иначе свёрнутый
                 // по умолчанию список спрятал бы вообще все главы без способа его открыть.
                 val isExpanded = group.label == null || group.key in expanded
-                if (group.label != null) {
-                    item(key = "vol_${group.key}") {
+                if (group.label == null) {
+                    // Группа без тома свернуться не может, зато глав в ней бывают сотни — она
+                    // обязана остаться ленивой, иначе список измерял бы их все разом.
+                    itemsIndexed(
+                        items = group.chapters,
+                        key = { _, chapter -> "${group.key}_${chapter.key}" },
+                    ) { index, chapter ->
+                        ChapterRow(
+                            chapter = chapter,
+                            shape = groupRowShape(index, group.chapters.size, false),
+                            progressFraction = state.progress[chapter.key]?.fraction ?: 0f,
+                            read = isRead(chapter),
+                            downloaded = isDownloaded(chapter),
+                            downloading = state.downloading[chapter.key],
+                            isDark = isDark,
+                            ru = ru,
+                            onClick = { onOpen(chapter) },
+                            onToggleRead = { onToggleRead(chapter, it) },
+                            onToggleDownload = { onToggleDownload(chapter) },
+                            modifier = Modifier.animateItem(
+                                fadeInSpec = MotionTokens.seasonExpansion(),
+                                placementSpec = MotionTokens.seasonExpansion(),
+                                fadeOutSpec = MotionTokens.seasonExpansion(),
+                            ),
+                        )
+                    }
+                    return@forEach
+                }
+                // Том целиком — ОДИН элемент списка: шапка плюс тело под общей анимацией. Раньше
+                // свёрнутый том просто выкидывал свои `itemsIndexed` из LazyColumn, и анимировать
+                // было нечего — строки исчезали вместе с элементами.
+                //
+                // Держать шапку и тело раздельными элементами тоже нельзя: `spacedBy` ставит зазор
+                // между элементами независимо от их высоты, и у свёрнутого тома между шапками
+                // набегал бы двойной отступ.
+                item(key = "vol_${group.key}") {
+                    Column {
                         VolumeHeader(
                             label = group.label,
                             coverUrl = state.binding.coverUrl,
@@ -533,34 +573,39 @@ private fun ChaptersContent(
                                     .forEach(onToggleDownload)
                             },
                         )
+                        AnimatedVisibility(
+                            visible = isExpanded,
+                            // Пружина — seasonExpansion: тома здесь ровно то же, что сезоны в
+                            // Details, и разъезжаться в моциях этим двум спискам незачем.
+                            enter = expandVertically(MotionTokens.seasonExpansion()) +
+                                fadeIn(MotionTokens.seasonExpansion()),
+                            exit = shrinkVertically(MotionTokens.seasonExpansion()) +
+                                fadeOut(MotionTokens.seasonExpansion()),
+                        ) {
+                            Column(
+                                // Отступ от шапки живёт ВНУТРИ анимируемой области, иначе он
+                                // остался бы висеть под шапкой свёрнутого тома.
+                                modifier = Modifier.padding(top = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                group.chapters.forEachIndexed { index, chapter ->
+                                    ChapterRow(
+                                        chapter = chapter,
+                                        shape = groupRowShape(index, group.chapters.size, true),
+                                        progressFraction = state.progress[chapter.key]?.fraction ?: 0f,
+                                        read = isRead(chapter),
+                                        downloaded = isDownloaded(chapter),
+                                        downloading = state.downloading[chapter.key],
+                                        isDark = isDark,
+                                        ru = ru,
+                                        onClick = { onOpen(chapter) },
+                                        onToggleRead = { onToggleRead(chapter, it) },
+                                        onToggleDownload = { onToggleDownload(chapter) },
+                                    )
+                                }
+                            }
+                        }
                     }
-                }
-                if (!isExpanded) return@forEach
-                itemsIndexed(
-                    items = group.chapters,
-                    key = { _, chapter -> "${group.key}_${chapter.key}" },
-                ) { index, chapter ->
-                    ChapterRow(
-                        chapter = chapter,
-                        shape = groupRowShape(index, group.chapters.size, group.label != null),
-                        progressFraction = state.progress[chapter.key]?.fraction ?: 0f,
-                        read = isRead(chapter),
-                        downloaded = isDownloaded(chapter),
-                        downloading = state.downloading[chapter.key],
-                        isDark = isDark,
-                        ru = ru,
-                        onClick = { onOpen(chapter) },
-                        onToggleRead = { onToggleRead(chapter, it) },
-                        onToggleDownload = { onToggleDownload(chapter) },
-                        // Строки тома появляются и исчезают анимированно, а не рывком. Пружина —
-                        // seasonExpansion: тома здесь ровно то же, что сезоны в Details, и
-                        // разъезжаться в моциях этим двум спискам незачем.
-                        modifier = Modifier.animateItem(
-                            fadeInSpec = MotionTokens.seasonExpansion(),
-                            placementSpec = MotionTokens.seasonExpansion(),
-                            fadeOutSpec = MotionTokens.seasonExpansion(),
-                        ),
-                    )
                 }
             }
         }
