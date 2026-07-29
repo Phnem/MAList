@@ -70,7 +70,7 @@ Last updated: 2026-07-29
 |---|---|---|---|---|---|
 | TICKET-01 | Математика цикла катаны | DONE | — | см. коммит | самопроверка, без замечаний |
 | TICKET-02 | Рисование катаны на Canvas | DONE_WITH_DEVIATIONS | 01 | см. коммит | самопроверка + показ пользователю |
-| TICKET-03 | Оверлей + ридер манги | PENDING | 02 | — | — |
+| TICKET-03 | Оверлей + ридер манги | DONE | 02 | см. коммит | самопроверка, без замечаний |
 | TICKET-04 | Плеер: замороженный кадр | PENDING | 03 | — | — |
 | TICKET-05 | Форма движения по референсу | BLOCKED (ждёт референс) | — | — | — |
 
@@ -112,16 +112,19 @@ Follow-up tickets: TICKET-05
 
 ### TICKET-03 — Оверлей + ридер манги
 
-Status: PENDING
+Status: DONE
 Tracker reference: [`issues/03-overlay-and-manga.md`](./issues/03-overlay-and-manga.md)
 Dependencies: TICKET-02
-Acceptance criteria: см. тикет
-Implementation summary:
-Deviations:
-Architecture notes:
-Verification evidence:
-Commit:
-Follow-up tickets:
+Acceptance criteria: все выполнены
+Implementation summary: `KatanaLoadingOverlay` — затемнение, fade через `MotionTokens`, гашение
+всех указательных событий. Держится в композиции постоянно, показ переключается флагом. В
+ридере манги ветка `Loading` больше ничего не рисует.
+Deviations: нет
+Architecture notes: `manga/` получил зависимость на `ui/shared/loading/` — направление верное
+Verification evidence: `:app:assembleDebug` успешно; 175 тестов, 1 падение — чужое,
+предшествующее (`StatsRatingBucketTest`)
+Commit: см. историю ветки (`feat(loading): ... [TICKET-03]`)
+Follow-up tickets: нет
 
 ### TICKET-04 — Плеер: замороженный кадр
 

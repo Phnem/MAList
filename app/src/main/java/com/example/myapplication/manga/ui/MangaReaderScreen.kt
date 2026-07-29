@@ -97,6 +97,7 @@ import com.example.myapplication.manga.domain.MangaChapter
 import com.example.myapplication.manga.domain.MangaPage
 import com.example.myapplication.ui.shared.components.IosSheetScaffold
 import com.example.myapplication.ui.shared.components.LiquidGlassTrack
+import com.example.myapplication.ui.shared.loading.KatanaLoadingOverlay
 import com.example.myapplication.ui.shared.theme.BrandOrange
 import com.example.myapplication.utils.performHaptic
 import com.kyant.backdrop.Backdrop
@@ -149,10 +150,9 @@ fun MangaReaderScreen(
                     .background(Color.Black),
             ) {
                 when (state) {
-                    MangaReaderUiState.Loading -> CircularProgressIndicator(
-                        color = BrandOrange,
-                        modifier = Modifier.align(Alignment.Center),
-                    )
+                    // Ожидание рисует оверлей ниже: он живёт в композиции постоянно, иначе
+                    // появление и исчезновение были бы рывком.
+                    MangaReaderUiState.Loading -> Unit
 
                     is MangaReaderUiState.Error -> ReaderError(
                         state = state,
@@ -177,6 +177,11 @@ fun MangaReaderScreen(
                         onClose = onClose,
                     )
                 }
+
+                KatanaLoadingOverlay(
+                    visible = state == MangaReaderUiState.Loading,
+                    modifier = Modifier.matchParentSize(),
+                )
             }
         },
         sheetContent = {

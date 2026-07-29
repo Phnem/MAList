@@ -2,7 +2,7 @@
 
 ## Status
 
-PENDING
+DONE
 
 ## Objective
 
@@ -65,8 +65,45 @@ NOT_NEEDED — состояние булево, логики нет. Прове�
 
 ## Implementation notes
 
+`ui/shared/loading/KatanaLoadingOverlay.kt` — затемнение 0.82 поверх переданной области, катана
+по центру, `AnimatedVisibility` с `MotionTokens.scrimFade()` на вход и `dialogExit()` на выход.
+
+- **Оверлей живёт в композиции постоянно, а показ переключается флагом.** Если монтировать его
+  веткой `when`, появление было бы рывком: `AnimatedVisibility`, входящий в композицию уже
+  видимым, ничего не анимирует.
+- **Гасятся все указательные события, а не только тапы** (`awaitPointerEvent().changes.consume()`).
+  Перехвата одних тапов не хватило бы: сквозь оверлей проходили бы скролл и щипок ридера.
+- Размер рига — 0.66 меньшей стороны, но не больше 320 dp: на планшете анимация иначе
+  превращается в плакат.
+- Блюр фона оверлей не делает — так решено в обзоре архитектуры. У ридера под ожиданием и так
+  чёрный экран, размывать нечего.
+
+`MangaReaderScreen`: ветка `Loading` больше ничего не рисует (`-> Unit` с пояснением), оверлей
+добавлен последним элементом того же `Box` внутри `content` у `IosSheetScaffold` — так он
+накрывает контент, но не шторку оглавления.
+
 ## Deviations
+
+Нет.
 
 ## Review findings
 
+Самопроверка диффа:
+
+- Тронута только ветка `Loading`; `Error` и `Ready` не изменены. ✓
+- Плейсхолдер отдельной страницы ленты (`MangaReaderScreen:695`, `CircularProgressIndicator` с
+  `BrandOrange`) не тронут — импорты `CircularProgressIndicator`/`BrandOrange` остались нужны. ✓
+- Оверлей внутри `content`, не рядом со `IosSheetScaffold` — риск из тикета снят. ✓
+- Пружины и длительности взяты из `MotionTokens`. ✓
+- `layerBackdrop` в затронутом экране не используется — контракт не задет. ✓
+- BLOCKING-замечаний нет.
+
 ## Completion evidence
+
+- Сборка: `.\gradlew.bat :app:assembleDebug` — успешно.
+- Тесты: `.\gradlew.bat :app:testDebugUnitTest` — 175 тестов, 1 падение:
+  `StatsRatingBucketTest.buckets_continuous_noGaps` (`expected:<24> but was:<02>`). Дефект
+  **предшествующий и чужой**, заведён отдельно в `.scratch/vetro-player/issues/05-stats-rating-bucket-test-failure.md`,
+  к загрузке отношения не имеет. Остальные 174 зелёные.
+- Файлы: `ui/shared/loading/KatanaLoadingOverlay.kt` (новый),
+  `manga/ui/MangaReaderScreen.kt` (ветка `Loading` + импорт).
