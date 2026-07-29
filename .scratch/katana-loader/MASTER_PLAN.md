@@ -3,9 +3,9 @@
 ## Workflow
 
 Current workflow state: IMPLEMENTING_TICKET
-Current ticket: TICKET-02
-Last completed ticket: TICKET-01
-Next eligible ticket: TICKET-02
+Current ticket: TICKET-03
+Last completed ticket: TICKET-02
+Next eligible ticket: TICKET-03
 Last updated: 2026-07-29
 
 ## Goal
@@ -69,9 +69,10 @@ Last updated: 2026-07-29
 | ID | Title | Status | Blocked by | Commit | Review |
 |---|---|---|---|---|---|
 | TICKET-01 | Математика цикла катаны | DONE | — | см. коммит | самопроверка, без замечаний |
-| TICKET-02 | Рисование катаны на Canvas | PENDING | 01 | — | — |
+| TICKET-02 | Рисование катаны на Canvas | DONE_WITH_DEVIATIONS | 01 | см. коммит | самопроверка + показ пользователю |
 | TICKET-03 | Оверлей + ридер манги | PENDING | 02 | — | — |
 | TICKET-04 | Плеер: замороженный кадр | PENDING | 03 | — | — |
+| TICKET-05 | Форма движения по референсу | BLOCKED (ждёт референс) | — | — | — |
 
 ## Ticket details
 
@@ -93,16 +94,21 @@ Follow-up tickets: нет
 
 ### TICKET-02 — Рисование катаны на Canvas
 
-Status: PENDING
+Status: DONE_WITH_DEVIATIONS
 Tracker reference: [`issues/02-katana-canvas.md`](./issues/02-katana-canvas.md)
 Dependencies: TICKET-01
-Acceptance criteria: см. тикет
-Implementation summary:
-Deviations:
-Architecture notes:
-Verification evidence:
-Commit:
-Follow-up tickets:
+Acceptance criteria: выполнены, кроме визуального совпадения с задуманным пользователем — принято
+как промежуточный вариант
+Implementation summary: `ui/shared/loading/KatanaLoader.kt`. Пропорции в `object Rig` (доли
+радиуса), пути в системе координат клинка, движение — только сдвиг и поворот. Выползание клинка
+из ножен получается отсечением по устью, прогиб — парабола как квадратичная кривая Безье.
+Deviations: катана снаружи окружности (честная геометрия устья), а не «стрелкой» внутри;
+`scabbardAngularLag` оставлен как задел. Подробно — в тикете.
+Architecture notes: слой рисования не знает о точках применения; правка формы не заденет экраны
+Verification evidence: `:app:compileDebugKotlin` успешно; анимация показана пользователю точным
+портом геометрии и математики
+Commit: см. историю ветки (`feat(loading): ... [TICKET-02]`)
+Follow-up tickets: TICKET-05
 
 ### TICKET-03 — Оверлей + ридер манги
 
