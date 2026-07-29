@@ -4,6 +4,9 @@ import android.content.Context
 import android.util.Log
 import com.example.myapplication.manga.domain.MangaChapter
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -37,7 +40,18 @@ class MangaChapterCacheStore(context: Context) {
     private val json = Json { ignoreUnknownKeys = true }
     private val mutex = Mutex()
     @Volatile private var loaded = false
-    private var cache: Map<String, CachedChapters> = emptyMap()
+
+    private val _flow = MutableStateFlow<Map<String, CachedChapters>>(emptyMap())
+
+    /**
+     * Оглавления реактивно: карточка главного экрана считает по ним прогресс чтения и не должна
+     * узнавать об изменении списка глав только при перезапуске.
+     */
+    val flow: StateFlow<Map<String, CachedChapters>> = _flow.asStateFlow()
+
+    private var cache: Map<String, CachedChapters>
+        get() = _flow.value
+        set(value) { _flow.value = value }
 
     private val serializer = MapSerializer(String.serializer(), CachedChapters.serializer())
 
@@ -58,6 +72,9 @@ class MangaChapterCacheStore(context: Context) {
     }
 
     fun entry(sourceId: String, mangaKey: String): CachedChapters? = cache[key(sourceId, mangaKey)]
+
+    /** Ключ записи в [flow] — чтобы подписчик искал оглавление по привязке, а не перебором. */
+    fun entryKey(sourceId: String, mangaKey: String): String = key(sourceId, mangaKey)
 
     fun isFresh(
         sourceId: String,

@@ -37,6 +37,9 @@ val viewModelModule = module {
             webLinksStore = get(),
             seasonEpisodesStore = get(),
             episodePlaybackStore = get(),
+            mangaBindingStore = get(),
+            mangaChapterCacheStore = get(),
+            mangaReadingStore = get(),
         )
     }
     viewModel {

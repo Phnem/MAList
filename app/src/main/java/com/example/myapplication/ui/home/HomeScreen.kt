@@ -140,6 +140,7 @@ fun HomeScreen(
     val webLinksMap by viewModel.webLinks.collectAsStateWithLifecycle()
     val airingMap by viewModel.airingProgress.collectAsStateWithLifecycle()
     val watchedMap by viewModel.watchedEpisodes.collectAsStateWithLifecycle()
+    val mangaReadingMap by viewModel.mangaReading.collectAsStateWithLifecycle()
     var cloudSyncPillDismissed by remember { mutableStateOf(false) }
     val showCloudSyncPill =
         uiState.isListLoaded &&
@@ -645,6 +646,7 @@ fun HomeScreen(
                                                     totalEpisodes = anime.episodes,
                                                     watched = watchedMap[anime.id],
                                                     airing = airingEntry,
+                                                    reading = mangaReadingMap[anime.id],
                                                 )
                                                 val cardState = remember(anime, currentLanguage, webLinksEntry, cardProgress) {
                                                     // Название по выбранному языку: EN → английское, RU → русское.
@@ -668,6 +670,13 @@ fun HomeScreen(
                                                                 .toTypedArray()
                                                         ),
                                                         episodesCount = anime.episodes,
+                                                        // У манги счёт идёт по главам — иначе на
+                                                        // одной карточке соседствовали бы
+                                                        // «12 / 60 ch.» и «60 eps.».
+                                                        episodesUnit = when (anime.mediaType) {
+                                                            com.example.myapplication.data.models.MediaType.MANGA -> "ch."
+                                                            else -> "eps."
+                                                        },
                                                         webLinks = links,
                                                         language = currentLanguage,
                                                         imagePath = viewModel.getImgPath(anime.imageFileName),
@@ -1206,23 +1215,34 @@ private fun LazyListScope.apiSearchResultsSection(
 
 /**
  * Какой бар показать на карточке:
- *  1. пользователь смотрит (есть сохранённая позиция хотя бы в одной серии) — бар просмотра,
+ *  1. пользователь читает мангу — бар чтения по главам, брендовый оранжевый, «12 / 60 ch.»;
+ *  2. пользователь смотрит (есть сохранённая позиция хотя бы в одной серии) — бар просмотра,
  *     брендовый оранжевый, «62 / 80 ep.»;
- *  2. иначе идёт сезон — бар выхода серий, фиолетовый, «S5 4 / 14 ep.»;
- *  3. иначе бара нет.
+ *  3. иначе идёт сезон — бар выхода серий, фиолетовый, «S5 4 / 14 ep.»;
+ *  4. иначе бара нет.
  *
- * Просмотр в приоритете над выходом серий: пока человек смотрит, ему важнее своя позиция.
- * «Смотрит» здесь — факт воспроизведения в приложении, а не догадка по числам, поэтому ложных
- * срабатываний на случайных тайтлах быть не может.
+ * Чтение и просмотр в приоритете над выходом серий: пока человек читает или смотрит, ему важнее
+ * своя позиция. И то и другое — факт активности в приложении, а не догадка по числам, поэтому
+ * ложных срабатываний на случайных тайтлах быть не может. Один тайтл не бывает одновременно
+ * читаемым и смотримым: прогресс чтения есть только у манги с подтверждённой привязкой.
  */
 @Composable
 private fun rememberCardProgress(
     totalEpisodes: Int,
     watched: Int?,
     airing: com.example.myapplication.data.models.AiringProgress?,
-): AiringCardInfo? = remember(totalEpisodes, watched, airing) {
+    reading: com.example.myapplication.manga.domain.MangaReadingSummary?,
+): AiringCardInfo? = remember(totalEpisodes, watched, airing, reading) {
     val progress = watched?.takeIf { it > 0 }
     when {
+        reading != null -> AiringCardInfo(
+            seasonNumber = null,
+            airedEpisodes = reading.readChapters,
+            totalEpisodes = reading.totalChapters,
+            kind = CardProgressKind.READING,
+            newItems = reading.newChapters,
+        )
+
         progress != null -> AiringCardInfo(
             seasonNumber = null,
             airedEpisodes = progress.coerceAtMost(totalEpisodes.coerceAtLeast(progress)),

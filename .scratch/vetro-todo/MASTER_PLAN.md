@@ -4,8 +4,8 @@
 
 Current workflow state: READY_FOR_IMPLEMENTATION
 Current ticket: None
-Last completed ticket: TICKET-08 (разделён, см. сноску 5)
-Next eligible ticket: TICKET-09, затем TICKET-10
+Last completed ticket: TICKET-09
+Next eligible ticket: TICKET-10 (последний в пакете). Заведён TICKET-11 — фоновое обновление оглавлений манги, следствие TICKET-09.
 Last updated: 2026-07-29
 
 ## Goal
@@ -80,10 +80,13 @@ Last updated: 2026-07-29
 | TICKET-06 | 7 | Рейтинг мини-карточкой, чипсы убрать | DONE¹ | — | `82d7f0e` | без блокирующих |
 | TICKET-07 | 8 | «0» → «N/A» в поиске | **DONE** | — | `1e6e448` | без блокирующих |
 | TICKET-08 | 9 | Мгновенная кнопка + дедупликация | SUPERSEDED⁵ | TICKET-07 | `fc347d7` | без блокирующих |
-| TICKET-09 | 2 | Прогресс манги на карточке | PENDING | TICKET-05 (снят) | | |
+| TICKET-09 | 2 | Прогресс манги на карточке | DONE_WITH_DEVIATIONS⁶ | TICKET-05 (снят) | `COMMIT_09` | без блокирующих |
 | TICKET-10 | 9 | Вычистка существующих дубликатов | PENDING | TICKET-08 (снят) | | |
+| TICKET-11 | — | Фоновое обновление оглавлений манги | PENDING | — | | заведён из TICKET-09 |
 
 ¹ Код-критерии выполнены и скомпилированы; визуальное подтверждение — за пользователем, отмечено в тикетах как невыполнимая мной проверка.
+
+⁶ Прогресс чтения и метка новых глав на карточке сделаны; **риск №2 сработал** — пайплайна проверки новых глав у манги не оказалось (`BatchEpisodeCheckUseCase` фильтрует `mediaType == ANIME`, оглавления пишет только открытие вкладки «Главы»). По правилу самого тикета добыча данных вынесена в TICKET-11, а метка считается офлайн по кэшу оглавлений. Область спеки не сужена: признак новых глав на карточке есть.
 
 ⁵ Разделён при реализации. Профилактика новых дубликатов (оптимистичная кнопка + проверка до сохранения + правило, 17 тестов) сделана. Вычистка **уже существующих** дубликатов вынесена в TICKET-10: схлопывание отдаёт выжившую запись дозаполненной, и сохранить это одним `deleteAnime` нельзя — нужен путь обновления, а операция необратима. Область спеки не изменилась, требование не ослаблено.
 
@@ -133,7 +136,15 @@ Status: PENDING · Тикет: `issues/08-add-from-search-optimistic-dedupe.md` 
 
 ### TICKET-09 — Прогресс манги на карточке
 
-Status: PENDING · Тикет: `issues/09-manga-progress-on-card.md` · Зависимости: TICKET-05 · TDD: RECOMMENDED
+Status: DONE_WITH_DEVIATIONS · Тикет: `issues/09-manga-progress-on-card.md` · Зависимости: TICKET-05 · TDD: RECOMMENDED (10 тестов `MangaReadingSummaryTest`)
+
+Добавлен третий вид прогресса `CardProgressKind.READING` в тот же механизм, что у аниме; чистая функция `summarizeMangaReading` + реактивный шов `HomeViewModel.mangaReading`. Фоновая добыча оглавлений — TICKET-11.
+
+### TICKET-11 — Фоновое обновление оглавлений манги
+
+Status: PENDING · Тикет: `issues/11-manga-chapter-refresh.md` · Зависимости: нет · TDD: RECOMMENDED
+
+Заведён из TICKET-09: без него метка «вышли новые главы» узнаёт о них только при открытии вкладки «Главы».
 
 ## Decisions
 

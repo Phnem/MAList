@@ -66,11 +66,12 @@ import java.io.File
 /**
  * Что показывает бар на карточке:
  *  • [AIRING] — выход серий сезона («S5 4 / 14 ep.»), фиолетовый;
- *  • [WATCHING] — просмотр пользователя («62 / 80 ep.»), брендовый оранжевый.
+ *  • [WATCHING] — просмотр пользователя («62 / 80 ep.»), брендовый оранжевый;
+ *  • [READING] — чтение манги по главам («12 / 60 ch.»), брендовый оранжевый.
  */
-enum class CardProgressKind { AIRING, WATCHING }
+enum class CardProgressKind { AIRING, WATCHING, READING }
 
-/** Прогресс на карточке — выход сезона либо просмотр, см. [CardProgressKind]. */
+/** Прогресс на карточке — выход сезона, просмотр либо чтение, см. [CardProgressKind]. */
 @Immutable
 data class AiringCardInfo(
     /** null — источник без графа франшизы (Shikimori/AniLibria) либо прогресс просмотра. */
@@ -79,6 +80,8 @@ data class AiringCardInfo(
     /** null — число серий сезона ещё не анонсировано (бар не рисуем, только текст). */
     val totalEpisodes: Int?,
     val kind: CardProgressKind = CardProgressKind.AIRING,
+    /** Сколько новых глав вышло с последнего чтения; 0 — метку не показываем. */
+    val newItems: Int = 0,
 )
 
 @Immutable
@@ -91,6 +94,8 @@ data class AnimeCardState(
     val rating: Float,
     val genres: PersistentList<String>,
     val episodesCount: Int,
+    /** Единица счёта в подписи внизу карточки: серии у аниме, главы у манги. */
+    val episodesUnit: String = "eps.",
     val imagePath: String?,
     val mediaTypeLabel: String,
     /** Избранное: карточка поднята в начало списка и обведена рамкой, чтобы это было видно. */
@@ -121,18 +126,24 @@ private fun AiringProgressSection(
         com.example.myapplication.network.AppLanguage.RU -> "Прогресс"
         com.example.myapplication.network.AppLanguage.EN -> "Progress"
     }
-    val total = airing.totalEpisodes?.takeIf { it > 0 } ?: courEstimatedTotal(airing.airedEpisodes)
+    // Оценка по курам — приём для сезонов аниме: у манги число глав либо известно из оглавления,
+    // либо неизвестно вовсе, и выдумывать знаменатель нельзя.
+    val total = airing.totalEpisodes?.takeIf { it > 0 }
+        ?: courEstimatedTotal(airing.airedEpisodes).takeIf { airing.kind != CardProgressKind.READING }
+    val unit = if (airing.kind == CardProgressKind.READING) "ch." else "ep."
     val counter = buildString {
         // Префикс сезона осмыслен только для выхода серий: просмотр считается сквозной
         // нумерацией по всей франшизе, номер сезона к нему не относится.
         if (airing.kind == CardProgressKind.AIRING) {
             airing.seasonNumber?.let { append("S").append(it).append(" ") }
         }
-        append(airing.airedEpisodes).append(" / ").append(total).append(" ep.")
+        append(airing.airedEpisodes)
+        if (total != null) append(" / ").append(total)
+        append(" ").append(unit)
     }
     val barColor = when (airing.kind) {
         CardProgressKind.AIRING -> AiringBarColor
-        CardProgressKind.WATCHING -> BrandOrangeBright
+        CardProgressKind.WATCHING, CardProgressKind.READING -> BrandOrangeBright
     }
     // Компактно: секция живёт внутри фиксированных 180dp карточки, каждый dp на счету.
     Column(modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
@@ -141,14 +152,37 @@ private fun AiringProgressSection(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = label,
-                fontSize = 11.sp,
-                lineHeight = 13.sp,
-                fontWeight = FontWeight.Medium,
-                fontFamily = SnProFamily,
-                color = labelColor,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = label,
+                    fontSize = 11.sp,
+                    lineHeight = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    fontFamily = SnProFamily,
+                    color = labelColor,
+                )
+                // Метка новых глав — брендовым оранжевым, рядом с подписью прогресса. Своего
+                // индикатора «вышло новое» у карточек нет вовсе (у аниме это пуш-стопка сверху),
+                // поэтому берём самую компактную форму из спеки.
+                if (airing.newItems > 0) {
+                    Box(
+                        modifier = Modifier
+                            .padding(start = 6.dp)
+                            .clip(CircleShape)
+                            .background(BrandOrangeBright)
+                            .padding(horizontal = 5.dp, vertical = 1.dp),
+                    ) {
+                        Text(
+                            text = "+${airing.newItems}",
+                            fontSize = 10.sp,
+                            lineHeight = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = SnProFamily,
+                            color = Color.White,
+                        )
+                    }
+                }
+            }
             Text(
                 text = counter,
                 fontSize = 11.sp,
@@ -158,22 +192,26 @@ private fun AiringProgressSection(
                 color = labelColor,
             )
         }
-        val fraction = (airing.airedEpisodes.toFloat() / total).coerceIn(0f, 1f)
-        Box(
-            modifier = Modifier
-                .padding(top = 4.dp)
-                .fillMaxWidth()
-                .height(4.dp)
-                .clip(CircleShape)
-                .background(trackColor)
-        ) {
+        // Знаменатель неизвестен (у манги — оглавление ещё не загружено): бар рисовать не от чего,
+        // остаётся один счётчик прочитанного.
+        if (total != null) {
+            val fraction = (airing.airedEpisodes.toFloat() / total).coerceIn(0f, 1f)
             Box(
                 modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(fraction)
+                    .padding(top = 4.dp)
+                    .fillMaxWidth()
+                    .height(4.dp)
                     .clip(CircleShape)
-                    .background(barColor)
-            )
+                    .background(trackColor)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(fraction)
+                        .clip(CircleShape)
+                        .background(barColor)
+                )
+            }
         }
     }
 }
@@ -405,7 +443,7 @@ fun SharedTransitionScope.OneUiAnimeCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "${state.episodesCount} eps.",
+                        text = "${state.episodesCount} ${state.episodesUnit}",
                         style = MaterialTheme.typography.labelLarge.copy(
                             fontSize = 13.sp,
                             fontFamily = SnProFamily

@@ -106,6 +106,27 @@ class MangaReadingStore(
         return dataStore.data.map { decode(it[key]) }.distinctUntilChanged()
     }
 
+    /**
+     * Прогресс сразу по списку тайтлов — для главного экрана, где карточек десятки.
+     *
+     * Читаем снимок Preferences ОДИН раз и спрашиваем по нему нужные ключи, а не заводим по
+     * [progressFlow] на каждый тайтл (тем же приёмом, что `EpisodePlaybackStore.furthestEpisodeFlow`).
+     * Ключ хранения — хэш от animeId, поэтому перечислить тайтлы по снимку нельзя: список
+     * приходит снаружи.
+     */
+    fun progressFlow(animeIds: List<String>): Flow<Map<String, Map<String, ChapterReadingProgress>>> {
+        if (animeIds.isEmpty()) return kotlinx.coroutines.flow.flowOf(emptyMap())
+        val keys = animeIds.associateWith { progressKey(it) }
+        return dataStore.data.map { preferences ->
+            buildMap {
+                for ((animeId, key) in keys) {
+                    val progress = decode(preferences[key])
+                    if (progress.isNotEmpty()) put(animeId, progress)
+                }
+            }
+        }.distinctUntilChanged()
+    }
+
     fun chapterFlow(animeId: String, chapterKey: String): Flow<ChapterReadingProgress?> =
         progressFlow(animeId).map { it[chapterKey] }.distinctUntilChanged()
 

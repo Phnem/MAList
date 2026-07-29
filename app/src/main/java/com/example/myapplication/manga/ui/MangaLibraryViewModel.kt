@@ -12,6 +12,7 @@ import com.example.myapplication.manga.data.MangaDownloadStore
 import com.example.myapplication.manga.data.MangaReadingStore
 import com.example.myapplication.manga.domain.MangaChapter
 import com.example.myapplication.manga.domain.MangaItem
+import com.example.myapplication.manga.domain.chaptersForLanguage
 import com.example.myapplication.manga.download.MangaDownloadWorker
 import com.example.myapplication.manga.source.MangaSourceEngine
 import com.example.myapplication.manga.source.MangaSourceResults
@@ -203,10 +204,9 @@ class MangaLibraryViewModel(
 
     private fun emitChapters(binding: MangaBinding, refreshing: Boolean) {
         val languages = chapters.mapNotNull { it.language }.distinct().sorted()
-        val filtered = binding.preferredLanguage
-            ?.let { lang -> chapters.filter { it.language == lang } }
-            ?.takeIf { it.isNotEmpty() }
-            ?: chapters
+        // Тот же отбор, по которому карточка главного экрана считает прогресс чтения: разойдись
+        // они — вкладка и карточка показывали бы разное число глав.
+        val filtered = chaptersForLanguage(chapters, binding.preferredLanguage)
         // Прогресс чтения и загрузки живут в своих потоках — при пересборке списка их не теряем.
         val previous = _state.value as? MangaLibraryUiState.Chapters
         _state.value = MangaLibraryUiState.Chapters(

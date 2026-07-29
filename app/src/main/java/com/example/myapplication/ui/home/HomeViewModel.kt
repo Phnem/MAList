@@ -36,6 +36,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
@@ -64,6 +65,9 @@ class HomeViewModel(
     private val webLinksStore: com.example.myapplication.data.local.WebLinksStore,
     private val seasonEpisodesStore: com.example.myapplication.data.local.SeasonEpisodesStore,
     private val episodePlaybackStore: com.example.myapplication.media.progress.EpisodePlaybackStore,
+    private val mangaBindingStore: com.example.myapplication.manga.data.MangaBindingStore,
+    private val mangaChapterCacheStore: com.example.myapplication.manga.data.MangaChapterCacheStore,
+    private val mangaReadingStore: com.example.myapplication.manga.data.MangaReadingStore,
 ) : ViewModel() {
 
     /** Найденные прямые ссылки по одобренным сайтам (animeId → запись). Реактивно для карточек. */
@@ -95,6 +99,49 @@ class HomeViewModel(
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     init { viewModelScope.launch { seasonEpisodesStore.ensureLoaded() } }
+
+    /**
+     * Прогресс чтения манги (animeId → сводка) — то же место на карточке, что прогресс серий у
+     * аниме, только считается по главам.
+     *
+     * Считаем только по тайтлам с подтверждённой привязкой к источнику: без неё нет и оглавления,
+     * а значит нет знаменателя. Оглавление берётся из файлового кэша — своей проверки новых глав
+     * по сети у манги нет (см. `.scratch/vetro-todo/issues/11-manga-chapter-refresh.md`), поэтому
+     * список обновляется в момент, когда пользователь открывает вкладку «Главы».
+     */
+    val mangaReading: StateFlow<Map<String, com.example.myapplication.manga.domain.MangaReadingSummary>> =
+        mangaBindingStore.flow
+            .flatMapLatest { bindings ->
+                if (bindings.isEmpty()) {
+                    flowOf(emptyMap())
+                } else {
+                    combine(
+                        mangaReadingStore.progressFlow(bindings.keys.toList()),
+                        mangaChapterCacheStore.flow,
+                    ) { progressByTitle, chapterCache ->
+                        bindings.mapValues { (animeId, binding) ->
+                            val cached = chapterCache[
+                                mangaChapterCacheStore.entryKey(binding.sourceId, binding.mangaKey)
+                            ]
+                            com.example.myapplication.manga.domain.summarizeMangaReading(
+                                chapters = com.example.myapplication.manga.domain.chaptersForLanguage(
+                                    chapters = cached?.chapters.orEmpty(),
+                                    preferredLanguage = binding.preferredLanguage,
+                                ),
+                                progress = progressByTitle[animeId].orEmpty(),
+                            )
+                        }.filterValues { it.hasProgress }
+                    }
+                }
+            }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
+    init {
+        viewModelScope.launch {
+            mangaBindingStore.ensureLoaded()
+            mangaChapterCacheStore.ensureLoaded()
+        }
+    }
 
     /** Выходящие сейчас сезоны (animeId → прогресс) — карточки «в процессе». */
     val airingProgress: StateFlow<Map<String, com.example.myapplication.data.models.AiringProgress>> =
