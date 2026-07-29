@@ -1,7 +1,9 @@
 package com.example.myapplication.localplayer.ui
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -50,6 +52,26 @@ class PlayerZoomTest {
         assertNull(pinchFitTarget(0f))
         assertNull(pinchFitTarget(Float.NaN))
         assertNull(pinchFitTarget(Float.POSITIVE_INFINITY))
+    }
+
+    @Test
+    fun speed_hold_lives_in_the_right_half() {
+        // Та же половина, что у перемотки вперёд дабл-тапом.
+        assertTrue(isSpeedHoldZone(x = 900f, containerWidth = 1000f))
+        assertFalse(isSpeedHoldZone(x = 100f, containerWidth = 1000f))
+        // Ровно середина — ещё левая половина: границу отдаём перемотке назад.
+        assertFalse(isSpeedHoldZone(x = 500f, containerWidth = 1000f))
+    }
+
+    @Test
+    fun speed_hold_zone_is_empty_until_the_size_is_known() {
+        // Первый кадр приходит с нулевым размером; иначе касание по левому краю сошло бы за правое.
+        assertFalse(isSpeedHoldZone(x = 0f, containerWidth = 0f))
+    }
+
+    @Test
+    fun hold_speed_is_double() {
+        assertEquals(2f, HOLD_SPEED, 0.001f)
     }
 
     @Test

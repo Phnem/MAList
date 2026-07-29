@@ -44,6 +44,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.AspectRatio
 import androidx.compose.material.icons.rounded.CropFree
+import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Pause
@@ -67,6 +68,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -82,6 +84,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -90,6 +93,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.exoplayer.ExoPlayer
 import com.example.myapplication.ui.shared.theme.BrandOrangeBright
 import com.example.myapplication.ui.shared.theme.MotionTokens
@@ -98,6 +103,7 @@ import com.example.myapplication.utils.performHaptic
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Locale
 
 private enum class PlayerMenu { AUDIO, SPEED }
@@ -182,6 +188,10 @@ fun PlayerControlsOverlay(
     var tapForward by remember { mutableStateOf(true) }
     var burstBase by remember { mutableLongStateOf(0L) }
     var tapJob by remember { mutableStateOf<Job?>(null) }
+    /** Палец держат в правой половине — идёт ускоренное воспроизведение. */
+    var speedHeld by remember { mutableStateOf(false) }
+    /** Скорость, к которой вернуться после удержания. Читается в момент отпускания, а не подписки. */
+    val currentSpeed by rememberUpdatedState(speed)
 
     LaunchedEffect(controlsVisible) { onControlsVisibleChange(controlsVisible) }
 
@@ -251,9 +261,53 @@ fun PlayerControlsOverlay(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .pointerInput(locked, duration) {
+            // Тапы и удержание — ОДИН обработчик. Разными их сделать нельзя: правая половина занята
+            // накапливающейся перемоткой дабл-тапом, и два независимых распознавателя на одном
+            // касании неминуемо отняли бы друг у друга либо тап, либо удержание.
+            .pointerInput(locked, duration, pinchState) {
                 awaitEachGesture {
-                    awaitFirstDown()
+                    val down = awaitFirstDown()
+                    val holdZone = !locked &&
+                        isSpeedHoldZone(down.position.x, size.width.toFloat()) &&
+                        !pinchState.swipesBlocked()
+                    if (holdZone) {
+                        // Ждём отпускания не дольше порога долгого нажатия. Уложился — это тап;
+                        // не уложился (withTimeoutOrNull вернул null по таймауту) — удержание.
+                        var released: PointerInputChange? = null
+                        val finishedInTime = withTimeoutOrNull(
+                            viewConfiguration.longPressTimeoutMillis,
+                        ) {
+                            released = waitForUpOrCancellation()
+                        } != null
+                        if (finishedInTime) {
+                            val up = released ?: return@awaitEachGesture
+                            up.consume()
+                            onVideoTap(up.position.x, size.width)
+                            return@awaitEachGesture
+                        }
+                        speedHeld = true
+                        player.playbackParameters = PlaybackParameters(HOLD_SPEED)
+                        try {
+                            // Держим до отрыва последнего пальца. Движение не потребляем: пусть
+                            // палец гуляет — жест от этого не должен рваться.
+                            do {
+                                val event = awaitPointerEvent()
+                            } while (event.changes.any { it.pressed })
+                        } finally {
+                            // Возврат — в finally: отмена жеста (второй палец, потеря окна, уход
+                            // композиции) не должна оставить плеер ускоренным без причины.
+                            speedHeld = false
+                            // Скорость читаем СЕЙЧАС, а не ту, что была на момент подписки: иначе
+                            // выбор из меню, сделанный вторым пальцем во время удержания, откатился
+                            // бы обратно при отпускании.
+                            // runCatching — на случай, когда композиция уходит вместе с активностью
+                            // и плеер успевают освободить раньше, чем сюда доходит отмена.
+                            runCatching {
+                                player.playbackParameters = PlaybackParameters(currentSpeed)
+                            }
+                        }
+                        return@awaitEachGesture
+                    }
                     val up = waitForUpOrCancellation() ?: return@awaitEachGesture
                     up.consume()
                     onVideoTap(up.position.x, size.width)
@@ -272,7 +326,8 @@ fun PlayerControlsOverlay(
                 var blocked = false
                 detectHorizontalDragGestures(
                     onDragStart = {
-                        blocked = pinchState.swipesBlocked()
+                        // Во время удержания палец принадлежит ускорению, а не перемотке.
+                        blocked = pinchState.swipesBlocked() || speedHeld
                         if (!blocked) {
                             startPos = player.currentPosition
                             target = startPos
@@ -332,6 +387,40 @@ fun PlayerControlsOverlay(
             exit = fadeOut(tween(280)),
         ) {
             lastBurst?.let { SeekRipple(it) }
+        }
+
+        // Плашка «2×» — единственный признак, что ускорение включилось: без неё жест неотличим от
+        // случайно залипшего пальца.
+        AnimatedVisibility(
+            visible = speedHeld,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(top = 72.dp),
+            enter = fadeIn(MotionTokens.standard()),
+            exit = fadeOut(MotionTokens.dialogExit()),
+        ) {
+            Row(
+                modifier = Modifier
+                    .clip(Capsule)
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .padding(horizontal = 14.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.FastForward,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = "${HOLD_SPEED.toInt()}×",
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
         }
 
         // Кнопка «Пропустить» — весь опенинг, независимо от автоскрытия.

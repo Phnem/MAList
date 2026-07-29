@@ -31,6 +31,13 @@ const val DRAG_AXIS_THRESHOLD_DP = 12f
  */
 const val POST_PINCH_LOCK_MS = 180L
 
+/**
+ * Скорость на время удержания пальца ([isSpeedHoldZone]). Абсолютная, а не множитель к текущей:
+ * пользователь просил «переходит на 2x», и от выбранной в меню 1.5× жест должен давать те же 2×,
+ * что от единицы.
+ */
+const val HOLD_SPEED = 2f
+
 /** Ось, вдоль которой залочен текущий однопальцевый драг. */
 enum class DragAxis { Undecided, Horizontal, Vertical }
 
@@ -60,6 +67,16 @@ fun dominantDragAxis(dx: Float, dy: Float, thresholdPx: Float): DragAxis {
     if (abs(dx) < thresholdPx && abs(dy) < thresholdPx) return DragAxis.Undecided
     return if (abs(dx) >= abs(dy)) DragAxis.Horizontal else DragAxis.Vertical
 }
+
+/**
+ * Та ли это половина экрана, где удержание ускоряет воспроизведение.
+ *
+ * Правая — та же, что у перемотки вперёд дабл-тапом: жест «пропустить скучное» логично держать с
+ * той стороны, куда и так двигают время. Нулевая ширина (первый кадр) зоной не считается — иначе
+ * касание по левому краю сработало бы как правое.
+ */
+fun isSpeedHoldZone(x: Float, containerWidth: Float): Boolean =
+    containerWidth > 0f && x > containerWidth / 2f
 
 /** Левая половина экрана — яркость, правая — громкость. */
 fun verticalZoneAt(x: Float, containerWidth: Float): VerticalZone =
