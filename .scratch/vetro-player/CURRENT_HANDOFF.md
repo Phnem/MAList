@@ -20,7 +20,7 @@
 |---|---|---|---|
 | TICKET-01 | 1 автопропуск | `4772aa1` | DONE |
 | TICKET-02 | 3 жест зума | `614e773` | DONE_WITH_DEVIATIONS |
-| TICKET-03 | 2 кнопки серий | `COMMIT_03` | DONE |
+| TICKET-03 | 2 кнопки серий | `f5adccc` | DONE |
 
 ## Active ticket
 
@@ -54,7 +54,7 @@
 
 ## Relevant commits
 
-`6f8d613` планирование, `4772aa1` TICKET-01, `614e773` TICKET-02, `COMMIT_03` TICKET-03. Ранее на этой ветке — прогон `vetro-todo` (`3b3cee6`…`3121d00`).
+`6f8d613` планирование, `4772aa1` TICKET-01, `614e773` TICKET-02, `f5adccc` TICKET-03. Ранее на этой ветке — прогон `vetro-todo` (`3b3cee6`…`3121d00`).
 
 ## Verification already performed
 
