@@ -2,10 +2,10 @@
 
 ## Workflow
 
-Current workflow state: READY_FOR_IMPLEMENTATION
+Current workflow state: COMPLETED (по коду; визуальную приёмку подтверждает пользователь)
 Current ticket: None
-Last completed ticket: TICKET-03
-Next eligible ticket: TICKET-04
+Last completed ticket: TICKET-07
+Next eligible ticket: нет — пакет закрыт. Дальше хвосты прошлых прогонов, см. «Deferred work».
 Last updated: 2026-07-29
 
 ## Goal
@@ -91,10 +91,10 @@ Last updated: 2026-07-29
 | TICKET-01 | 1 | Меню качества по референсу | DONE¹ | — | `70f83cf` | без блокирующих |
 | TICKET-02 | 6 | Жест разворота вместо свободного зума | DONE_WITH_DEVIATIONS² | — | `63dd9df` | без блокирующих |
 | TICKET-03 | 2 | Автопереход на следующую серию | DONE_WITH_DEVIATIONS³ | TICKET-02 (снят) | `2152f98` | без блокирующих |
-| TICKET-04 | 3 | Прогресс манги по границе прочитанного | PENDING | — | | |
-| TICKET-05 | 4 | Анимация раскрытия и схлопывания томов | PENDING | TICKET-04 | | |
-| TICKET-06 | 5 | Меню глав: градиент и материал карточек | PENDING | TICKET-05 | | |
-| TICKET-07 | 7 | Порядок раскладок ридера + вертикальный дефолт | PENDING | TICKET-04 | | |
+| TICKET-04 | 3 | Прогресс манги по границе прочитанного | DONE⁴ | — | `074be39` | без блокирующих |
+| TICKET-05 | 4 | Анимация раскрытия и схлопывания томов | DONE¹ | TICKET-04 (снят) | `b13168e` | без блокирующих |
+| TICKET-06 | 5 | Меню глав: градиент и материал карточек | DONE¹ | TICKET-05 (снят) | `d711da8` | без блокирующих |
+| TICKET-07 | 7 | Порядок раскладок ридера + вертикальный дефолт | DONE | TICKET-04 (снят) | `76c0b66` | без блокирующих |
 
 ¹ Код-критерии выполнены и скомпилированы; совпадение с макетом на глаз подтверждает пользователь —
 в тикете отмечено как невыполнимая мной проверка.
@@ -106,6 +106,10 @@ Last updated: 2026-07-29
 ExoPlayer, переход по концу работал и раньше, и настройка гасит его через `pauseAtEndOfMediaItems`.
 Собственный переход поверх означал бы два механизма на одно действие. Область спеки не сужена:
 переключатель включает и выключает поведение в обоих плеерах.
+
+⁴ Граница считается по **номеру** главы, а не по позиции в списке, как значилось в тикете: позиция
+завязана на порядок, в котором оглавление отдал источник, и перевёрнутый список молча дал бы
+«77 из 92» вместо 16. Следствие: главы без номера (пролог, экстра) в отрезок не входят.
 
 Рёбра блокировки — только из-за общих файлов, не из-за логики:
 TICKET-02 → TICKET-03 (`StreamPlayerActivity`, `PlayerScreen`, `PlayerControls`);
@@ -146,28 +150,33 @@ Status: DONE_WITH_DEVIATIONS · [`issues/03-auto-next-episode.md`](./issues/03-a
 
 ### TICKET-04 — Прогресс манги по границе прочитанного
 
-Status: PENDING · [`issues/04-manga-progress-frontier.md`](./issues/04-manga-progress-frontier.md) ·
-Зависимости: нет · TDD: **REQUIRED** · Блокирует TICKET-05, TICKET-07
+Status: DONE · [`issues/04-manga-progress-frontier.md`](./issues/04-manga-progress-frontier.md) ·
+Зависимости: нет · TDD: **REQUIRED** (23 теста `MangaReadingSummaryTest`) · Коммит `074be39`
 
-Единственный тикет пакета, который необратимо пишет пользовательские данные.
+Единственный тикет пакета, который необратимо пишет пользовательские данные. При реализации
+поймана и исправлена ловушка: свежая метка времени у дописанных отметок погасила бы признак
+«вышли новые главы» у всей коллекции.
 
 ### TICKET-05 — Анимация раскрытия и схлопывания томов
 
-Status: PENDING · [`issues/05-volume-expand-animation.md`](./issues/05-volume-expand-animation.md) ·
-Зависимости: TICKET-04 · TDD: NOT_NEEDED · Блокирует TICKET-06
+Status: DONE · [`issues/05-volume-expand-animation.md`](./issues/05-volume-expand-animation.md) ·
+Зависимости: TICKET-04 · TDD: NOT_NEEDED · Коммит `b13168e`
+
+Том стал одним элементом списка (шапка + тело под `AnimatedVisibility`); группа без томов осталась
+ленивой.
 
 ### TICKET-06 — Меню глав: градиент и материал карточек
 
-Status: PENDING · [`issues/06-chapters-menu-surface.md`](./issues/06-chapters-menu-surface.md) ·
-Зависимости: TICKET-05 · TDD: NOT_NEEDED
+Status: DONE · [`issues/06-chapters-menu-surface.md`](./issues/06-chapters-menu-surface.md) ·
+Зависимости: TICKET-05 · TDD: NOT_NEEDED · Коммит `d711da8`
 
 Несёт обязательную структурную правку из архобзора: градиент экрана переезжает в токен, обе
 существующие копии переводятся на него.
 
 ### TICKET-07 — Порядок раскладок ридера + вертикальный дефолт
 
-Status: PENDING · [`issues/07-reader-layout-order.md`](./issues/07-reader-layout-order.md) ·
-Зависимости: TICKET-04 · TDD: RECOMMENDED
+Status: DONE · [`issues/07-reader-layout-order.md`](./issues/07-reader-layout-order.md) ·
+Зависимости: TICKET-04 · TDD: RECOMMENDED (5 тестов `ReaderLayoutTest`) · Коммит `76c0b66`
 
 ## Decisions
 
@@ -215,12 +224,12 @@ Status: PENDING · [`issues/07-reader-layout-order.md`](./issues/07-reader-layou
 
 ## Final acceptance checklist
 
-- [ ] Все семь тикетов завершены
-- [ ] Полная сборка (`assembleDebug`) прогнана
-- [ ] Спека проверена требование за требованием (AC-1…AC-11)
-- [ ] Нет нерешённых блокирующих замечаний ревью
-- [ ] Локальный плеер не потерял прежнего поведения
-- [ ] Настройки и меню серий не изменились после выноса градиента в токен
-- [ ] Пользовательское поведение проверено (визуальное и жесты — пользователем)
-- [ ] Отложенная работа выписана явно
-- [ ] Финальный архитектурный чекпоинт сделан
+- [x] Все семь тикетов завершены
+- [x] Полная сборка (`assembleDebug`) прогнана — `BUILD SUCCESSFUL in 46s`
+- [x] Спека проверена требование за требованием — [`reviews/final-review.md`](./reviews/final-review.md)
+- [x] Нет нерешённых блокирующих замечаний ревью
+- [x] Локальный плеер не потерял прежнего поведения **в коде**; на устройстве не проверялся
+- [x] Настройки и меню серий переведены на токен дословно (кроме сведения `#FFD9CC`→`#FFD8CB`)
+- [ ] **Пользовательское поведение проверено** — визуальное, жесты и воспроизведение за пользователем
+- [x] Отложенная работа выписана явно
+- [x] Финальный архитектурный чекпоинт сделан
