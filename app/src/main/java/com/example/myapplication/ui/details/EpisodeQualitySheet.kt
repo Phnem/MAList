@@ -58,6 +58,7 @@ import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import com.example.myapplication.ui.shared.theme.IosDesign
 import com.example.myapplication.ui.shared.theme.MotionTokens
+import com.example.myapplication.ui.shared.theme.OverlayThemeTokens
 import com.example.myapplication.ui.shared.theme.SnProFamily
 import com.example.myapplication.ui.shared.theme.SquircleShape
 import kotlinx.coroutines.delay
@@ -134,7 +135,10 @@ fun EpisodeQualityPopover(
     // GlassMenuHeader/GlassIconButton) здесь недоступен: меню живёт в отдельном окне `Popup`, а
     // `layerBackdrop` пишет контент окна приложения — сэмплировать его из чужого окна нельзя.
     // Глубину даёт связка «elevated-поверхность + scrim», без рамок-«ободков» (см. §3.2).
-    val menuSurface = IosDesign.level2Surface(isDark)
+    // В тёмной теме — непрозрачный #333333, а не level2Surface: тот даёт чёрный с alpha 0.75, что
+    // на чистом чёрном фоне приложения неотличимо от фона. В светлой теме материал уровня 2
+    // работает как задумано и остаётся.
+    val menuSurface = if (isDark) OverlayThemeTokens.EpisodeMenuSurfaceDark else IosDesign.level2Surface(isDark)
     val menuShape = remember { SquircleShape(QualityMenuRadius) }
     // Разделитель в тон бывшему pillRing: чуть заметнее его, но заметно легче §3.3-сепаратора —
     // на полупрозрачной поверхности линия 0.16 читалась бы как жирная решётка.
