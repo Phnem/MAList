@@ -90,7 +90,13 @@ fun ApiSearchResultCard(
             rating = r10.takeIf { it > 0f },
             genres = displayGenres ?: persistentListOf(*(result.genres.take(3).toTypedArray())),
             episodesText = buildString {
-                append(if (result.categoryType == "MOVIE") "1 film" else "${result.episodes} eps")
+                append(
+                    if (result.categoryType == "MOVIE") {
+                        "1 film"
+                    } else {
+                        searchResultCountText(result.episodes, "eps")
+                    },
+                )
                 append(" · ")
                 append(result.source)
             },

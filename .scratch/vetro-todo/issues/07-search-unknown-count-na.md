@@ -2,7 +2,7 @@
 
 ## Status
 
-PENDING
+DONE
 
 ## Objective
 
@@ -56,8 +56,36 @@ RECOMMENDED — чистая функция форматирования, тес
 
 ## Implementation notes
 
+Новый файл `ui/home/SearchResultCountText.kt`:
+
+```kotlin
+const val UnknownCountText = "N/A"
+
+fun searchResultCountText(count: Int?, unitLabel: String): String =
+    if (count == null || count <= 0) UnknownCountText else "$count $unitLabel"
+```
+
+Отдельный файл, а не функция внутри `ApiSearchResultCard.kt`, — сознательно: тот файл тянет Compose, и обычный JVM-тест на нём был бы хрупким. Здесь зависимостей нет вовсе.
+
+Вызов в `ApiSearchResultCard.kt:93`: `"${result.episodes} eps"` → `searchResultCountText(result.episodes, "eps")`. Ветка `"1 film"` для `categoryType == "MOVIE"` не тронута — там количество не приходит от источника, оно константа.
+
 ## Deviations
+
+Отступлений нет.
 
 ## Review findings
 
+- **TDD соблюдён.** Тест написан первым и подтверждённо провалился на компиляции (`Unresolved reference 'searchResultCountText'`, 7 мест), затем реализация, затем зелёный прогон. Порядок не постфактумный.
+- **Отрицательные значения** тоже трактуются как «неизвестно» (`count <= 0`). Отрицательного числа серий не бывает; если источник прислал такое, показывать его — хуже, чем сказать «не знаю».
+- **Область не расползлась.** Карточки коллекции, Details и `AddFromApiUseCase` не тронуты — правка только в выдаче поиска, как и предписывало решение D-4.
+- **Локализация.** Строка на карточке и раньше была англоязычной (`eps`, `film`), так что «N/A» не выбивается: в обеих локалях выводится одинаково. Критерий AC-5 выполнен по второй ветке («одинакова в обеих локалях»).
+- **Известное ограничение, не дефект тикета:** в БД неизвестное количество по-прежнему сохраняется как 1 серия (`AddFromApiUseCase.kt:67`). Это прямое следствие решения D-4 и записано в `spec.md` (Out of scope, Compatibility). В KDoc функции ограничение продублировано, чтобы следующий читатель не принял его за недосмотр.
+- Блокирующих замечаний нет.
+
 ## Completion evidence
+
+- Команда: `.\gradlew.bat :app:testDebugUnitTest --tests "*SearchResultCountTextTest*"` → `BUILD SUCCESSFUL in 10s`.
+- Отчёт `app/build/test-results/testDebugUnitTest/TEST-...SearchResultCountTextTest.xml`: `tests="4" skipped="0" failures="0" errors="0"` — тесты действительно исполнились, а не отфильтровались в ноль.
+- Покрыто: 0, null, отрицательное, реальные значения с разными единицами.
+- Компиляция приложения входит в `testDebugUnitTest`, отдельного прогона не требуется.
+- Все критерии тикета проверяемы автоматически; визуальных проверок, которые я не могу выполнить, здесь нет.
