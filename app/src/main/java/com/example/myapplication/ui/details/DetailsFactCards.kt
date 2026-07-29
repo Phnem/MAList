@@ -22,6 +22,7 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.PauseCircleOutline
 import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.Tv
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
@@ -39,6 +40,7 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.example.myapplication.data.models.Anime
 import com.example.myapplication.data.models.MediaType
+import com.example.myapplication.data.models.RatingScale
 import com.example.myapplication.network.AnimeDetails
 import com.example.myapplication.ui.shared.theme.BrandOrange
 import com.example.myapplication.ui.shared.theme.SnProFamily
@@ -60,8 +62,8 @@ data class DetailFact(
 
 /**
  * Собирает факты тайтла из локальной записи и подгруженной карточки API.
- * Порядок фиксированный (Статус, Эпизоды, Формат, Релиз, Источник, Студия) — сетка не должна
- * перетасовываться, когда у соседнего тайтла нет студии.
+ * Порядок фиксированный (Рейтинг, Статус, Эпизоды, Формат, Релиз, Источник, Студия) — сетка не
+ * должна перетасовываться, когда у соседнего тайтла нет студии.
  */
 fun buildDetailFacts(
     anime: Anime,
@@ -70,6 +72,18 @@ fun buildDetailFacts(
 ): List<DetailFact> {
     val isManga = anime.mediaType == MediaType.MANGA
     val facts = mutableListOf<DetailFact>()
+
+    // Рейтинг идёт первым: это единственный факт, который переехал сюда из верхней строки чипсов
+    // (её остальные пункты — дата и число серий — дублировали «Релиз» и «Эпизоды»). Задвинуть его
+    // в конец сетки значило бы обесценить сам смысл переноса.
+    ratingLabel(anime, details)?.let { label ->
+        facts += DetailFact(
+            key = "rating",
+            icon = Icons.Rounded.Star,
+            label = if (ru) "Рейтинг" else "Rating",
+            value = label,
+        )
+    }
 
     val statusCode = normalizeCode(details?.status)
     statusLabel(statusCode, ru)?.let { label ->
@@ -290,6 +304,24 @@ private fun sourceMaterialLabel(code: String?, ru: Boolean): String? = when (cod
     "MULTIMEDIA_PROJECT" -> if (ru) "Мультимедиа" else "Multimedia"
     "OTHER", "UNKNOWN" -> null
     else -> code.lowercase().replaceFirstChar { it.uppercase() }
+}
+
+/**
+ * Рейтинг для карточки фактов. Приоритет у оценки источника — ровно как было в прежнем чипсе,
+ * который эта карточка заменяет.
+ *
+ * API отдаёт рейтинг и по 10-балльной, и по 100-балльной шкале, отсюда развилка по `> 10`.
+ * Своя оценка форматируется через [RatingScale]: в БД она лежит целым ×10, вручную делить нельзя.
+ *
+ * Возвращает null, когда рейтинга нет ни там, ни там, — карточка тогда просто не попадает в
+ * сетку, как и остальные факты без значения. Показывать «0» нельзя: ноль здесь означал бы
+ * «оценка ноль», а не «оценки нет».
+ */
+private fun ratingLabel(anime: Anime, details: AnimeDetails?): String? {
+    val api = details?.rating?.takeIf { it > 0 }
+    if (api != null) return if (api > 10) "$api/100" else "$api/10"
+    val user = anime.rating.takeIf { it > 0f } ?: return null
+    return "${RatingScale.format(user)}/10"
 }
 
 private fun releaseLabel(details: AnimeDetails?, ru: Boolean): String? {

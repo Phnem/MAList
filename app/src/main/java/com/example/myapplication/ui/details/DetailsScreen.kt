@@ -32,7 +32,6 @@ import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.automirrored.rounded.MenuBook
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.PlayCircleFilled
-import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -65,7 +64,6 @@ import com.example.myapplication.data.models.Anime
 import com.example.myapplication.data.models.MediaType
 import com.example.myapplication.manga.ui.MangaChaptersPage
 import com.example.myapplication.manga.ui.rememberMangaContinueReading
-import com.example.myapplication.data.models.RatingScale
 import com.example.myapplication.isAppInDarkTheme
 import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.ui.shared.GlassPreset
@@ -419,53 +417,9 @@ private fun DetailsInfoPage(
                 overflow = TextOverflow.Ellipsis,
             )
 
-            Spacer(Modifier.height(14.dp))
-
-            // ——— Мета-чипы: дата · рейтинг · тип/серии ———
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                details?.airedOn?.let { MetaChip(text = it, chipBg = chipBg, fg = onBg) }
-
-                val apiRating = details?.rating?.takeIf { it > 0 }
-                val userRating = anime.rating.takeIf { it > 0f }
-                if (apiRating != null || userRating != null) {
-                    val ratingText = when {
-                        apiRating != null && apiRating > 10 -> "$apiRating/100"
-                        apiRating != null -> "$apiRating/10"
-                        else -> "${RatingScale.format(userRating!!)}/10"
-                    }
-                    Row(
-                        modifier = Modifier
-                            .clip(CircleShape)
-                            .background(chipBg)
-                            .padding(horizontal = 12.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            Icons.Rounded.Star,
-                            contentDescription = null,
-                            tint = Color(0xFFFFCC4D),
-                            modifier = Modifier.size(14.dp),
-                        )
-                        Spacer(Modifier.width(5.dp))
-                        Text(
-                            text = ratingText,
-                            style = MaterialTheme.typography.labelLarge.copy(
-                                fontFamily = SnProFamily,
-                                fontWeight = FontWeight.Bold,
-                            ),
-                            color = onBg,
-                        )
-                    }
-                }
-
-                if (anime.episodes > 0) {
-                    MetaChip(
-                        text = if (ru) "${anime.episodes} эп." else "${anime.episodes} ep.",
-                        chipBg = chipBg,
-                        fg = onBg,
-                    )
-                }
-            }
+            // Строки мета-чипов «дата · рейтинг · серии» здесь больше нет: дата дублировала
+            // карточку «Релиз», число серий — карточку «Эпизоды», а рейтинг переехал в сетку
+            // фактов отдельной карточкой (см. buildDetailFacts, ключ "rating").
 
             Spacer(Modifier.height(18.dp))
 
