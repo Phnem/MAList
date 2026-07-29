@@ -21,14 +21,20 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -771,7 +777,17 @@ private fun ReaderChrome(
                             1f to Color.Transparent,
                         ),
                     )
-                    .statusBarsPadding()
+                    // Не statusBarsPadding: активность прячет системные бары
+                    // (MangaReaderActivity.hideSystemBars), и этот инсет схлопывается в ноль —
+                    // а вырез камеры в statusBars не входит и никуда не девается. Отступаем по
+                    // объединению, иначе название главы уезжает под фронталку.
+                    // Горизонталь нужна для ландшафта, где вырез уходит вбок; низ исключаем —
+                    // бар прижат к верху, и нижний инсет только раздул бы ему высоту.
+                    .windowInsetsPadding(
+                        WindowInsets.systemBars
+                            .union(WindowInsets.displayCutout)
+                            .only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
+                    )
                     .padding(start = 4.dp, end = 12.dp, top = 8.dp, bottom = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
