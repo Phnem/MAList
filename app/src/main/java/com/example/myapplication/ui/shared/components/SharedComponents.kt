@@ -175,9 +175,9 @@ fun GenreSelectionSection(
     val categories = listOf(
         // Вторая копия того же списка — держать её в тех же токенах, что и
         // FormatCategoryTilesSection, иначе палитры разъедутся (ровно это и произошло раньше).
-        GenreCategoryData("Anime", strings.genreAnime, animeGenres, OverlayThemeTokens.SortAccentPrimary),
-        GenreCategoryData("Movies", strings.genreMovies, movieGenres, OverlayThemeTokens.SortAccentSecondary),
-        GenreCategoryData("Series", strings.genreSeries, seriesGenres, OverlayThemeTokens.SortAccentTertiary)
+        GenreCategoryData("Anime", strings.genreAnime, animeGenres, OverlayThemeTokens.AccentOrange),
+        GenreCategoryData("Movies", strings.genreMovies, movieGenres, OverlayThemeTokens.AccentBlue),
+        GenreCategoryData("Series", strings.genreSeries, seriesGenres, OverlayThemeTokens.AccentGreen)
     )
 
     ExpandableGenreFlow(

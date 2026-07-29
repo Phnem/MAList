@@ -698,9 +698,9 @@ fun SortOption.getIcon(): ImageVector = when (this) {
 }
 
 fun SortOption.getAccentColor(): Color = when (this) {
-    SortOption.RATING -> OverlayThemeTokens.SortAccentPrimary
-    SortOption.EPISODES -> OverlayThemeTokens.SortAccentSecondary
-    SortOption.TITLE -> OverlayThemeTokens.SortAccentTertiary
+    SortOption.RATING -> OverlayThemeTokens.AccentOrange
+    SortOption.EPISODES -> OverlayThemeTokens.AccentBlue
+    SortOption.TITLE -> OverlayThemeTokens.AccentYellow
 }
 
 // ==========================================
@@ -738,10 +738,10 @@ fun SortFilterOverlay(
     val swipe = rememberIosSheetSwipe { onDismiss() }
     // Один источник правды с [SortOption.getAccentColor] — раньше палитра была продублирована
     // здесь литералами, и правка в одном месте не доезжала до второго.
-    val accentRating = OverlayThemeTokens.SortAccentPrimary
-    val accentEpisodes = OverlayThemeTokens.SortAccentSecondary
-    val accentTitle = OverlayThemeTokens.SortAccentTertiary
-    val accentGenres = OverlayThemeTokens.SortAccentQuaternary
+    val accentRating = OverlayThemeTokens.AccentOrange
+    val accentEpisodes = OverlayThemeTokens.AccentBlue
+    val accentTitle = OverlayThemeTokens.AccentYellow
+    val accentGenres = OverlayThemeTokens.AccentPurple
     fun sortAccent(o: SortOption) = o.getAccentColor()
     val applyAccent = when (val d = draftSelection) {
         SortGridSelection.Genres -> accentGenres

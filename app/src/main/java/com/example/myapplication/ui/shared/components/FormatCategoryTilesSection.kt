@@ -95,11 +95,11 @@ fun FormatCategoryTilesWithGenres(
     )
 
     val categories = listOf(
-        // Тёплый ряд из OverlayThemeTokens вместо прежних «бренд + два нейтрала» (#8A8A8E серый,
+        // Разные насыщенные цвета вместо прежних «бренд + два нейтрала» (#8A8A8E серый,
         // #D9C3AB бежевый): рядом с брендовым оранжевым нейтралы читались как выключенные плитки.
-        GenreCategoryData("Anime", strings.genreAnime, animeGenres, OverlayThemeTokens.SortAccentPrimary),
-        GenreCategoryData("Movies", strings.genreMovies, movieGenres, OverlayThemeTokens.SortAccentSecondary),
-        GenreCategoryData("Series", strings.genreSeries, seriesGenres, OverlayThemeTokens.SortAccentTertiary)
+        GenreCategoryData("Anime", strings.genreAnime, animeGenres, OverlayThemeTokens.AccentOrange),
+        GenreCategoryData("Movies", strings.genreMovies, movieGenres, OverlayThemeTokens.AccentBlue),
+        GenreCategoryData("Series", strings.genreSeries, seriesGenres, OverlayThemeTokens.AccentGreen)
     )
 
     val isDark = isAppInDarkTheme()
