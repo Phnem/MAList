@@ -738,7 +738,9 @@ fun SwipeBackground(dismissState: SwipeToDismissBoxState) {
 
     val color by animateColorAsState(
         targetValue = when (direction) {
-            SwipeToDismissBoxValue.StartToEnd -> Color(0xFFFFD600).copy(alpha = 0.85f)
+            // Тот же токен, что у рамки и чипса избранного: раньше здесь был литерал, и цвет
+            // заливки разъехался с рамкой карточки.
+            SwipeToDismissBoxValue.StartToEnd -> OverlayThemeTokens.FavoriteGold.copy(alpha = 0.85f)
             SwipeToDismissBoxValue.EndToStart -> Color(0xFFFF1744).copy(alpha = 0.85f)
             SwipeToDismissBoxValue.Settled -> Color.Transparent
         },

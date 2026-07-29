@@ -19,11 +19,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Icon
 import androidx.compose.material3.FilledTonalButton
@@ -36,7 +38,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -190,14 +194,20 @@ fun SharedTransitionScope.OneUiAnimeCard(
     modifier: Modifier = Modifier
 ) {
     val isDark = isAppInDarkTheme()
-    val borderStroke = when {
-        state.isFavorite -> OverlayThemeTokens.FavoriteCardBorder
-        isDark -> Color.White.copy(alpha = 0.15f)
-        else -> LightBorder
+    // Рамка избранного — затухающая: золотая в левом верхнем углу и уходящая в прозрачность к
+    // правому нижнему. Роль «это избранное» теперь несёт угловой чипс со звездой, поэтому рамке
+    // не нужно быть толстой меткой — хватает тонкого golden edge, и карточка не выглядит
+    // обведённой в рамку.
+    val borderBrush = when {
+        state.isFavorite -> Brush.linearGradient(
+            0f to OverlayThemeTokens.FavoriteGold,
+            0.45f to OverlayThemeTokens.FavoriteGold.copy(alpha = 0.45f),
+            1f to Color.Transparent,
+        )
+        isDark -> SolidColor(Color.White.copy(alpha = 0.15f))
+        else -> SolidColor(LightBorder)
     }
-    // Рамка избранного заметно толще обычной кромки: на 1dp персиковый читался бы как чуть
-    // подсвеченный край, а не как метка.
-    val borderWidth = if (state.isFavorite) 2.dp else 1.dp
+    val borderWidth = 1.dp
     val cardBg = if (isDark) Color(0xFF1C1C1C) else MaterialTheme.colorScheme.surface
     val cardShadowColor = if (isDark) Color.Black.copy(alpha = 0.5f) else Color.Black.copy(alpha = 0.08f)
     val subtitleColor = if (isDark) Color(0xFFA7A7A7) else Color(0xFF8E8E93)
@@ -222,7 +232,7 @@ fun SharedTransitionScope.OneUiAnimeCard(
             .clip(RoundedCornerShape(24.dp))
             .background(cardBg)
             .border(
-                BorderStroke(borderWidth, borderStroke),
+                BorderStroke(borderWidth, borderBrush),
                 RoundedCornerShape(24.dp)
             )
     ) {
@@ -451,5 +461,48 @@ fun SharedTransitionScope.OneUiAnimeCard(
                 }
             }
         }
+
+        // Последним в Box — значит поверх постера, как на референсе. Внешний clip карточки
+        // (RoundedCornerShape(24.dp)) срезает чипсу верхний левый угол ровно по краю карточки,
+        // поэтому он садится в угол заподлицо, а не висит квадратом поверх скругления.
+        if (state.isFavorite) {
+            FavoriteCornerChip(modifier = Modifier.align(Alignment.TopStart))
+        }
+    }
+}
+
+/**
+ * Угловой чипс избранного — золотой «вымпел» со звездой в левом верхнем углу карточки.
+ *
+ * Вместе с затухающей рамкой заменяет прежнюю толстую обводку: рамка даёт золотой край, чипс —
+ * однозначную метку. Скругления подобраны под карточку: верхний левый угол совпадает с её
+ * радиусом, нижний правый скруглён мягче, отчего форма читается вымпелом, а не плашкой.
+ */
+@Composable
+private fun FavoriteCornerChip(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .size(30.dp)
+            .clip(
+                RoundedCornerShape(
+                    topStart = 24.dp,
+                    topEnd = 0.dp,
+                    bottomEnd = 14.dp,
+                    bottomStart = 0.dp,
+                ),
+            )
+            .background(OverlayThemeTokens.FavoriteGold),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.Star,
+            contentDescription = null,
+            tint = OverlayThemeTokens.OnFavoriteGold,
+            modifier = Modifier
+                // Звезда смещена к внешнему углу — в центре квадрата она визуально «падает»
+                // от скруглённого угла вправо-вниз.
+                .offset(x = (-1).dp, y = (-1).dp)
+                .size(15.dp),
+        )
     }
 }
