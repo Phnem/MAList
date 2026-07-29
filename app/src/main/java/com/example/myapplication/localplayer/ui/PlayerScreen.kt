@@ -99,6 +99,10 @@ fun PlayerScreen(
     var buffered by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(0L) }
     var currentIndex by remember { mutableIntStateOf(startIndex.coerceAtLeast(0)) }
+
+    // FR-3a: новая серия не должна открываться увеличенной — зум переживать переключение не обязан.
+    val zoomState = remember { PlayerZoomState() }
+    androidx.compose.runtime.LaunchedEffect(currentIndex) { zoomState.reset() }
     var audioTracks by remember { mutableStateOf<List<AudioTrackOption>>(emptyList()) }
     var speed by remember { mutableStateOf(1f) }
     var fit by remember { mutableStateOf(VideoFit.ORIGINAL) }
@@ -237,8 +241,12 @@ fun PlayerScreen(
                 .fillMaxSize()
                 .onSizeChanged { viewportSize = it }
                 .graphicsLayer {
-                    scaleX = animatedVideoScale
-                    scaleY = animatedVideoScale
+                    // Зум жестом домножается на существующий масштаб «вписывания», а не заменяет
+                    // его: иначе переключение fit сбрасывало бы увеличение и наоборот.
+                    scaleX = animatedVideoScale * zoomState.scale
+                    scaleY = animatedVideoScale * zoomState.scale
+                    translationX = zoomState.offsetX
+                    translationY = zoomState.offsetY
                 },
             factory = { ctx ->
                 // surface_type по умолчанию = SurfaceView: дешевле по батарее и композитингу, чем
@@ -295,6 +303,7 @@ fun PlayerScreen(
                 duration = duration,
                 hasPrev = currentIndex > 0,
                 hasNext = currentIndex < episodes.lastIndex,
+                zoomState = zoomState,
                 audioTracks = audioTracks,
                 speed = speed,
                 fit = fit,

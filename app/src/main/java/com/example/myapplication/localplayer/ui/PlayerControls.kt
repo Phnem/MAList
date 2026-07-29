@@ -134,6 +134,11 @@ fun PlayerControlsOverlay(
     duration: Long,
     hasPrev: Boolean,
     hasNext: Boolean,
+    /**
+     * Состояние зума видео. Поднято в хост, потому что жест ловится здесь (оверлей поверх видео),
+     * а трансформация применяется там — к самой поверхности плеера.
+     */
+    zoomState: PlayerZoomState,
     audioTracks: List<AudioTrackOption>,
     speed: Float,
     fit: VideoFit,
@@ -242,26 +247,49 @@ fun PlayerControlsOverlay(
                     onVideoTap(up.position.x, size.width)
                 }
             }
-            .pointerInput(locked, duration) {
+            // Зум идёт ПЕРЕД перемоткой: он потребляет событие при двух пальцах, и до
+            // detectHorizontalDragGestures мультитач тогда не доходит.
+            .playerZoomGestures(zoomState, enabled = !locked)
+            .pointerInput(locked, duration, zoomState) {
                 if (locked) return@pointerInput
                 var startPos = 0L
                 var target = 0L
+                // Драг, начавшийся при мультитаче, в дебаунсе после pinch'а или на увеличенном
+                // кадре, перемоткой не является. Решение принимается на onDragStart и держится
+                // весь драг: переобуться в середине свайпа — это ровно тот скачок, ради которого
+                // ось и лочат.
+                var blocked = false
                 detectHorizontalDragGestures(
                     onDragStart = {
-                        startPos = player.currentPosition
-                        target = startPos
-                        seekPreview = SeekPreview(startPos, target, duration)
+                        blocked = zoomState.swipesBlocked() || zoomState.isZoomed
+                        if (!blocked) {
+                            startPos = player.currentPosition
+                            target = startPos
+                            seekPreview = SeekPreview(startPos, target, duration)
+                        }
                     },
                     onDragEnd = {
-                        if (duration > 0) player.seekTo(target)
-                        seekPreview = null
+                        if (!blocked && duration > 0) player.seekTo(target)
+                        if (!blocked) seekPreview = null
+                        blocked = false
                     },
-                    onDragCancel = { seekPreview = null },
+                    onDragCancel = {
+                        if (!blocked) seekPreview = null
+                        blocked = false
+                    },
                     onHorizontalDrag = { change, dragAmount ->
-                        change.consume()
-                        val msPerPx = 120_000f / size.width.coerceAtLeast(1)
-                        target = (target + dragAmount * msPerPx).toLong().coerceIn(0L, duration)
-                        seekPreview = SeekPreview(startPos, target, duration)
+                        if (blocked) {
+                            // На увеличенном кадре тот же жест — панорама по нему.
+                            if (zoomState.isZoomed) {
+                                zoomState.pan(dragAmount, 0f, size)
+                                change.consume()
+                            }
+                        } else {
+                            change.consume()
+                            val msPerPx = 120_000f / size.width.coerceAtLeast(1)
+                            target = (target + dragAmount * msPerPx).toLong().coerceIn(0L, duration)
+                            seekPreview = SeekPreview(startPos, target, duration)
+                        }
                     },
                 )
             },

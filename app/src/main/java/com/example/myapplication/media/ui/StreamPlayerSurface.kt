@@ -35,6 +35,7 @@ import com.example.myapplication.localplayer.domain.SkipSegmentProvider
 import com.example.myapplication.localplayer.ui.AudioTrackOption
 import com.example.myapplication.localplayer.ui.ImmersivePlayerWindow
 import com.example.myapplication.localplayer.ui.PlayerControlsOverlay
+import com.example.myapplication.localplayer.ui.PlayerZoomState
 import com.example.myapplication.localplayer.ui.VideoFit
 import com.example.myapplication.localplayer.ui.isDrmProtected
 import com.example.myapplication.localplayer.ui.rememberPlayerAmbient
@@ -184,6 +185,9 @@ fun StreamPlayerSurface(
         }
     }
 
+    // FR-3a: сбрасывается при смене серии (TICKET-03 переиспользует этот же сброс).
+    val zoomState = remember { PlayerZoomState() }
+
     ImmersivePlayerWindow(enabled = !isInPip)
 
     Box(modifier.fillMaxSize().background(Color.Black)) {
@@ -192,8 +196,12 @@ fun StreamPlayerSurface(
                 .fillMaxSize()
                 .onSizeChanged { viewportSize = it }
                 .graphicsLayer {
-                    scaleX = animatedVideoScale
-                    scaleY = animatedVideoScale
+                    // Зум жестом домножается на существующий масштаб «вписывания», а не заменяет
+                    // его: иначе переключение fit сбрасывало бы увеличение и наоборот.
+                    scaleX = animatedVideoScale * zoomState.scale
+                    scaleY = animatedVideoScale * zoomState.scale
+                    translationX = zoomState.offsetX
+                    translationY = zoomState.offsetY
                 },
             factory = { context ->
                 // SurfaceView (значение surface_type по умолчанию) — не менять на TextureView:
@@ -236,6 +244,7 @@ fun StreamPlayerSurface(
                 duration = duration,
                 hasPrev = false,
                 hasNext = false,
+                zoomState = zoomState,
                 audioTracks = audioTracks,
                 speed = speed,
                 fit = fit,
