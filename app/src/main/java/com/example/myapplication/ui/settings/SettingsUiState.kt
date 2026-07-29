@@ -15,6 +15,11 @@ data class SettingsUiState(
     val devMirrorDbToDocuments: Boolean = false,
     val devHideShareButton: Boolean = false,
     val devFpsOverlay: Boolean = false,
+    /**
+     * Автопропуск сегментов в плеере. Один флаг на все виды ([SkipKind]: опенинг, эндинг, рекап) —
+     * ровно так его и трактуют оба плеера.
+     */
+    val autoSkipSegments: Boolean = false,
     val devAdaptiveGlassScroll: Boolean = false,
     val devGithubUpdatesEnabled: Boolean = false,
     val isExportingLogs: Boolean = false,

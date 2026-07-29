@@ -23,6 +23,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.myapplication.network.AppContentType
 import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.data.models.AppTheme
+import com.example.myapplication.localplayer.ui.LocalPlayerViewModel
 import com.example.myapplication.data.models.AppUpdateSnapshot
 import com.example.myapplication.data.models.AppUpdateStatus
 import com.example.myapplication.data.models.toUiStatus
@@ -109,6 +110,7 @@ private fun mergeSettingsUi(
         devMirrorDbToDocuments = prefs[KEY_DEV_MIRROR_DB] ?: false,
         devHideShareButton = prefs[KEY_DEV_HIDE_SHARE] ?: false,
         devFpsOverlay = prefs[KEY_DEV_FPS_OVERLAY] ?: false,
+        autoSkipSegments = prefs[LocalPlayerViewModel.AUTO_SKIP_KEY] ?: false,
         devAdaptiveGlassScroll = prefs[DevPreferencesKeys.ADAPTIVE_GLASS_SCROLL] ?: false,
         devGithubUpdatesEnabled = githubUpdatesEnabled,
         isExportingLogs = t.isExportingLogs,
@@ -291,6 +293,20 @@ class SettingsViewModel(
     fun setDevHideShare(enabled: Boolean) {
         viewModelScope.launch {
             settingsDataStore.edit { it[KEY_DEV_HIDE_SHARE] = enabled }
+        }
+    }
+
+    /**
+     * Единственный писатель [LocalPlayerViewModel.AUTO_SKIP_KEY].
+     *
+     * Ключ берётся напрямую из `LocalPlayerViewModel`, а не объявляется здесь второй строкой:
+     * у него три читателя (`LocalPlayerViewModel`, `StreamPlayerActivity`,
+     * `DownloadedPlayerActivity`), и разъехавшееся имя оставило бы автопропуск таким же
+     * недостижимым, как до этой правки, — только с переключателем, который внешне работает.
+     */
+    fun setAutoSkipSegments(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsDataStore.edit { it[LocalPlayerViewModel.AUTO_SKIP_KEY] = enabled }
         }
     }
 

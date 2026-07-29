@@ -56,6 +56,7 @@ import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.outlined.BrightnessAuto
 import androidx.compose.material.icons.outlined.Category
@@ -132,6 +133,7 @@ import com.example.myapplication.utils.getDevRepairDbStrings
 import com.example.myapplication.utils.getTitleDubbingStrings
 import com.example.myapplication.utils.TitleDubbingStrings
 import com.example.myapplication.utils.getCollectionEnrichmentStrings
+import com.example.myapplication.utils.getPlayerSettingsStrings
 import com.example.myapplication.utils.getGithubUpdateStrings
 import com.example.myapplication.utils.getStrings
 import com.example.myapplication.utils.performHaptic
@@ -198,6 +200,7 @@ fun SettingsScreen(
     val githubUpdateStrings = getGithubUpdateStrings(uiState.language)
     val aiConnectStrings = getAiConnectStrings(uiState.language)
     val enrichmentStrings = getCollectionEnrichmentStrings(uiState.language)
+    val playerSettingsStrings = getPlayerSettingsStrings(uiState.language)
 
     var showCloudSheet by remember { mutableStateOf(false) }
     var showAiConnectSheet by remember { mutableStateOf(false) }
@@ -443,6 +446,24 @@ fun SettingsScreen(
                                         iconWell = false,
                                         showChevron = true,
                                         onClick = { performHaptic(view, "light"); showAiConnectSheet = true },
+                                    )
+                                },
+                                {
+                                    IosRow(
+                                        title = playerSettingsStrings.autoSkipTitle,
+                                        subtitle = playerSettingsStrings.autoSkipSubtitle,
+                                        isDark = isDark,
+                                        icon = Icons.Filled.FastForward,
+                                        iconWell = false,
+                                        trailing = {
+                                            IosSwitch(
+                                                checked = uiState.autoSkipSegments,
+                                                onCheckedChange = {
+                                                    performHaptic(view, "light")
+                                                    viewModel.setAutoSkipSegments(it)
+                                                },
+                                            )
+                                        },
                                     )
                                 },
                                 {

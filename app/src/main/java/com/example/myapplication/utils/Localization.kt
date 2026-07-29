@@ -740,6 +740,32 @@ fun getCollectionEnrichmentStrings(lang: AppLanguage): CollectionEnrichmentStrin
     AppLanguage.EN -> EnglishCollectionEnrichmentStrings
 }
 
+/**
+ * Строки настроек плеера.
+ *
+ * Отдельным объектом, а не полями [UiStrings]: у того больше 254 полей роняют release-сборку
+ * (`VerifyError` в `clinit`), и в debug это не воспроизводится.
+ */
+data class PlayerSettingsStrings(
+    val autoSkipTitle: String,
+    val autoSkipSubtitle: String,
+)
+
+private val RussianPlayerSettingsStrings = PlayerSettingsStrings(
+    autoSkipTitle = "Автопропуск",
+    autoSkipSubtitle = "Молча перематывать опенинг, эндинг и рекап. Выключено — плеер показывает кнопку «Пропустить»",
+)
+
+private val EnglishPlayerSettingsStrings = PlayerSettingsStrings(
+    autoSkipTitle = "Auto-skip",
+    autoSkipSubtitle = "Skip openings, endings and recaps silently. When off, the player offers a Skip button instead",
+)
+
+fun getPlayerSettingsStrings(lang: AppLanguage): PlayerSettingsStrings = when (lang) {
+    AppLanguage.RU -> RussianPlayerSettingsStrings
+    AppLanguage.EN -> EnglishPlayerSettingsStrings
+}
+
 /** Строки блока «Где смотреть» (иконки-ссылки на одобренные сайты). */
 data class WebLinksStrings(
     val sheetTitle: String,

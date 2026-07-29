@@ -2,7 +2,7 @@
 
 ## Status
 
-PENDING
+DONE (фактическую перемотку на видео подтверждает пользователь — см. Completion evidence)
 
 ## Objective
 
@@ -60,8 +60,30 @@ NOT_NEEDED — строка настроек и запись в DataStore. Ал�
 
 ## Implementation notes
 
+- `utils/Localization.kt`: `PlayerSettingsStrings` + `getPlayerSettingsStrings(lang)` — **отдельный объект**, по образцу `CollectionEnrichmentStrings`/`WebLinksStrings`. В `UiStrings` не добавлено ничего.
+- `SettingsUiState`: `autoSkipSegments: Boolean = false`.
+- `SettingsViewModel`: чтение в маппинге состояния и `setAutoSkipSegments(enabled)`.
+- `SettingsScreen`: строка с `IosSwitch` в основной пользовательской группе (рядом с «Облако», «Обогащение», «ИИ», «Связь»), иконка `Icons.Filled.FastForward`, с гаптикой как у соседей.
+
+**Ключ переиспользован напрямую:** `settingsDataStore.edit { it[LocalPlayerViewModel.AUTO_SKIP_KEY] = enabled }`. Вторую строковую константу не заводил — это полностью снимает риск «разъехавшегося ключа», записанный в Risks: разъехаться нечему, объявление одно.
+
+Подтверждено, что это тот же экземпляр DataStore: `SettingsViewModel` получает `settingsDataStore = get(named("settings"))` (`di/viewModelModule.kt:63`), плееры читают из него же.
+
 ## Deviations
+
+Отступлений нет.
 
 ## Review findings
 
+- **Ключ — единственное объявление.** `grep AUTO_SKIP_KEY` показывает семь ссылок на одну константу из `LocalPlayerViewModel:112`: три читателя (`LocalPlayerViewModel`, `StreamPlayerActivity`, `DownloadedPlayerActivity`) и теперь писатель в `SettingsViewModel`. Дублирующей строки `"local_player_auto_skip"` в коде нет.
+- **`UiStrings` не тронут** — новые строки в отдельном `PlayerSettingsStrings`, release-ограничение в 254 поля не задето.
+- **Логика плееров не менялась** — по решению D-1 переключатель охватывает все виды сегментов, ровно как код уже работает. Правка ограничена настройками.
+- **Подпись переключателя честная**: сказано, что пропускаются опенинг, эндинг и рекап, а не только опенинг. Обещать в UI меньше, чем делает код, — это ловушка для пользователя.
+- **Размещение** — в основной пользовательской группе, а не в dev-секции: функция пользовательская.
+- Блокирующих замечаний нет.
+
 ## Completion evidence
+
+- Команда: `.\gradlew.bat :app:compileDebugKotlin` → `BUILD SUCCESSFUL in 8s`. (Первый прогон упал на четырёх `Unresolved reference` — не хватало импортов `getPlayerSettingsStrings`, `FastForward`, `LocalPlayerViewModel`; добавлены, прогон повторён.)
+- Сверка ключа выполнена статически (`grep`), а не на глаз — критерий тикета закрыт.
+- **Не выполнено и не может быть выполнено мной:** что при включённом переключателе плеер действительно перематывает сегмент на реальном видео (AC-4, AC-5). Устройства в сессии нет. Влияние на уверенность: путь «настройка → DataStore → три читателя» проверен по коду и общий ключ подтверждён, но сам факт перемотки зависит ещё и от того, отдал ли AniSkip тайминги для конкретной серии. **Требуется проверка пользователем.**
