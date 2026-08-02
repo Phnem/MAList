@@ -71,7 +71,7 @@ Last updated: 2026-07-29
 | TICKET-01 | Математика цикла катаны | DONE | — | см. коммит | самопроверка, без замечаний |
 | TICKET-02 | Рисование катаны на Canvas | DONE_WITH_DEVIATIONS | 01 | см. коммит | самопроверка + показ пользователю |
 | TICKET-03 | Оверлей + ридер манги | DONE | 02 | см. коммит | самопроверка, без замечаний |
-| TICKET-04 | Плеер: замороженный кадр | PENDING | 03 | — | — |
+| TICKET-04 | Плеер: замороженный кадр | DONE | 03 | см. коммит | самопроверка, без замечаний |
 | TICKET-05 | Форма движения по референсу | BLOCKED (ждёт референс) | — | — | — |
 
 ## Ticket details
@@ -128,16 +128,19 @@ Follow-up tickets: нет
 
 ### TICKET-04 — Плеер: замороженный кадр
 
-Status: PENDING
+Status: DONE
 Tracker reference: [`issues/04-player-frozen-frame.md`](./issues/04-player-frozen-frame.md)
 Dependencies: TICKET-03
-Acceptance criteria: см. тикет
-Implementation summary:
-Deviations:
-Architecture notes:
-Verification evidence:
-Commit:
-Follow-up tickets:
+Acceptance criteria: выполнены, кроме ручной проверки на устройстве — её подтверждает пользователь
+Implementation summary: `media/ui/FrozenFrame.kt` — снимок кадра `PixelCopy` шириной 128 px,
+размытие получается растяжением на весь экран. `StreamPlayerSurface` получил параметр `loading`
+и сам рисует ожидание; из активности ушёл `busyText`, блок ошибок остался.
+Deviations: нет
+Architecture notes: `SurfaceView` не поднят в активность — вниз спущен один флаг
+Verification evidence: `:app:assembleDebug` успешно; 175 тестов, 1 падение — чужое,
+предшествующее. Ручная проверка на устройстве за пользователем.
+Commit: см. историю ветки (`feat(player): ... [TICKET-04]`)
+Follow-up tickets: нет
 
 ## Decisions
 
