@@ -2,6 +2,7 @@ package com.example.myapplication.domain.recommendations
 
 import com.example.myapplication.domain.normalizeForSearch
 import com.example.myapplication.network.ApiSearchResult
+import kotlin.math.sqrt
 
 /**
  * Кандидат из related-графа одного сида (до агрегации/скоринга).
@@ -60,14 +61,20 @@ class RecommendationScorer(
             .take(limit)
     }
 
+    /**
+     * Норма пользовательского вектора вкуса — считается один раз на весь ранжируемый пул, а не
+     * на каждого кандидата: сам вектор [affinity] от кандидата не зависит.
+     */
+    private val affinityNorm: Float by lazy {
+        sqrt(affinity.values.sumOf { (it * it).toDouble() }).toFloat()
+    }
+
     private fun score(entries: List<PoolEntry>): Float {
         val genres = entries.firstNotNullOfOrNull { e -> e.result.genres.takeIf { it.isNotEmpty() } }.orEmpty()
-        val genreScore = genres
-            .mapNotNull { genreToTagId(it) }
-            .mapNotNull { affinity[it] }
-            .let { if (it.isEmpty()) 0f else it.average().toFloat() }
+        val genreTagIds = genres.mapNotNull { genreToTagId(it) }
+        val genreScore = cosineGenreScore(genreTagIds)
 
-        val coOccurrence = (COOCCURRENCE_STEP * (entries.size - 1)).coerceAtMost(COOCCURRENCE_CAP)
+        val coOccurrence = weightedCoOccurrence(entries)
 
         val rating = entries.firstNotNullOfOrNull { normalizedRating(it.result) } ?: 0
         val ratingBoost = (rating / 100f) * RATING_WEIGHT
@@ -75,6 +82,35 @@ class RecommendationScorer(
         val seedBoost = (entries.maxOf { it.seedRating } / 10f) * SEED_WEIGHT
 
         return genreScore + coOccurrence + ratingBoost + seedBoost
+    }
+
+    /**
+     * Косинусное сходство между полным вектором вкуса пользователя ([affinity], по всем тегам,
+     * не только тегам кандидата) и вектором кандидата (мульти-хот: 1 по каждому его тегу, 0 по
+     * остальным). Кандидат, совпадающий сразу с несколькими сильно любимыми тегами, получает
+     * более высокий балл, чем совпадающий только с одним — простое среднее по тегам такого не
+     * различало бы (Reko/Mangaki: компактный профиль + дешёвое сравнение вектором).
+     */
+    private fun cosineGenreScore(tagIds: List<String>): Float {
+        if (affinityNorm <= 0f) return 0f
+        val distinctTags = tagIds.distinct()
+        if (distinctTags.isEmpty()) return 0f
+        val dot = distinctTags.sumOf { (affinity[it] ?: 0f).toDouble() }.toFloat()
+        val candidateNorm = sqrt(distinctTags.size.toFloat())
+        return (dot / (affinityNorm * candidateNorm)).coerceIn(-1f, 1f)
+    }
+
+    /**
+     * Сила co-occurrence — сколько ЕЩЁ сидов, помимо лучшего (его рейтинг уже учтён в
+     * [SEED_WEIGHT]-бусте), рекомендуют кандидата, взвешенно по их пользовательским рейтингам.
+     * Кандидат, которого рекомендуют сразу несколько высоко оценённых сидов, стоит выше
+     * кандидата с тем же количеством, но еле терпимых сидов — раньше count делал их неотличимыми
+     * (Implicit: сходство по совместным рекомендациям, а не по голому числу источников).
+     */
+    private fun weightedCoOccurrence(entries: List<PoolEntry>): Float {
+        val extra = entries.sortedByDescending { it.seedRating }.drop(1)
+        val weight = extra.sumOf { (it.seedRating / 10f).coerceIn(0f, 1f).toDouble() }.toFloat()
+        return (weight * COOCCURRENCE_STEP).coerceAtMost(COOCCURRENCE_CAP)
     }
 
     /** Рейтинг источника, приведённый к 0..100 (AniList отдаёт 0..100, Shikimori/Jikan 0..10). */

@@ -6,6 +6,7 @@ import com.example.myapplication.data.local.RecommendationCacheStore
 import com.example.myapplication.data.models.Anime
 import com.example.myapplication.data.models.MediaType
 import com.example.myapplication.data.repository.GenreRepository
+import com.example.myapplication.data.repository.ImageStorageRepository
 import com.example.myapplication.domain.search.mapApiGenresToTagIds
 import com.example.myapplication.network.ApiService
 import com.example.myapplication.network.AppLanguage
@@ -33,6 +34,8 @@ class RecommendationEngine(
     private val localDataSource: AnimeLocalDataSource,
     private val genreRepository: GenreRepository,
     private val cache: RecommendationCacheStore,
+    private val coverDescriptorProvider: CoverDescriptorProvider,
+    private val imageStorageRepository: ImageStorageRepository,
     private val affinityCalculator: GenreAffinityCalculator = GenreAffinityCalculator(),
     private val filter: RecommendationFilter = RecommendationFilter(),
 ) {
@@ -88,9 +91,17 @@ class RecommendationEngine(
             preferredSource = if (language == AppLanguage.RU) "Shikimori" else "AniList",
         )
         val items = scorer.scoreAndRank(filtered, limit = MAX_RESULTS)
+        // BALSE-style визуальный сигнал — только для cold start (Onboarding), где остальные
+        // сигналы почти отсутствуют; при любой проблеме (нет BYOK-провайдера, сеть, рейт-лимит)
+        // тихо возвращаем items как есть, см. CoverDescriptorProvider.
+        val ranked = if (strategy is RecommendationStrategy.Onboarding) {
+            runCatching { applyVisualColdStart(items, library) }.getOrElse { items }
+        } else {
+            items
+        }
 
         return RecommendationsSnapshot(
-            items = items,
+            items = ranked,
             computedAtMillis = System.currentTimeMillis(),
             librarySignature = librarySignature(library),
             confidence = when (strategy) {
@@ -201,6 +212,42 @@ class RecommendationEngine(
             .getOrElse { emptyList() }
             .map { PoolEntry(it, seedTitle = "", seedRating = 0f) }
 
+    // ---- Визуальный cold start (BALSE-inspired) -------------------------------
+
+    /**
+     * Пере-ранжирует верхушку cold-start пула по сходству обложек с коллекцией пользователя.
+     * Ничего не делает, если нет подключённого vision-capable AI-провайдера или коллекция без
+     * обложек — тогда [items] возвращается как есть (см. Domain rules в спеке: BYOK опционален
+     * везде).
+     */
+    private suspend fun applyVisualColdStart(
+        items: List<RecommendationItem>,
+        library: List<Anime>,
+    ): List<RecommendationItem> {
+        if (!coverDescriptorProvider.isAvailable()) return items
+
+        val referenceTagSets = library
+            .mapNotNull { it.imageFileName }
+            .distinct()
+            .take(MAX_VISUAL_REFERENCE_COVERS)
+            .mapNotNull { fileName -> imageStorageRepository.getImageFilePath(fileName) }
+            .mapNotNull { path -> coverDescriptorProvider.descriptorsForLocalFile(path) }
+        if (referenceTagSets.isEmpty()) return items
+
+        val candidates = items.take(MAX_VISUAL_CANDIDATES)
+        val rest = items.drop(MAX_VISUAL_CANDIDATES)
+        val reScored = candidates
+            .map { item ->
+                val tags = coverDescriptorProvider.descriptorsForUrl(item.coverUrl).orEmpty()
+                val visual = visualSimilarityScore(tags, referenceTagSets)
+                item to visual
+            }
+            .sortedByDescending { (item, visual) -> item.score + visual * VISUAL_WEIGHT }
+            .map { (item, _) -> item }
+
+        return reScored + rest
+    }
+
     // ---- Сигнатура библиотеки --------------------------------------------------
 
     /** Дёшево и детерминированно: меняется при добавлении/удалении/оценке/избранном. */
@@ -217,6 +264,13 @@ class RecommendationEngine(
         const val MAX_FALLBACK_SEEDS = 3
         const val PER_SEED = 12
         const val TRENDING_LIMIT = 24
+
+        /** Сколько обложек коллекции берём как визуальный референс — ограничивает число AI-вызовов. */
+        const val MAX_VISUAL_REFERENCE_COVERS = 5
+        /** Сколько верхних cold-start кандидатов пере-ранжируем визуально — остальные не трогаем. */
+        const val MAX_VISUAL_CANDIDATES = 12
+        /** Вес визуального сходства в cold start — сопоставимо по влиянию, т.к. остальные сигналы там слабые. */
+        const val VISUAL_WEIGHT = 0.3f
 
         /**
          * Пул кэша шире, чем показывается за раз (см. сессионный сэмплинг во ViewModel):

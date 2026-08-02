@@ -128,6 +128,45 @@ class RecommendationScorerTest {
     }
 
     @Test
+    fun cosine_scoring_rewards_matching_more_of_the_users_liked_tags() {
+        // Раньше жанровый балл был простым средним по совпавшим тегам — кандидат с одним
+        // сильно любимым тегом и кандидат с двумя получали бы одинаковый средний балл (1.0).
+        // Косинусное сходство с полным вектором пользователя различает их.
+        val affinity = mapOf("Action" to 1f, "Comedy" to 1f, "Romance" to -1f)
+        val pool = listOf(
+            PoolEntry(candidate("Two Matches", genres = listOf("Action", "Comedy")), "S", 0f),
+            PoolEntry(candidate("One Match", genres = listOf("Action")), "S", 0f),
+        )
+        val ranked = scorer(affinity).scoreAndRank(pool, limit = 10)
+        assertEquals("Two Matches", ranked.first().title)
+        assertTrue(ranked.first().score > ranked[1].score)
+    }
+
+    @Test
+    fun cooccurrence_weighs_the_extra_seeds_rating_not_just_their_count() {
+        // Best-recommending seed rated 9 in both cases (equal seedBoost); the SECOND seed's
+        // rating differs and should be the only thing separating the two candidates' scores.
+        val pool = listOf(
+            PoolEntry(candidate("Backed By Favorites"), "Primary", 9f),
+            PoolEntry(candidate("Backed By Favorites"), "Secondary", 9f),
+            PoolEntry(candidate("Backed By Tolerated"), "Primary", 9f),
+            PoolEntry(candidate("Backed By Tolerated"), "Secondary", 2f),
+        )
+        val ranked = scorer().scoreAndRank(pool, limit = 10)
+        assertEquals("Backed By Favorites", ranked.first().title)
+        assertTrue(ranked.first().score > ranked[1].score)
+    }
+
+    @Test
+    fun cooccurrence_is_zero_for_a_single_recommending_seed_like_before() {
+        val pool = listOf(PoolEntry(candidate("Solo"), "S", 9f))
+        val ranked = scorer().scoreAndRank(pool, limit = 10)
+        // No genres/affinity/external rating → only the seed boost contributes; a lone seed adds
+        // no co-occurrence term (same as the pre-TICKET-05 baseline of size-1 == 0).
+        assertEquals(0.09f, ranked.first().score, 0.0001f)
+    }
+
+    @Test
     fun duplicates_merge_across_sources_by_any_title_key() {
         // AniList: title=english, alt=romaji; Shikimori: title=romaji, alt=russian
         val pool = listOf(
