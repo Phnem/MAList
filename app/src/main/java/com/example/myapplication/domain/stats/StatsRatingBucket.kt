@@ -1,7 +1,7 @@
 package com.example.myapplication.domain.stats
 
 /**
- * Тег корзины по среднему рейтингу (звёзды 0…5): ≤2 → 02, (2;4] → 24, >4 → 45.
+ * Тег корзины по среднему рейтингу (шкала 0…10): ≤4 → 02, (4;8] → 24, >8 → 45.
  */
 object StatsRatingBucket {
     const val TAG_02 = "02"

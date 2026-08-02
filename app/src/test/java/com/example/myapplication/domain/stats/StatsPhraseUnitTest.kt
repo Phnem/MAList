@@ -8,11 +8,11 @@ class StatsRatingBucketTest {
     @Test
     fun buckets_continuous_noGaps() {
         assertEquals(StatsRatingBucket.TAG_02, StatsRatingBucket.tagForAverage(0.0))
-        assertEquals(StatsRatingBucket.TAG_02, StatsRatingBucket.tagForAverage(2.0))
-        assertEquals(StatsRatingBucket.TAG_24, StatsRatingBucket.tagForAverage(2.01))
-        assertEquals(StatsRatingBucket.TAG_24, StatsRatingBucket.tagForAverage(4.0))
-        assertEquals(StatsRatingBucket.TAG_45, StatsRatingBucket.tagForAverage(4.01))
-        assertEquals(StatsRatingBucket.TAG_45, StatsRatingBucket.tagForAverage(5.0))
+        assertEquals(StatsRatingBucket.TAG_02, StatsRatingBucket.tagForAverage(4.0))
+        assertEquals(StatsRatingBucket.TAG_24, StatsRatingBucket.tagForAverage(4.01))
+        assertEquals(StatsRatingBucket.TAG_24, StatsRatingBucket.tagForAverage(8.0))
+        assertEquals(StatsRatingBucket.TAG_45, StatsRatingBucket.tagForAverage(8.01))
+        assertEquals(StatsRatingBucket.TAG_45, StatsRatingBucket.tagForAverage(10.0))
     }
 }
 
