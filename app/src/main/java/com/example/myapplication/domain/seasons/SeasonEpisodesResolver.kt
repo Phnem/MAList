@@ -59,7 +59,13 @@ class SeasonEpisodesResolver(
             if (entry != null) {
                 store.put(entry)
                 resolved++
-                Log.i(TAG, "Seasons for \"${anime.title}\": ${entry.seasons.map { "S${it.seasonNumber}=${it.episodes}" }} complete=${entry.complete}")
+                // Провенанс строки виден в логе: источник и наличие сезонного названия решают,
+                // сможет ли SourceEngine сузить поиск до сезона.
+                val rows = entry.seasons.map {
+                    val titled = if (it.title.isNullOrBlank()) "untitled" else "titled"
+                    "S${it.seasonNumber}=${it.episodes}(${it.source},$titled)"
+                }
+                Log.i(TAG, "Seasons for \"${anime.title}\": $rows complete=${entry.complete}")
             }
             delay(ITEM_DELAY_MS)
         }
@@ -80,8 +86,15 @@ class SeasonEpisodesResolver(
             ?.let { store.put(it) }
     }
 
-    /** Полный резолв одного тайтла. null = сид не найден и фолбэки пусты (перепробуем позже). */
-    suspend fun resolve(anime: Anime): SeasonEpisodesEntry? {
+    /**
+     * Полный резолв одного тайтла. null = сид не найден и фолбэки пусты (перепробуем позже).
+     * [includeStoredStreaming] выключается только для ручного full refresh, чтобы старые найденные
+     * сезоны не примешались обратно до записи свежего результата.
+     */
+    suspend fun resolve(
+        anime: Anime,
+        includeStoredStreaming: Boolean = true,
+    ): SeasonEpisodesEntry? {
         val self = findSeedNode(anime)
             ?: return fallbackSingleSeason(anime)
 
@@ -138,7 +151,11 @@ class SeasonEpisodesResolver(
 
         // Пропуск в середине цепочки съедает нумерацию — перенумеруем по порядку.
         val renumbered = seasons.mapIndexed { i, s -> s.copy(seasonNumber = i + 1) }
-        val withStreaming = mergeStreamingSeasons(anime.id, renumbered)
+        val withStreaming = if (includeStoredStreaming) {
+            mergeStreamingSeasons(anime.id, renumbered)
+        } else {
+            renumbered
+        }
         return SeasonEpisodesEntry(
             animeId = anime.id,
             seasons = withStreaming,

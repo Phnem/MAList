@@ -6,6 +6,7 @@ import com.example.myapplication.data.models.Anime
 import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.network.WebLinkResolver
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
@@ -23,7 +24,11 @@ class WebLinkEnrichmentUseCase(
     private val store: WebLinksStore,
 ) {
 
-    suspend fun enrichOne(anime: Anime, language: AppLanguage): Boolean {
+    suspend fun enrichOne(
+        anime: Anime,
+        language: AppLanguage,
+        shouldStop: () -> Boolean = { false },
+    ): Boolean {
         val queries = when (language) {
             AppLanguage.RU -> listOfNotNull(anime.titleRu, anime.title, anime.titleEn)
             AppLanguage.EN -> listOfNotNull(anime.titleEn, anime.title, anime.titleRu)
@@ -31,14 +36,18 @@ class WebLinkEnrichmentUseCase(
         Log.i(TAG, "enrichOne id=${anime.id} '${anime.title}' lang=$language queries=$queries")
         val linksBySite = linkedMapOf<String, ResolvedWebLink>()
         for (query in queries.take(MAX_TITLE_ALIASES)) {
-            val resolutions = runCatching {
+            if (shouldStop()) break
+            val resolutions = try {
                 when (language) {
                     AppLanguage.RU -> resolver.resolveRu(query)
                     AppLanguage.EN -> resolver.resolveEn(query)
                 }
-            }.onFailure {
-                Log.w(TAG, "resolve failed id=${anime.id} query='$query': ${it.message}")
-            }.getOrDefault(emptyList())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "resolve failed id=${anime.id} query='$query': ${e.message}")
+                emptyList()
+            }
             resolutions.forEach { resolution ->
                 linksBySite.putIfAbsent(
                     resolution.siteKey,
@@ -77,8 +86,13 @@ class WebLinkEnrichmentUseCase(
                 Log.i(TAG, "enrichBatch STOP requested after $done")
                 break
             }
-            runCatching { enrichOne(anime, language) }
-                .onFailure { Log.w(TAG, "enrichOne threw for '${anime.title}': ${it.message}") }
+            try {
+                enrichOne(anime, language, shouldStop)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "enrichOne threw for '${anime.title}': ${e.message}")
+            }
             done++
             delay(ITEM_DELAY_MS)
         }

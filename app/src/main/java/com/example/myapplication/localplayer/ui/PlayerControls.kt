@@ -54,7 +54,6 @@ import androidx.compose.material.icons.rounded.ScreenRotation
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.Speed
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -94,6 +93,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.myapplication.ui.shared.loading.BubbleClusterLoader
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.exoplayer.ExoPlayer
 import com.example.myapplication.ui.shared.theme.BrandOrangeBright
@@ -113,6 +113,8 @@ private val Capsule = RoundedCornerShape(percent = 50)
 
 /** Шаг перемотки дабл-тапом; каждый следующий тап подряд добавляет ещё один такой шаг. */
 private const val SEEK_STEP_MS = 10_000L
+/** Перемотка одним тапом по пузырьку «+89» слева от нижнего дока. */
+private const val SEEK_FORWARD_MS = 89_000L
 /** Сколько ждём следующий тап, прежде чем решить, что это был одиночный тап (показать контролы). */
 private const val SINGLE_TAP_DELAY_MS = 220L
 /** Сколько серия перемотки живёт после последнего тапа — окно накопления и время показа плашки. */
@@ -538,7 +540,10 @@ fun PlayerControlsOverlay(
                 }
                 Box(Modifier.size(72.dp), contentAlignment = Alignment.Center) {
                     if (isBuffering) {
-                        CircularProgressIndicator(color = Color.White, strokeWidth = 3.dp, modifier = Modifier.size(46.dp))
+                        BubbleClusterLoader(
+                            modifier = Modifier.size(46.dp),
+                            color = Color.White,
+                        )
                     } else {
                         TransportIcon(
                             if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
@@ -580,6 +585,15 @@ fun PlayerControlsOverlay(
                             color = Color.White,
                         )
                         Spacer(Modifier.weight(1f))
+                        SeekForwardBubble(
+                            tint = ambient.bottomTint,
+                            backdrop = ambient.bottomBackdrop,
+                            content = ambient.bottomContent,
+                            onClick = {
+                                player.seekTo(seekForwardTarget(player.currentPosition, duration, SEEK_FORWARD_MS))
+                            },
+                        )
+                        Spacer(Modifier.width(8.dp))
                         Row(
                             modifier = Modifier
                                 .ambientDockSurface(Capsule, ambient.bottomTint, ambient.bottomBackdrop)
@@ -909,6 +923,44 @@ private fun SkipButton(
         )
         Spacer(Modifier.width(6.dp))
         Icon(Icons.Rounded.SkipNext, contentDescription = null, tint = content, modifier = Modifier.size(24.dp))
+    }
+}
+
+/** Позиция после тапа по «+89»: вперёд на [amountMs], не дальше конца, если он уже известен. */
+internal fun seekForwardTarget(position: Long, duration: Long, amountMs: Long): Long =
+    if (duration > 0L) (position + amountMs).coerceAtMost(duration) else position + amountMs
+
+/**
+ * Пузырёк «+89» слева от нижнего дока — тот же капсульный стиль, что у [SkipButton], но с
+ * фиксированной подписью и без иконки: один тап перематывает на [SEEK_FORWARD_MS] вперёд.
+ */
+@Composable
+private fun SeekForwardBubble(
+    tint: Color,
+    backdrop: DockBackdrop?,
+    content: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .ambientDockSurface(Capsule, tint, backdrop)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            )
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = "+${SEEK_FORWARD_MS / 1000}",
+            style = MaterialTheme.typography.titleMedium.copy(
+                fontFamily = SnProFamily,
+                fontWeight = FontWeight.SemiBold,
+            ),
+            color = content,
+        )
     }
 }
 

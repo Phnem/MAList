@@ -148,6 +148,7 @@ class EpisodeMenuViewModel(
     private val artworkLoaded = mutableSetOf<Int>()
     private val episodeJobs = mutableMapOf<EpisodeKey, Job>()
     private val downloadSlots = Semaphore(2)
+    private var seasonDiscoveryRequested = false
 
     init {
         viewModelScope.launch {
@@ -174,9 +175,13 @@ class EpisodeMenuViewModel(
      */
     fun discoverMoreSeasons(ru: Boolean) {
         if (_state.value.discoveringSeasons) return
+        val forceRefresh = seasonDiscoveryRequested
+        seasonDiscoveryRequested = true
         _state.update { it.copy(discoveringSeasons = true) }
         viewModelScope.launch {
-            val outcome = runCatching { seasonDiscovery.discover(anime.id) }
+            val outcome = runCatching {
+                seasonDiscovery.discover(anime.id, forceRefresh = forceRefresh)
+            }
                 .onFailure { Log.w(TAG, "Season discovery failed", it) }
                 .getOrNull()
             _state.update { it.copy(discoveringSeasons = false) }
@@ -186,6 +191,12 @@ class EpisodeMenuViewModel(
                         "Найдено сезонов: +${outcome.addedSeasons}, серий: +${outcome.addedEpisodes}"
                     } else {
                         "Found +${outcome.addedSeasons} season(s), +${outcome.addedEpisodes} episode(s)"
+                    }
+                is com.example.myapplication.domain.seasons.StreamingSeasonDiscovery.Outcome.Refreshed ->
+                    if (ru) {
+                        "Список сезонов полностью обновлён"
+                    } else {
+                        "Season list fully refreshed"
                     }
                 com.example.myapplication.domain.seasons.StreamingSeasonDiscovery.Outcome.NothingNew ->
                     if (ru) "Новых сезонов нет" else "No new seasons"

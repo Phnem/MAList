@@ -81,7 +81,6 @@ fun PlayerScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val skipProvider = org.koin.compose.koinInject<com.example.myapplication.localplayer.domain.SkipSegmentProvider>()
 
     val exoPlayer = remember {
         val extractorsFactory = DefaultExtractorsFactory()
@@ -108,6 +107,10 @@ fun PlayerScreen(
 
     val pinchState = remember { PlayerPinchState() }
     var audioTracks by remember { mutableStateOf<List<AudioTrackOption>>(emptyList()) }
+    // Метка выбранной пользователем дорожки — переживает переход между сериями (весь сезон живёт
+    // одним плейлистом в одном ExoPlayer, см. класс-комментарий), поэтому запоминаем её здесь, а
+    // не в EpisodePlaybackStore: до кросс-сессионного хранения это не требование тикета.
+    var preferredAudioLabel by remember { mutableStateOf<String?>(null) }
     var speed by remember { mutableStateOf(1f) }
     var fit by remember { mutableStateOf(VideoFit.ORIGINAL) }
     // Новая серия не должна открываться обрезанной — положение кадра переживать переключение не
@@ -135,25 +138,20 @@ fun PlayerScreen(
     )
     var playbackError by remember { mutableStateOf<String?>(null) }
 
-    // ——— Тайминги пропуска опенинга/эндинга (AniSkip) ———
-    var segments by remember { mutableStateOf<List<com.example.myapplication.localplayer.domain.SkipSegment>>(emptyList()) }
-    val durationKnown = duration > 0
-    androidx.compose.runtime.LaunchedEffect(currentIndex, durationKnown, malId) {
-        segments = emptyList()
-        if (!durationKnown) return@LaunchedEffect
-        val epNum = episodes.getOrNull(currentIndex)?.episodeNumber
-        segments = runCatching { skipProvider.fetch(anilistId, malId, epNum, duration) }.getOrDefault(emptyList())
-    }
-    val activeSegment by androidx.compose.runtime.remember {
-        androidx.compose.runtime.derivedStateOf {
-            segments.firstOrNull { position >= it.startMs && position < it.endMs }
-        }
-    }
-    // Автоскип: если включён в настройках (по умолчанию ВЫКЛ) — молча перескакиваем.
-    androidx.compose.runtime.LaunchedEffect(activeSegment, autoSkipEnabled) {
-        val seg = activeSegment
-        if (autoSkipEnabled && seg != null) exoPlayer.seekTo(seg.endMs)
-    }
+    val currentEpisode = episodes.getOrNull(currentIndex)
+    val currentMediaId = currentEpisode?.documentUri.orEmpty()
+    val skipPlayback = rememberMediaSkipPlayback(
+        player = exoPlayer,
+        mediaId = currentMediaId,
+        diagnosticEpisodeKey = "local:$currentMediaId",
+        episodeNumber = currentEpisode?.episodeNumber,
+        anilistId = anilistId,
+        malId = malId,
+        durationMs = duration,
+        positionMs = position,
+        autoSkipEnabled = autoSkipEnabled,
+    )
+    val activeSegment = skipPlayback.activeSegment
 
     DisposableEffect(exoPlayer) {
         val listener = object : Player.Listener {
@@ -172,12 +170,20 @@ fun PlayerScreen(
             }
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                position = 0L
+                buffered = 0L
+                duration = 0L
                 currentIndex = exoPlayer.currentMediaItemIndex
             }
 
             override fun onTracksChanged(tracks: Tracks) {
                 audioTracks = tracks.extractAudioOptions()
                 drmProtected = tracks.isDrmProtected()
+                // Новая серия ExoPlayer подбирает дорожку сама — если пользователь уже выбирал
+                // дорожку раньше в этом сеансе, переносим её выбор на серию, если такая есть.
+                matchPreferredAudioTrack(preferredAudioLabel, audioTracks)?.let { match ->
+                    exoPlayer.applyAudioOverride(match)
+                }
             }
 
             override fun onVideoSizeChanged(size: VideoSize) {
@@ -319,15 +325,31 @@ fun PlayerScreen(
                 fit = fit,
                 // Кнопку показываем только когда автоскип ВЫКЛ и мы внутри отрезка опенинга/эндинга.
                 skipVisible = !autoSkipEnabled && activeSegment != null,
-                onSkip = { activeSegment?.let { exoPlayer.seekTo(it.endMs) } },
+                onSkip = skipPlayback.manualSkip,
                 onBack = onBack,
                 onEnterPip = onEnterPip,
                 onSelectSpeed = { s -> speed = s; exoPlayer.playbackParameters = PlaybackParameters(s) },
-                onSelectAudio = { opt -> exoPlayer.applyAudioOverride(opt) },
+                onSelectAudio = { opt ->
+                    preferredAudioLabel = opt.label
+                    exoPlayer.applyAudioOverride(opt)
+                },
                 onSetFit = { fit = it },
             )
         }
     }
+}
+
+/**
+ * Дорожка новой серии, соответствующая ранее выбранной пользователем (по [label][AudioTrackOption.label]
+ * — единственный устойчивый признак дорожки между сериями, `groupIndex`/`trackIndex` per-episode).
+ * `null`, если выбора не было, подходящей дорожки нет, либо она и так уже выбрана.
+ */
+internal fun matchPreferredAudioTrack(
+    preferredLabel: String?,
+    options: List<AudioTrackOption>,
+): AudioTrackOption? {
+    if (preferredLabel == null) return null
+    return options.firstOrNull { it.label == preferredLabel && !it.isSelected }
 }
 
 /** Достаёт список аудиодорожек из [Tracks] для меню выбора. */

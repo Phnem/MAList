@@ -37,12 +37,12 @@ class SourceEngine(
             AppLanguage.RU -> resolveRu(anime, episodeNumber, seasonInfo)
             AppLanguage.EN -> resolveEn(anime, episodeNumber, seasonInfo)
         }
-        val normalized = resolved.normalizeHosters()
+        val normalized = resolved.withPropagatedSkipReference().playableHosters()
         Log.i(
             TAG,
             "Resolved ${normalized.size} hosters / " +
                 "${normalized.sumOf { it.videos.orEmpty().size }} videos for " +
-                "${anime.title} ep $episodeNumber [$language]",
+                "${anime.title} S${seasonInfo?.seasonNumber ?: 1}E$episodeNumber [$language]",
         )
         return normalized
     }
@@ -54,12 +54,13 @@ class SourceEngine(
     ): List<VetroHoster> {
         webLinksStore.ensureLoaded()
         val links = webLinksStore.flow.value[anime.id]?.ruLinks.orEmpty()
+        val seasonQuery = anime.seasonSourceQuery(seasonInfo)
         val aniKnown = links.firstOrNull {
             it.siteKey == WebLinkSites.ANILIBRIA_TOP ||
                 it.siteKey == WebLinkSites.ANILIBRIA_TV
         }?.url
         val seasonSpecificAniUrl = aniKnown.takeIf {
-            (seasonInfo?.seasonNumber?.coerceAtLeast(1) ?: 1) == 1
+            seasonInfo == null || seasonInfo.seasonNumber <= 1
         }
         val jutKnown = links.firstOrNull { it.siteKey == WebLinkSites.JUTSU }?.url
 
@@ -67,10 +68,13 @@ class SourceEngine(
         val exact = supervisorScope {
             buildList<suspend () -> List<VetroHoster>> {
                 if (seasonSpecificAniUrl != null) {
-                    add { aniLibriaSource.resolveEpisode(anime, episodeNumber, seasonSpecificAniUrl) }
-                }
-                if (jutKnown != null) {
-                    add { jutSuSource.resolveEpisode(anime, episodeNumber, seasonInfo, jutKnown) }
+                    add {
+                        aniLibriaSource.resolveEpisode(
+                            seasonQuery.anime,
+                            episodeNumber,
+                            seasonSpecificAniUrl,
+                        )
+                    }
                 }
             }.map { block ->
                 async { safeResolve("known source", EXACT_SOURCE_TIMEOUT_MS, block) }
@@ -82,16 +86,27 @@ class SourceEngine(
             buildList<Pair<String, suspend () -> List<VetroHoster>>> {
                 if (seasonSpecificAniUrl == null) {
                     add("AniLiberty" to {
-                        aniLibriaSource.resolveEpisode(anime, episodeNumber)
+                        aniLibriaSource.resolveEpisode(
+                            anime = anime,
+                            episodeNumber = episodeNumber,
+                            seasonInfo = seasonInfo,
+                        )
                     })
                 }
-                add("AnimeGo" to { animeGoSource.resolveEpisode(anime, episodeNumber) })
-                add("Kodik" to { kodikSource.resolveEpisode(anime, episodeNumber) })
-                if (jutKnown == null) {
-                    add("jut.su" to {
-                        jutSuSource.resolveEpisode(anime, episodeNumber, seasonInfo)
-                    })
-                }
+                // AnimeGo больше не выпадает из гонки на сезонах без собственного названия:
+                // он получает франшизные алиасы и ищет ими.
+                add("AnimeGo" to {
+                    animeGoSource.resolveEpisode(seasonQuery, episodeNumber)
+                })
+                add("Kodik" to { kodikSource.resolveEpisode(anime, episodeNumber, seasonInfo) })
+                // jut.su — источник ТАЙМСКИПОВ, не видео: сайт перешёл на новый плеер и отдаёт
+                // в разметке заглушки вместо адресов (§ .scratch/season-source-resolution,
+                // TICKET-02). Конфиг с таймингами по-прежнему приезжает, поэтому ветку держим,
+                // но видео из неё отбрасываем — как это давно делает EN-путь.
+                add("jut.su reference" to {
+                    jutSuSource.resolveEpisode(anime, episodeNumber, seasonInfo, jutKnown)
+                        .map { it.copy(videos = emptyList()) }
+                })
             }.map { (label, block) ->
                 async {
                     val timeout = if (label == "Kodik") KODIK_SOURCE_TIMEOUT_MS else SOURCE_TIMEOUT_MS
@@ -99,9 +114,10 @@ class SourceEngine(
                 }
             }.awaitAll().flatten()
         }
-        if (exact.isNotEmpty() || native.isNotEmpty()) return exact + native
+        val resolved = exact + native
+        if (resolved.hasPlayableVideo()) return resolved
 
-        return resolveDirectFallback(links.map { it.url })
+        return resolved + resolveDirectFallback(links.map { it.url })
     }
 
     private suspend fun resolveEn(
@@ -109,15 +125,26 @@ class SourceEngine(
         episodeNumber: Int,
         seasonInfo: SeasonInfo?,
     ): List<VetroHoster> {
-        // AnimeHeaven needs three sequential page loads (search → title → gate), hence its own budget.
-        val native = safeResolve("AnimeHeaven", EN_SOURCE_TIMEOUT_MS) {
-            animeHeavenSource.resolveEpisode(anime, episodeNumber, seasonInfo)
+        val (native, jutReference) = supervisorScope {
+            // AnimeHeaven needs three sequential page loads (search → title → gate), hence its own budget.
+            val video = async {
+                safeResolve("AnimeHeaven", EN_SOURCE_TIMEOUT_MS) {
+                    animeHeavenSource.resolveEpisode(anime, episodeNumber, seasonInfo)
+                }
+            }
+            val reference = async {
+                safeResolve("jut.su reference", SOURCE_TIMEOUT_MS) {
+                    jutSuSource.resolveEpisode(anime, episodeNumber, seasonInfo)
+                        .map { it.copy(videos = emptyList()) }
+                }
+            }
+            video.await() to reference.await()
         }
-        if (native.isNotEmpty()) return native
+        if (native.hasPlayableVideo()) return native + jutReference
 
         webLinksStore.ensureLoaded()
         val links = webLinksStore.flow.value[anime.id]?.enLinks.orEmpty()
-        return resolveDirectFallback(links.map { it.url })
+        return jutReference + resolveDirectFallback(links.map { it.url })
     }
 
     private suspend fun resolveDirectFallback(urls: List<String>): List<VetroHoster> {
@@ -127,19 +154,31 @@ class SourceEngine(
         }
     }
 
+    /**
+     * Исход КАЖДОЙ ветки попадает в лог, включая пустую. Раньше молчание источника было
+     * неотличимо от того, что его вообще не запускали, и отказ разбирался по сырым строкам Ktor.
+     */
     private suspend fun safeResolve(
         label: String,
         timeoutMs: Long,
         block: suspend () -> List<VetroHoster>,
     ): List<VetroHoster> {
-        return withTimeoutOrNull(timeoutMs) {
+        val startedAt = System.currentTimeMillis()
+        val resolved = withTimeoutOrNull(timeoutMs) {
             runCatching { block() }
                 .onFailure { Log.w(TAG, "$label failed: ${it.message}") }
                 .getOrElse { emptyList() }
-        } ?: run {
-            Log.w(TAG, "$label timed out after ${timeoutMs}ms")
-            emptyList()
         }
+        val elapsedMs = System.currentTimeMillis() - startedAt
+        if (resolved == null) {
+            Log.w(TAG, "$label timed out after ${timeoutMs}ms")
+            return emptyList()
+        }
+        val playable = resolved.sumOf { hoster ->
+            hoster.videos.orEmpty().count { isPlayableVetroVideoUrl(it.url) }
+        }
+        Log.i(TAG, "$label → ${resolved.size} hoster(s), $playable playable video(s), ${elapsedMs}ms")
+        return resolved
     }
 
     suspend fun resolveBestVideo(hosters: List<VetroHoster>): VetroVideo? {
@@ -147,16 +186,6 @@ class SourceEngine(
         flat.firstOrNull { it.isPreferred }?.let { return it }
         return flat.maxByOrNull { it.resolution ?: 0 }
     }
-
-    private fun List<VetroHoster>.normalizeHosters(): List<VetroHoster> =
-        mapNotNull { hoster ->
-            val videos = hoster.videos.orEmpty()
-                .filter { it.url.startsWith("http://") || it.url.startsWith("https://") }
-                .distinctBy { it.url }
-            hoster.copy(videos = videos).takeIf { videos.isNotEmpty() }
-        }.distinctBy { hoster ->
-            hoster.videos.orEmpty().joinToString("|") { it.url }
-        }
 
     companion object {
         private const val TAG = "SourceEngine"

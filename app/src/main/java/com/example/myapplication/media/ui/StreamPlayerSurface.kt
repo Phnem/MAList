@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -30,10 +29,9 @@ import androidx.media3.common.VideoSize
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
-import com.example.myapplication.localplayer.domain.SkipSegment
-import com.example.myapplication.localplayer.domain.SkipSegmentProvider
 import com.example.myapplication.localplayer.ui.AudioTrackOption
 import com.example.myapplication.localplayer.ui.ImmersivePlayerWindow
+import com.example.myapplication.localplayer.ui.rememberMediaSkipPlayback
 import com.example.myapplication.localplayer.ui.PlayerControlsOverlay
 import com.example.myapplication.localplayer.ui.PlayerPinchState
 import com.example.myapplication.localplayer.ui.VideoFit
@@ -43,7 +41,6 @@ import com.example.myapplication.media.source.VetroVideo
 import com.example.myapplication.ui.shared.theme.MotionTokens
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
-import org.koin.compose.koinInject
 import kotlin.math.max
 
 /** The custom Exo controls applied to a remote, header-aware player. */
@@ -70,11 +67,16 @@ fun StreamPlayerSurface(
     hasNextEpisode: Boolean = false,
     onPrevEpisode: () -> Unit = {},
     onNextEpisode: () -> Unit = {},
+    /** Идёт резолв ссылки или переключение серии; показывается локальный индикатор в контролах. */
+    loading: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
-    val skipProvider = koinInject<SkipSegmentProvider>()
     var isPlaying by remember(player) { mutableStateOf(player.isPlaying) }
-    var isBuffering by remember(player) { mutableStateOf(true) }
+    var isBuffering by remember(player) { mutableStateOf(player.playbackState != Player.STATE_READY) }
+    val showLoading = shouldShowStreamLoading(
+        requestPending = loading,
+        playerBuffering = isBuffering,
+    )
     var position by remember(player) { mutableLongStateOf(player.currentPosition) }
     var buffered by remember(player) { mutableLongStateOf(player.bufferedPosition) }
     var duration by remember(player) { mutableLongStateOf(0L) }
@@ -102,8 +104,6 @@ fun StreamPlayerSurface(
         animationSpec = MotionTokens.standard(),
         label = "streamVideoFitScale",
     )
-    var segments by remember(video.url) { mutableStateOf<List<SkipSegment>>(emptyList()) }
-
     val studioTracks = remember(renditions, video.url) {
         renditions
             .filter { !it.sourceName.isNullOrBlank() }
@@ -126,26 +126,22 @@ fun StreamPlayerSurface(
     val audioTracks =
         studioTracks + embeddedAudioTracks.takeIf { it.size > 1 }.orEmpty()
 
-    LaunchedEffect(video.url, duration, malId, anilistId, episodeNumber) {
-        if (duration <= 0L) return@LaunchedEffect
-        val embedded = video.timestamps.map {
-            SkipSegment(it.startMs, it.endMs, it.kind)
-        }
-        segments = embedded.ifEmpty {
-            runCatching {
-                skipProvider.fetch(anilistId, malId, episodeNumber, duration)
-            }.getOrDefault(emptyList())
-        }
-    }
-    val activeSegment by remember {
-        derivedStateOf {
-            segments.firstOrNull { position >= it.startMs && position < it.endMs }
-        }
-    }
-    LaunchedEffect(activeSegment, autoSkipEnabled) {
-        val segment = activeSegment
-        if (autoSkipEnabled && segment != null) player.seekTo(segment.endMs)
-    }
+    val skipPlayback = rememberMediaSkipPlayback(
+        player = player,
+        mediaId = video.url,
+        diagnosticEpisodeKey =
+            "stream:${malId ?: anilistId ?: title.hashCode()}:$episodeNumber",
+        episodeNumber = episodeNumber,
+        anilistId = anilistId,
+        malId = malId,
+        durationMs = duration,
+        positionMs = position,
+        autoSkipEnabled = autoSkipEnabled,
+        exactTimestamps = video.timestamps,
+        exactOrigin = video.sourceName,
+        reference = video.skipReference,
+    )
+    val activeSegment = skipPlayback.activeSegment
 
     DisposableEffect(player) {
         val listener = object : Player.Listener {
@@ -246,7 +242,7 @@ fun StreamPlayerSurface(
                 onControlsVisibleChange = { controlsVisible = it },
                 onRotate = onRotate,
                 isPlaying = isPlaying,
-                isBuffering = isBuffering,
+                isBuffering = showLoading,
                 position = position,
                 buffered = buffered,
                 duration = duration,
@@ -259,7 +255,7 @@ fun StreamPlayerSurface(
                 speed = speed,
                 fit = fit,
                 skipVisible = !autoSkipEnabled && activeSegment != null,
-                onSkip = { activeSegment?.let { player.seekTo(it.endMs) } },
+                onSkip = skipPlayback.manualSkip,
                 onBack = onBack,
                 onEnterPip = onEnterPip,
                 onSelectSpeed = {

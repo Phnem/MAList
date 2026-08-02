@@ -7,6 +7,7 @@ import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.util.Log
 import android.util.Rational
 import androidx.activity.ComponentActivity
@@ -28,6 +29,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -42,23 +44,37 @@ import androidx.compose.ui.unit.dp
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.ViewModelProvider
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaSession
 import com.example.myapplication.data.models.Anime
+import com.example.myapplication.domain.enrichment.CollectionEnrichmentCoordinator
+import com.example.myapplication.domain.enrichment.InteractiveMediaPauseViewModel
 import com.example.myapplication.domain.seasons.SeasonInfo
 import com.example.myapplication.localplayer.ui.LocalPlayerViewModel
 import com.example.myapplication.media.MediaGateway
 import com.example.myapplication.media.episode.EpisodeRange
 import com.example.myapplication.media.episode.EpisodeStreamResolver
 import com.example.myapplication.media.episode.shouldAutoAdvance
-import com.example.myapplication.media.player.HeaderResolvingPlayerFactory
+import com.example.myapplication.media.player.StreamingPlaybackSessionFactory
+import com.example.myapplication.media.player.ContinuousBufferingWatchdog
+import com.example.myapplication.media.player.StreamRecoveryAction
+import com.example.myapplication.media.player.StreamRecoveryInput
+import com.example.myapplication.media.player.StreamRecoveryPolicy
+import com.example.myapplication.media.player.StreamRecoveryTrigger
+import com.example.myapplication.media.player.playbackHttpStatus
+import com.example.myapplication.media.player.rankRecoveryCandidates
+import com.example.myapplication.media.player.selectPreferredVideo
+import com.example.myapplication.media.player.selectResumePosition
 import com.example.myapplication.media.source.flattenVideosWithSource
 import com.example.myapplication.media.player.VetroVideoCache
 import com.example.myapplication.media.progress.EpisodePlaybackStore
 import com.example.myapplication.media.source.VetroVideo
 import com.example.myapplication.media.source.rankVideosForResolution
 import com.example.myapplication.ui.shared.theme.OneUiTheme
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
@@ -78,6 +94,7 @@ class StreamPlayerActivity : ComponentActivity() {
     private val mediaGateway: MediaGateway by inject()
     private val okHttpClient: OkHttpClient by inject()
     private val playbackStore: EpisodePlaybackStore by inject()
+    private val enrichmentCoordinator: CollectionEnrichmentCoordinator by inject()
     private val settings: DataStore<Preferences> by inject(named("settings"))
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
@@ -89,6 +106,10 @@ class StreamPlayerActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ViewModelProvider(
+            this,
+            InteractiveMediaPauseViewModel.factory(enrichmentCoordinator),
+        )[InteractiveMediaPauseViewModel::class.java]
         enableEdgeToEdge()
 
         val legacyVideo = intent.getStringExtra(EXTRA_VIDEO_JSON)
@@ -146,18 +167,25 @@ class StreamPlayerActivity : ComponentActivity() {
                 val autoNext by settings.data
                     .map { it[LocalPlayerViewModel.AUTO_NEXT_KEY] ?: true }
                     .collectAsState(initial = true)
-                val stored by remember(animeId, season, episode) {
+                val stored by key(animeId, season, episode) {
                     playbackStore.episodeFlow(animeId, season, episode)
-                }.collectAsState(initial = null)
+                        .collectAsState(initial = null)
+                }
                 var candidates by remember { mutableStateOf(initialVideos) }
                 var currentIndex by remember { mutableIntStateOf(0) }
                 var current by remember { mutableStateOf(video) }
-                var resumePosition by remember { mutableLongStateOf(0L) }
-                var storedResumeApplied by remember { mutableStateOf(false) }
+                var resumePosition by remember { mutableStateOf<Long?>(null) }
+                var restoreAppliedTo by remember { mutableStateOf<String?>(null) }
                 var retrying by remember { mutableStateOf(false) }
-                var automaticRetries by remember { mutableStateOf(0) }
+                var recoveryJob by remember { mutableStateOf<Job?>(null) }
+                var recoveryGeneration by remember { mutableLongStateOf(0L) }
+                var recoveryOwner by remember { mutableStateOf<Player?>(null) }
+                var sameUrlRetryUsed by remember { mutableStateOf(false) }
                 var playbackError by remember { mutableStateOf<String?>(null) }
                 var manualSwitchFallback by remember { mutableStateOf<VetroVideo?>(null) }
+                // Студия, выбранная пользователем через колесо озвучки — переносится на соседние
+                // серии в switchToEpisode(), иначе выбор сбрасывался бы на дефолт резолвера каждый раз.
+                var preferredSourceName by remember { mutableStateOf<String?>(null) }
                 var failedRenditionUrls by remember { mutableStateOf<Set<String>>(emptySet()) }
                 var landscape by rememberSaveable { mutableStateOf(true) }
                 // Номер серии, которая сейчас резолвится. Он же — защёлка от гонки: пока не null,
@@ -182,50 +210,85 @@ class StreamPlayerActivity : ComponentActivity() {
                     }
                 }
 
-                val player = remember(current.url, current.resolvedAt) {
-                    HeaderResolvingPlayerFactory.createPlayer(
+                val playbackSession = remember(current.url, current.resolvedAt) {
+                    StreamingPlaybackSessionFactory.createSession(
                         this@StreamPlayerActivity,
                         okHttpClient,
                         current,
-                    ).apply {
-                        setMediaSource(HeaderResolvingPlayerFactory.buildMediaSource(okHttpClient, current))
-                        playWhenReady = true
-                        prepare()
-                        if (resumePosition > 0L) seekTo(resumePosition)
+                    ).also { session ->
+                        session.player.apply {
+                            playWhenReady = true
+                            prepare()
+                        }
                     }
                 }
+                val player = playbackSession.player
+                val recoveryPolicy = remember { StreamRecoveryPolicy() }
+                val bufferingWatchdog = remember(player, current.url) {
+                    ContinuousBufferingWatchdog(WATCHDOG_BUFFERING_MS)
+                }
 
-                fun refreshStream() {
+                fun cancelRecoveryResolve() {
+                    recoveryGeneration += 1L
+                    recoveryJob?.cancel()
+                    recoveryJob = null
+                    retrying = false
+                }
+
+                fun availableFallbacks(): List<VetroVideo> = rankRecoveryCandidates(
+                    current = current,
+                    candidates = candidates,
+                    failedUrls = failedRenditionUrls,
+                )
+
+                fun switchToFallback(markCurrentFailed: Boolean): Boolean {
+                    val next = availableFallbacks().firstOrNull() ?: return false
+                    cancelRecoveryResolve()
+                    resumePosition = player.currentPosition.coerceAtLeast(0L)
+                    if (markCurrentFailed) failedRenditionUrls = failedRenditionUrls + current.url
+                    currentIndex = candidates.indexOfFirst { it.url == next.url }.coerceAtLeast(0)
+                    sameUrlRetryUsed = false
+                    manualSwitchFallback = null
+                    playbackError = null
+                    Log.i(TAG, "Switching to ranked fallback ${currentIndex + 1}/${candidates.size}")
+                    current = next.copy(resolvedAt = System.currentTimeMillis())
+                    return true
+                }
+
+                fun resolveFreshStream(markCurrentFailed: Boolean) {
                     if (retrying) return
-                    val nextIndex = (currentIndex + 1..candidates.lastIndex)
-                        .firstOrNull { candidates[it].url != current.url }
-                    if (nextIndex != null) {
-                        resumePosition = player.currentPosition.coerceAtLeast(0L)
-                        currentIndex = nextIndex
-                        playbackError = null
-                        val next = candidates[nextIndex]
-                        Log.i(
-                            TAG,
-                            "Switching to fallback ${nextIndex + 1}/${candidates.size}",
-                        )
-                        current = next.copy(resolvedAt = System.currentTimeMillis())
-                        return
-                    }
+                    val previous = current
+                    if (markCurrentFailed) failedRenditionUrls = failedRenditionUrls + previous.url
                     retrying = true
                     playbackError = null
                     resumePosition = player.currentPosition.coerceAtLeast(0L)
                     val refreshingEpisode = episode
-                    scope.launch {
-                        val refreshed = resolveReplacement(
-                            resolver = episodeResolver,
-                            episode = refreshingEpisode,
-                            previous = current,
-                            excludedUrls = candidates.mapTo(mutableSetOf()) { it.url },
-                        )
-                        retrying = false
+                    val generation = recoveryGeneration + 1L
+                    recoveryGeneration = generation
+                    recoveryJob = scope.launch {
+                        val refreshed = try {
+                            resolveReplacement(
+                                resolver = episodeResolver,
+                                episode = refreshingEpisode,
+                                previous = previous,
+                                excludedUrls = candidates.mapTo(
+                                    failedRenditionUrls.toMutableSet(),
+                                ) { it.url },
+                            )
+                        } catch (cancellation: CancellationException) {
+                            throw cancellation
+                        } catch (_: Exception) {
+                            null
+                        }
                         // Пока обновляли ссылку, пользователь мог уйти на соседнюю серию: результат
                         // относится к прошлой и подменять им уже играющую новую нельзя.
-                        if (episode != refreshingEpisode) return@launch
+                        if (
+                            recoveryGeneration != generation ||
+                            episode != refreshingEpisode ||
+                            current.url != previous.url
+                        ) return@launch
+                        retrying = false
+                        recoveryJob = null
                         if (refreshed != null) {
                             VetroVideoCache.put(
                                 VetroVideoCache.key(
@@ -239,11 +302,45 @@ class StreamPlayerActivity : ComponentActivity() {
                             val updated = candidates + refreshed
                             candidates = updated
                             currentIndex = updated.lastIndex
+                            sameUrlRetryUsed = false
+                            manualSwitchFallback = null
                             current = refreshed.copy(resolvedAt = System.currentTimeMillis())
                         } else {
                             playbackError = "Источник больше не отвечает. Попробуйте ещё раз."
                         }
                     }
+                }
+
+                fun executeRecovery(action: StreamRecoveryAction, reason: String) {
+                    if (recoveryOwner === player) return
+                    recoveryOwner = player
+                    Log.i(TAG, "Streaming recovery action=$action reason=$reason")
+                    when (action) {
+                        StreamRecoveryAction.RETRY_CURRENT -> {
+                            resumePosition = player.currentPosition.coerceAtLeast(0L)
+                            sameUrlRetryUsed = true
+                            playbackError = null
+                            current = current.copy(resolvedAt = System.currentTimeMillis())
+                        }
+                        StreamRecoveryAction.SWITCH_CANDIDATE -> {
+                            if (!switchToFallback(markCurrentFailed = true)) {
+                                resolveFreshStream(markCurrentFailed = true)
+                            }
+                        }
+                        StreamRecoveryAction.RERESOLVE -> {
+                            resolveFreshStream(markCurrentFailed = true)
+                        }
+                    }
+                }
+
+                fun refreshStream() {
+                    recoveryOwner = null
+                    val action = if (availableFallbacks().isNotEmpty()) {
+                        StreamRecoveryAction.SWITCH_CANDIDATE
+                    } else {
+                        StreamRecoveryAction.RERESOLVE
+                    }
+                    executeRecovery(action, reason = "manual_retry")
                 }
 
                 /**
@@ -253,6 +350,8 @@ class StreamPlayerActivity : ComponentActivity() {
                  */
                 fun switchToEpisode(target: Int?) {
                     if (target == null || target == episode || switchingTo != null) return
+                    cancelRecoveryResolve()
+                    recoveryOwner = player
                     switchingTo = target
                     switchError = null
                     failedSwitchTarget = null
@@ -275,13 +374,14 @@ class StreamPlayerActivity : ComponentActivity() {
                         val resolved = runCatching {
                             episodeResolver.resolve(target, preferredResolution)
                         }.getOrDefault(emptyList())
-                        val best = resolved.firstOrNull()
+                        val best = selectPreferredVideo(resolved, preferredSourceName)
                         if (best == null) {
                             // «Ссылку достать не удалось» — не то же самое, что «серии нет»:
                             // кнопка останется активной, попытку можно повторить.
                             switchError = "Не удалось получить ссылку на серию $target"
                             failedSwitchTarget = target
                             switchingTo = null
+                            recoveryOwner = null
                             return@launch
                         }
                         VetroVideoCache.put(
@@ -292,23 +392,27 @@ class StreamPlayerActivity : ComponentActivity() {
                         currentIndex = 0
                         failedRenditionUrls = emptySet()
                         manualSwitchFallback = null
-                        automaticRetries = 0
+                        sameUrlRetryUsed = false
                         playbackError = null
                         resumePosition = 0L
-                        storedResumeApplied = false
                         episode = target
                         current = best.copy(resolvedAt = System.currentTimeMillis())
                         switchingTo = null
                     }
                 }
 
-                LaunchedEffect(player, stored) {
-                    if (storedResumeApplied) return@LaunchedEffect
-                    val saved = stored ?: return@LaunchedEffect
-                    storedResumeApplied = true
-                    if (!saved.watched && saved.positionMs > 0L) {
-                        player.seekTo(saved.positionMs)
-                    }
+                LaunchedEffect(player, episode, stored, resumePosition) {
+                    val restoreKey =
+                        "${System.identityHashCode(player)}:$episode:${current.url}:${current.resolvedAt}"
+                    if (restoreAppliedTo == restoreKey) return@LaunchedEffect
+                    val savedPosition = stored
+                        ?.takeIf { !it.watched && it.positionMs > 0L }
+                        ?.positionMs
+                    val target = selectResumePosition(resumePosition, savedPosition)
+                    if (target == null && stored == null) return@LaunchedEffect
+                    restoreAppliedTo = restoreKey
+                    resumePosition = null
+                    if (target != null) player.seekTo(target)
                 }
 
                 LaunchedEffect(player, animeId, season, episode) {
@@ -327,48 +431,79 @@ class StreamPlayerActivity : ComponentActivity() {
                     }
                 }
 
-                DisposableEffect(player, current.url) {
+                LaunchedEffect(player, current.url) {
+                    while (isActive) {
+                        val buffering = player.playWhenReady &&
+                            player.playbackState == Player.STATE_BUFFERING
+                        if (
+                            bufferingWatchdog.sample(SystemClock.elapsedRealtime(), buffering) &&
+                            !retrying &&
+                            switchingTo == null
+                        ) {
+                            val action = recoveryPolicy.decide(
+                                StreamRecoveryInput(
+                                    trigger = StreamRecoveryTrigger.WATCHDOG,
+                                    bufferedDurationMs = (
+                                        player.bufferedPosition - player.currentPosition
+                                    ).coerceAtLeast(0L),
+                                    retryAlreadyUsed = sameUrlRetryUsed,
+                                    httpStatus = null,
+                                    hasFallback = availableFallbacks().isNotEmpty(),
+                                ),
+                            )
+                            executeRecovery(action, reason = "buffering_watchdog")
+                        }
+                        delay(WATCHDOG_POLL_MS)
+                    }
+                }
+
+                DisposableEffect(player, current.url, current.resolvedAt) {
+                    // Old listener is disposed before this replacement effect starts, so clearing
+                    // an owner from another player cannot reopen the old callback race.
+                    if (recoveryOwner !== player) recoveryOwner = null
+                    val listenerSessionUrl = current.url
+                    val listenerSessionResolvedAt = current.resolvedAt
                     activePlayer = player
                     val mediaSession = MediaSession.Builder(this@StreamPlayerActivity, player)
                         .setId("vetro-stream-${System.currentTimeMillis()}")
                         .build()
                     val listener = object : Player.Listener {
                         override fun onPlayerError(error: PlaybackException) {
-                            Log.w(TAG, "Playback failed: ${error.errorCodeName}", error)
+                            if (recoveryOwner === player) return
+                            Log.w(TAG, "Playback failed: ${error.errorCodeName}")
                             val previousRendition = manualSwitchFallback
                             if (previousRendition != null) {
-                                Log.w(TAG, "Manual rendition failed; rolling back from ${current.sourceName}")
+                                Log.w(TAG, "Manual rendition failed; rolling back")
+                                recoveryOwner = player
                                 failedRenditionUrls = failedRenditionUrls + current.url
                                 manualSwitchFallback = null
-                                automaticRetries = 0
+                                sameUrlRetryUsed = false
                                 playbackError = null
                                 current = previousRendition.copy(resolvedAt = System.currentTimeMillis())
                                 return
                             }
-                            // Чаще всего падает не сам кандидат, а соединение/протухший сегмент,
-                            // поэтому первую попытку тратим на пересборку плеера с тем же URL —
-                            // уходить к другой озвучке/качеству имеет смысл только если и это не помогло.
-                            if (automaticRetries == 0) {
-                                Log.i(TAG, "Retrying same stream URL before fallback")
-                                automaticRetries = 1
-                                resumePosition = player.currentPosition.coerceAtLeast(0L)
-                                playbackError = null
-                                current = current.copy(resolvedAt = System.currentTimeMillis())
-                                return
-                            }
-                            if (automaticRetries < MAX_AUTOMATIC_RETRIES) {
-                                automaticRetries += 1
-                                refreshStream()
-                            } else {
-                                playbackError = error.localizedMessage
-                                    ?: "Не удалось воспроизвести поток"
-                            }
+                            val bufferedDurationMs =
+                                (player.bufferedPosition - player.currentPosition).coerceAtLeast(0L)
+                            val action = recoveryPolicy.decide(
+                                StreamRecoveryInput(
+                                    trigger = StreamRecoveryTrigger.PLAYER_ERROR,
+                                    bufferedDurationMs = bufferedDurationMs,
+                                    retryAlreadyUsed = sameUrlRetryUsed,
+                                    httpStatus = playbackHttpStatus(error),
+                                    hasFallback = availableFallbacks().isNotEmpty(),
+                                ),
+                            )
+                            executeRecovery(action, reason = "player_error")
                         }
 
                         override fun onPlaybackStateChanged(playbackState: Int) {
-                            if (playbackState == Player.STATE_READY) {
+                            if (
+                                playbackState == Player.STATE_READY &&
+                                current.url == listenerSessionUrl &&
+                                current.resolvedAt == listenerSessionResolvedAt
+                            ) {
                                 manualSwitchFallback = null
-                                automaticRetries = 0
+                                sameUrlRetryUsed = false
                             }
                             if (playbackState == Player.STATE_ENDED && player.duration > 0L) {
                                 scope.launch {
@@ -415,10 +550,13 @@ class StreamPlayerActivity : ComponentActivity() {
                             current,
                         ),
                         onSelectRendition = { rendition ->
+                            preferredSourceName = rendition.sourceName ?: preferredSourceName
                             if (rendition.url != current.url) {
+                                cancelRecoveryResolve()
+                                recoveryOwner = player
                                 resumePosition = player.currentPosition.coerceAtLeast(0L)
                                 manualSwitchFallback = current
-                                automaticRetries = 0
+                                sameUrlRetryUsed = false
                                 val selectedIndex = candidates.indexOfFirst {
                                     it.url == rendition.url
                                 }
@@ -443,15 +581,12 @@ class StreamPlayerActivity : ComponentActivity() {
                         onNextEpisode = {
                             switchToEpisode(EpisodeRange.nextOf(episode, availableEpisodes))
                         },
+                        // Ожидание рисует сама поверхность локально, вместо текстовой плашки.
+                        loading = switchingTo != null || retrying,
                     )
 
-                    val busyText = when {
-                        retrying -> "Обновляем ссылку на поток…"
-                        switchingTo != null -> "Загружаем серию $switchingTo…"
-                        else -> null
-                    }
                     val errorText = playbackError ?: switchError
-                    if (busyText != null || errorText != null) {
+                    if (errorText != null) {
                         Column(
                             modifier = Modifier
                                 .align(Alignment.Center)
@@ -461,38 +596,36 @@ class StreamPlayerActivity : ComponentActivity() {
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
                             Text(
-                                text = busyText ?: errorText.orEmpty(),
+                                text = errorText,
                                 color = Color.White,
                                 style = MaterialTheme.typography.bodyLarge,
                             )
-                            if (busyText == null) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Button(
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Button(
+                                    onClick = {
+                                        val retryTarget = failedSwitchTarget
+                                        if (retryTarget != null) {
+                                            switchError = null
+                                            failedSwitchTarget = null
+                                            switchToEpisode(retryTarget)
+                                        } else {
+                                            sameUrlRetryUsed = false
+                                            refreshStream()
+                                        }
+                                    }
+                                ) {
+                                    Text("Повторить")
+                                }
+                                // Ошибка переключения не должна запирать экран: текущая серия
+                                // играет, сообщение можно просто закрыть.
+                                if (failedSwitchTarget != null) {
+                                    TextButton(
                                         onClick = {
-                                            val retryTarget = failedSwitchTarget
-                                            if (retryTarget != null) {
-                                                switchError = null
-                                                failedSwitchTarget = null
-                                                switchToEpisode(retryTarget)
-                                            } else {
-                                                automaticRetries = 0
-                                                refreshStream()
-                                            }
+                                            switchError = null
+                                            failedSwitchTarget = null
                                         }
                                     ) {
-                                        Text("Повторить")
-                                    }
-                                    // Ошибка переключения не должна запирать экран: текущая серия
-                                    // играет, сообщение можно просто закрыть.
-                                    if (failedSwitchTarget != null) {
-                                        TextButton(
-                                            onClick = {
-                                                switchError = null
-                                                failedSwitchTarget = null
-                                            }
-                                        ) {
-                                            Text("Закрыть", color = Color.White)
-                                        }
+                                        Text("Закрыть", color = Color.White)
                                     }
                                 }
                             }
@@ -584,7 +717,8 @@ class StreamPlayerActivity : ComponentActivity() {
 
     companion object {
         private const val TAG = "StreamPlayer"
-        private const val MAX_AUTOMATIC_RETRIES = 8
+        private const val WATCHDOG_BUFFERING_MS = 8_000L
+        private const val WATCHDOG_POLL_MS = 250L
         /** К чему тянемся, если у текущей ссылки разрешение неизвестно. */
         private const val DEFAULT_RESOLUTION = 1080
         private const val EXTRA_VIDEO_JSON = "video_json"

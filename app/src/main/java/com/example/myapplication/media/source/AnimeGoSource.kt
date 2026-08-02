@@ -39,26 +39,58 @@ class AnimeGoSource(
     private val json = Json { ignoreUnknownKeys = true }
     private val cvh = CvhResolver(client)
 
-    suspend fun resolveEpisode(anime: Anime, episodeNumber: Int): List<VetroHoster> {
-        val query = anime.titleRu?.takeIf { it.isNotBlank() }
-            ?: anime.title.takeIf { it.isNotBlank() }
-            ?: anime.titleEn
-            ?: return emptyList()
-        val localTitles = listOfNotNull(anime.title, anime.titleRu, anime.titleEn)
-        val best = search(query)
-            .map { hit ->
-                hit to (
-                    localTitles.maxOfOrNull {
+    internal suspend fun resolveEpisode(
+        seasonQuery: SeasonSourceQuery,
+        episodeNumber: Int,
+    ): List<VetroHoster> {
+        val anime = seasonQuery.anime
+        val queries = animeGoSearchQueries(seasonQuery)
+        if (queries.isEmpty()) {
+            Log.i(TAG, "No usable title alias for ep=$episodeNumber")
+            return emptyList()
+        }
+        val seasonTitle = anime.title.takeIf { seasonQuery.seasonIdentifiable && it.isNotBlank() }
+        val franchiseTitles = listOfNotNull(anime.titleRu, anime.title, anime.titleEn)
+
+        // Ступени идут по убыванию точности и стоят по одному запросу каждая: следующая
+        // выполняется, только если предыдущая не дала подтверждённой страницы.
+        var best: SearchHit? = null
+        var usedQuery: String? = null
+        for (candidate in queries) {
+            best = search(candidate)
+                .filter { hit ->
+                    animeGoPageMatchesSeason(
+                        pageTitle = hit.title,
+                        seasonTitle = seasonTitle,
+                        franchiseTitles = franchiseTitles,
+                        seasonNumber = seasonQuery.seasonNumber,
+                    )
+                }
+                .maxByOrNull { hit ->
+                    franchiseTitles.maxOfOrNull {
                         TitleMatcher.bestScore(it, listOf(hit.title))
                     } ?: 0.0
-                )
+                }
+            if (best != null) {
+                usedQuery = candidate
+                break
             }
-            .filter { it.second >= TITLE_MATCH_THRESHOLD }
-            .maxByOrNull { it.second }
-            ?.first
-            ?: return emptyList()
+        }
+        if (best == null) {
+            Log.i(
+                TAG,
+                "No season-confirmed match for S${seasonQuery.seasonNumber}E$episodeNumber " +
+                    "(tried $queries)",
+            )
+            return emptyList()
+        }
+        Log.i(TAG, "Matched '${best.title}' via '$usedQuery' S${seasonQuery.seasonNumber}")
 
-        val playerHtml = fetchPlayerHtml(best.id, episodeNumber) ?: return emptyList()
+        val playerHtml = fetchPlayerHtml(best.id, episodeNumber)
+        if (playerHtml == null) {
+            Log.i(TAG, "No player page for '${best.title}' ep=$episodeNumber")
+            return emptyList()
+        }
 
         // Агрегируем оба бэкенда, а не останавливаемся на первом успехе: supervisorScope не даёт
         // падению одной ветки отменить вторую.

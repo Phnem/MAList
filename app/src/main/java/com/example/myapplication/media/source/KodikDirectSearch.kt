@@ -24,6 +24,97 @@ internal data class KodikIframeCandidate(
     val dubbing: String,
 )
 
+internal fun kodikEpisodeLink(
+    seasons: JSONObject?,
+    season: Int,
+    episode: Int,
+): String? = seasons
+    ?.let(::parseKodikEpisodeLinks)
+    ?.let { selectKodikEpisodeLink(it, season, episode) }
+
+private fun parseKodikEpisodeLinks(
+    root: JSONObject,
+): Map<Int, Map<Int, String>> {
+    val linksBySeason = LinkedHashMap<Int, Map<Int, String>>()
+    val seasonKeys = root.keys()
+    while (seasonKeys.hasNext()) {
+        val seasonNumber = seasonKeys.next().toIntOrNull() ?: continue
+        val episodes = root.optJSONObject(seasonNumber.toString())
+            ?.optJSONObject("episodes")
+            ?: continue
+        val links = LinkedHashMap<Int, String>()
+        val episodeKeys = episodes.keys()
+        while (episodeKeys.hasNext()) {
+            val episodeNumber = episodeKeys.next().toIntOrNull() ?: continue
+            val raw = episodes.opt(episodeNumber.toString())
+            val link = when (raw) {
+                is String -> raw
+                is JSONObject -> raw.optString("link")
+                else -> ""
+            }
+            normalizeUrl(link)?.let { links[episodeNumber] = it }
+        }
+        linksBySeason[seasonNumber] = links
+    }
+    return linksBySeason
+}
+
+internal fun selectKodikEpisodeLink(
+    linksBySeason: Map<Int, Map<Int, String>>,
+    season: Int,
+    episode: Int,
+): String? = linksBySeason[season]?.get(episode)
+
+/**
+ * Фильм/OVA одной серией годится, когда просят первую серию И релиз доказуемо тот самый:
+ * либо это первый сезон, либо релиз найден по собственному названию сезона. Прежнее
+ * `season == 1 && episode == 1` делало недостижимым любой фильм, привязанный к сезону ≥2.
+ */
+internal fun isKodikStandaloneEligible(
+    season: Int,
+    episode: Int,
+    seasonIdentifiable: Boolean,
+): Boolean = episode == 1 && (season == 1 || seasonIdentifiable)
+
+/**
+ * Лестница выбора ссылки на серию сериального релиза.
+ *
+ * 1. Точный ключ сезона в карте.
+ * 2. Односезонный релиз со своей нумерацией: у Kodik сиквел — как правило отдельная запись,
+ *    и её единственный сезон лежит под ключом «1» независимо от того, какой это сезон
+ *    франшизы. Ступень доступна, только когда подмене взяться неоткуда: релиз найден по
+ *    названию самого сезона либо просят первый сезон.
+ * 3. Релизный iframe с query-параметрами — лишь когда карты нет вовсе и Kodik сам заявляет
+ *    этот сезон последним.
+ *
+ * Перебора «найти серию с таким номером в любом сезоне карты» здесь намеренно нет: он
+ * возвращает ровно тот дефект, ради которого карту сделали авторитетной, — S1E4 вместо S2E4.
+ */
+internal fun selectKodikSerialEpisodeLink(
+    baseLink: String,
+    linksBySeason: Map<Int, Map<Int, String>>?,
+    lastSeason: Int,
+    lastEpisode: Int,
+    season: Int,
+    episode: Int,
+    seasonIdentifiable: Boolean,
+): String? {
+    if (lastEpisode > 0 && episode > lastEpisode) return null
+    if (linksBySeason != null) {
+        selectKodikEpisodeLink(linksBySeason, season, episode)?.let { return it }
+        val onlySeason = linksBySeason.entries.singleOrNull() ?: return null
+        if (!seasonIdentifiable && season != 1) return null
+        return onlySeason.value[episode]
+    }
+    if (lastSeason > 0 && lastSeason != season) return null
+    return baseLink.withKodikEpisodeParams(season, episode)
+}
+
+private fun String.withKodikEpisodeParams(season: Int, episode: Int): String {
+    val separator = if (contains('?')) '&' else '?'
+    return "$this${separator}season=${season.coerceAtLeast(1)}&episode=$episode"
+}
+
 /**
  * Второй, независимый от YummyAnime путь к iframe Kodik: прямой поиск через `kodik-api.com`.
  *
@@ -46,6 +137,8 @@ class KodikDirectSearch(
     internal suspend fun findEpisodeCandidates(
         anime: Anime,
         episodeNumber: Int,
+        seasonNumber: Int,
+        seasonIdentifiable: Boolean,
         limit: Int,
     ): List<KodikIframeCandidate> {
         if (episodeNumber <= 0 || limit <= 0) return emptyList()
@@ -58,9 +151,20 @@ class KodikDirectSearch(
         return withContext(Dispatchers.IO) {
             for (query in queries) {
                 val payload = search(query) ?: continue
-                val candidates = pickCandidates(payload, queries, episodeNumber, limit)
+                val candidates = pickCandidates(
+                    payload = payload,
+                    localTitles = queries,
+                    season = seasonNumber.coerceAtLeast(1),
+                    episode = episodeNumber,
+                    seasonIdentifiable = seasonIdentifiable,
+                    limit = limit,
+                )
                 if (candidates.isNotEmpty()) {
-                    Log.i(TAG, "Kodik direct '$query' ep=$episodeNumber candidates=${candidates.size}")
+                    Log.i(
+                        TAG,
+                        "Kodik direct '$query' S${seasonNumber.coerceAtLeast(1)}E$episodeNumber " +
+                            "candidates=${candidates.size}",
+                    )
                     return@withContext candidates
                 }
             }
@@ -127,12 +231,14 @@ class KodikDirectSearch(
     private fun pickCandidates(
         payload: JSONObject,
         localTitles: List<String>,
+        season: Int,
         episode: Int,
+        seasonIdentifiable: Boolean,
         limit: Int,
     ): List<KodikIframeCandidate> = payload.optJSONArray("results").objects()
         // Kodik по названию охотно отдаёт «похожее»: без порога матчера в выдачу уедет чужой тайтл.
         .filter { result -> score(localTitles, result) >= TitleMatcher.MATCH_THRESHOLD }
-        .mapNotNull { result -> toCandidate(result, episode) }
+        .mapNotNull { result -> toCandidate(result, season, episode, seasonIdentifiable) }
         .distinctBy { it.iframeUrl }
         .take(limit)
 
@@ -150,22 +256,31 @@ class KodikDirectSearch(
         return localTitles.maxOfOrNull { TitleMatcher.bestScore(it, remote) } ?: 0.0
     }
 
-    private fun toCandidate(result: JSONObject, episode: Int): KodikIframeCandidate? {
+    private fun toCandidate(
+        result: JSONObject,
+        season: Int,
+        episode: Int,
+        seasonIdentifiable: Boolean,
+    ): KodikIframeCandidate? {
         val baseLink = normalizeUrl(result.optString("link")) ?: return null
         val isSerial = result.optString("type").contains("serial", ignoreCase = true)
 
         val iframe = if (!isSerial) {
             // Фильм/OVA одной серией: отдаём только когда просят первую — иначе это не та серия.
-            if (episode != 1) return null
+            if (!isKodikStandaloneEligible(season, episode, seasonIdentifiable)) return null
             baseLink
         } else {
-            // Релиз ещё не докатился до нужной серии — не гоняем экстрактор впустую.
-            val lastEpisode = result.optInt("last_episode", 0)
-            if (lastEpisode > 0 && episode > lastEpisode) return null
             // with_episodes даёт прямую ссылку на серию; если её нет — сезонный плеер умеет
             // переключаться сам по query-параметрам (так же делает референсный парсер).
-            episodeLink(result.optJSONObject("seasons"), episode)
-                ?: baseLink.withEpisodeParams(result.optInt("last_season", 1), episode)
+            selectKodikSerialEpisodeLink(
+                baseLink = baseLink,
+                linksBySeason = result.optJSONObject("seasons")?.let(::parseKodikEpisodeLinks),
+                lastSeason = result.optInt("last_season", 0),
+                lastEpisode = result.optInt("last_episode", 0),
+                season = season,
+                episode = episode,
+                seasonIdentifiable = seasonIdentifiable,
+            ) ?: return null
         }
 
         val translation = result.optJSONObject("translation")
@@ -175,28 +290,6 @@ class KodikDirectSearch(
     }
 
     /** Ссылка на конкретную серию из `seasons.{N}.episodes.{M}`; значение — строка либо объект. */
-    private fun episodeLink(seasons: JSONObject?, episode: Int): String? {
-        val root = seasons ?: return null
-        val key = episode.toString()
-        val seasonKeys = root.keys()
-        while (seasonKeys.hasNext()) {
-            val episodes = root.optJSONObject(seasonKeys.next())?.optJSONObject("episodes") ?: continue
-            val raw = episodes.opt(key) ?: continue
-            val link = when (raw) {
-                is String -> raw
-                is JSONObject -> raw.optString("link")
-                else -> ""
-            }
-            normalizeUrl(link)?.let { return it }
-        }
-        return null
-    }
-
-    private fun String.withEpisodeParams(season: Int, episode: Int): String {
-        val separator = if (contains('?')) '&' else '?'
-        return "$this${separator}season=${season.coerceAtLeast(1)}&episode=$episode"
-    }
-
     // endregion
 
     // region Сеть и токены

@@ -17,6 +17,13 @@ data class VetroTimestamp(
     val kind: SkipKind,
 )
 
+@Serializable
+data class VetroSkipReference(
+    val segments: List<VetroTimestamp>,
+    val referenceDurationMs: Long,
+    val origin: String,
+)
+
 /**
  * Resolved playable stream. Independent of Animetail's Video model
  * (no mutable status, no okhttp Headers, no MPV-only fields).
@@ -31,6 +38,7 @@ data class VetroVideo(
     val subtitles: List<VetroSubtitleTrack> = emptyList(),
     val audioTracks: List<VetroSubtitleTrack> = emptyList(),
     val timestamps: List<VetroTimestamp> = emptyList(),
+    val skipReference: VetroSkipReference? = null,
     val isPreferred: Boolean = false,
     val resolvedAt: Long = System.currentTimeMillis(),
 ) {
@@ -53,6 +61,7 @@ data class VetroHoster(
     val name: String,
     val url: String = "",
     val videos: List<VetroVideo>? = null,
+    val skipReference: VetroSkipReference? = null,
     val lazy: Boolean = false,
 )
 

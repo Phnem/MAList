@@ -41,6 +41,13 @@ class CollectionEnrichmentCoordinator(
     private val settingsDataStore: DataStore<Preferences>,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val interactivePauseLock = Any()
+    @Volatile
+    private var webLinkEnrichmentPaused = false
+    private val interactiveMediaPauseGate = InteractiveMediaPauseGate(
+        onFirstAcquire = ::pauseAutomaticWebLinkEnrichment,
+        onLastRelease = ::resumeAutomaticWebLinkEnrichment,
+    )
 
     private val _prompt = MutableStateFlow<FullEnrichmentPrompt?>(null)
     /** != null → показать незакрываемый диалог. Переживает холодный старт (seed из prefs). */
@@ -77,8 +84,11 @@ class CollectionEnrichmentCoordinator(
         val request = OneTimeWorkRequestBuilder<WebLinkEnrichmentWorker>()
             .setConstraints(constraints)
             .build()
-        WorkManager.getInstance(context)
-            .enqueueUniqueWork(WEB_LINK_WORK, ExistingWorkPolicy.KEEP, request)
+        synchronized(interactivePauseLock) {
+            if (webLinkEnrichmentPaused) return
+            WorkManager.getInstance(context)
+                .enqueueUniqueWork(WEB_LINK_WORK, ExistingWorkPolicy.KEEP, request)
+        }
     }
 
     /** Self-reschedule остатка ссылок. APPEND — после текущего захода. */
@@ -90,8 +100,35 @@ class CollectionEnrichmentCoordinator(
             .setConstraints(constraints)
             .setInitialDelay(delayMs, TimeUnit.MILLISECONDS)
             .build()
-        WorkManager.getInstance(context)
-            .enqueueUniqueWork(WEB_LINK_WORK, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
+        synchronized(interactivePauseLock) {
+            if (webLinkEnrichmentPaused) return
+            WorkManager.getInstance(context)
+                .enqueueUniqueWork(WEB_LINK_WORK, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
+        }
+    }
+
+    /**
+     * Pauses only automatic web-link enrichment. Manual full enrichment and downloads remain
+     * user-controlled and are intentionally unaffected.
+     */
+    fun acquireInteractiveMediaPause(): AutoCloseable = interactiveMediaPauseGate.acquire()
+
+    val isWebLinkEnrichmentPaused: Boolean
+        get() = webLinkEnrichmentPaused
+
+    private fun pauseAutomaticWebLinkEnrichment() {
+        synchronized(interactivePauseLock) {
+            webLinkEnrichmentPaused = true
+        }
+        WorkManager.getInstance(context).cancelUniqueWork(WEB_LINK_WORK)
+    }
+
+    private fun resumeAutomaticWebLinkEnrichment() {
+        synchronized(interactivePauseLock) {
+            if (interactiveMediaPauseGate.hasActiveTokens) return
+            webLinkEnrichmentPaused = false
+        }
+        enqueueWebLinkEnrichment()
     }
 
     suspend fun isLiveMaintenanceEnabled(): Boolean {

@@ -10,10 +10,13 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.ViewModelProvider
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.example.myapplication.manga.domain.MangaChapter
+import com.example.myapplication.domain.enrichment.CollectionEnrichmentCoordinator
+import com.example.myapplication.domain.enrichment.InteractiveMediaPauseViewModel
 import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.ui.shared.theme.OneUiTheme
 import kotlinx.coroutines.flow.map
@@ -32,6 +35,7 @@ import org.koin.core.qualifier.named
 class MangaReaderActivity : ComponentActivity() {
 
     private val settings: DataStore<Preferences> by inject(named("settings"))
+    private val enrichmentCoordinator: CollectionEnrichmentCoordinator by inject()
 
     private val viewModel: MangaReaderViewModel by viewModel {
         parametersOf(
@@ -42,6 +46,10 @@ class MangaReaderActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ViewModelProvider(
+            this,
+            InteractiveMediaPauseViewModel.factory(enrichmentCoordinator),
+        )[InteractiveMediaPauseViewModel::class.java]
         enableEdgeToEdge()
         hideSystemBars()
 

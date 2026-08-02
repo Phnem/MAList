@@ -10,6 +10,7 @@ import androidx.work.WorkerParameters
 import com.example.myapplication.data.local.AnimeLocalDataSource
 import com.example.myapplication.domain.enrichment.CollectionEnrichmentCoordinator
 import com.example.myapplication.network.AppLanguage
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -33,6 +34,7 @@ class WebLinkEnrichmentWorker(
     private val settingsDataStore: DataStore<Preferences> by inject(named("settings"))
 
     override suspend fun doWork(): Result {
+        if (coordinator.isWebLinkEnrichmentPaused) return Result.success()
         return try {
             val all = localDataSource.getAllAnimeList()
             Log.i(TAG, "doWork START collection=${all.size} languages=${AppLanguage.entries}")
@@ -40,21 +42,23 @@ class WebLinkEnrichmentWorker(
 
             var processed = 0
             for (language in AppLanguage.entries) {
-                if (isStopped) break
+                if (isStopped || coordinator.isWebLinkEnrichmentPaused) break
                 processed += useCase.enrichBatch(
                     allAnime = all,
                     language = language,
                     limit = CHUNK_PER_LANGUAGE,
-                    shouldStop = { isStopped },
+                    shouldStop = { isStopped || coordinator.isWebLinkEnrichmentPaused },
                 )
             }
             val remaining = AppLanguage.entries.sumOf { useCase.countStale(all, it) }
             Log.i(TAG, "doWork END processed=$processed remaining=$remaining stopped=$isStopped")
 
-            if (!isStopped && remaining > 0) {
+            if (!isStopped && !coordinator.isWebLinkEnrichmentPaused && remaining > 0) {
                 coordinator.scheduleWebLinkContinuation(CONTINUATION_DELAY_MS)
             }
             Result.success()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.w(TAG, "WebLinkEnrichmentWorker failed", e)
             Result.retry()

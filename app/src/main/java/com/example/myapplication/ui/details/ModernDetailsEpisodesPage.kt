@@ -88,6 +88,7 @@ import com.example.myapplication.localplayer.ui.DownloadedPlayerActivity
 import com.example.myapplication.media.progress.EpisodePlaybackProgress
 import com.example.myapplication.media.ui.StreamPlayerActivity
 import com.example.myapplication.network.AppLanguage
+import com.example.myapplication.ui.shared.loading.BubbleClusterLoader
 import com.example.myapplication.ui.shared.theme.IosDesign
 import com.example.myapplication.ui.shared.theme.MotionTokens
 import com.example.myapplication.ui.shared.theme.SnProFamily
@@ -669,13 +670,12 @@ private fun EpisodeRow(
                     modifier = Modifier
                         .matchParentSize()
                         .clip(RoundedCornerShape(12.dp))
-                        .background(Color.Black.copy(alpha = 0.45f)),
+                        .background(Color.Black.copy(alpha = 0.48f)),
                     contentAlignment = Alignment.Center,
                 ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(22.dp),
+                    BubbleClusterLoader(
+                        modifier = Modifier.size(30.dp),
                         color = Color.White,
-                        strokeWidth = 2.dp,
                     )
                 }
             }

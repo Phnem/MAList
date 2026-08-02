@@ -4,7 +4,6 @@ import android.util.Log
 import com.example.myapplication.data.models.Anime
 import com.example.myapplication.domain.seasons.DiscoveredSeason
 import com.example.myapplication.domain.seasons.SeasonInfo
-import com.example.myapplication.sync.TitleMatcher
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.cookies.cookies
 import io.ktor.client.request.get
@@ -19,8 +18,16 @@ import java.net.URLEncoder
  * Native Kotlin source for jut.su (RU).
  *
  * Search: GET /lookfor/{q} → 302 to title page.
- * Episode pages expose `<source type="video/mp4" label="720p" res="720" src="...">`
- * (direct progressive MP4 with Referer).
+ *
+ * **Источник таймскипов, а не видео.** Сайт перешёл на новый плеер (`jutsu_new_player = "yes"`):
+ * `<source>` на странице серии есть, но их `src` — заглушка `pixel.png?<res>` с подставленным
+ * `type="video/mp4"`, а настоящие адреса подставляются на клиенте и в получаемую разметку не
+ * попадают (снимок: `app/src/test/resources/jutsu/`, разбор: `.scratch/season-source-resolution/`
+ * TICKET-02). Конфиг плеера с интро/аутро и длительностью приезжает по-прежнему, поэтому класс
+ * остаётся поставщиком [VetroSkipReference]; `SourceEngine` отбрасывает у него видео.
+ *
+ * Разбор `<source>` намеренно сохранён: он корректен и заработает сам, если сайт вернёт адреса
+ * в разметку.
  */
 class JutSuSource(
     client: HttpClient,
@@ -52,30 +59,29 @@ class JutSuSource(
     ): List<VetroHoster> {
         val base = activeBaseUrl()
         val titleUrl = knownTitleUrl?.takeIf { isOwnTitleUrl(it, base) }
-            ?: run {
-                val query = anime.titleRu?.takeIf { it.isNotBlank() }
-                    ?: anime.title.takeIf { it.isNotBlank() }
-                    ?: anime.titleEn
-                    ?: return emptyList()
-                resolveTitleUrl(query, anime, base)
-            }
+            ?: resolveTitleUrl(anime, base)
             ?: return emptyList()
 
         val slug = titleUrl.trimEnd('/').substringAfterLast('/')
-        if (slug.isBlank() || slug in NON_TITLE_SLUGS) return emptyList()
+        if (slug.isBlank() || slug in JUTSU_NON_TITLE_PATHS) return emptyList()
 
         val season = seasonInfo?.seasonNumber?.takeIf { it > 0 } ?: 1
         val candidates = episodeUrlCandidates(base, slug, season, episodeNumber)
 
         for (pageUrl in candidates) {
-            val videos = scrapeEpisodeSources(pageUrl)
-            if (videos.isNotEmpty()) {
-                Log.i(TAG, "OK $pageUrl → ${videos.size} qualities")
+            val episode = scrapeEpisode(pageUrl)
+            if (episode.videos.isNotEmpty() || episode.reference != null) {
+                Log.i(
+                    TAG,
+                    "OK $pageUrl → ${episode.videos.size} qualities, " +
+                        "reference=${episode.reference != null}",
+                )
                 return listOf(
                     VetroHoster(
                         name = "jut.su",
                         url = pageUrl,
-                        videos = videos,
+                        videos = episode.videos,
+                        skipReference = episode.reference,
                         lazy = false,
                     )
                 )
@@ -95,13 +101,9 @@ class JutSuSource(
      */
     suspend fun findSeasons(anime: Anime): List<DiscoveredSeason> = runCatching {
         val base = activeBaseUrl()
-        val query = anime.titleRu?.takeIf { it.isNotBlank() }
-            ?: anime.title.takeIf { it.isNotBlank() }
-            ?: anime.titleEn
-            ?: return emptyList()
-        val titleUrl = resolveTitleUrl(query, anime, base) ?: return emptyList()
+        val titleUrl = resolveTitleUrl(anime, base) ?: return emptyList()
         val slug = titleUrl.trimEnd('/').substringAfterLast('/')
-        if (slug.isBlank() || slug in NON_TITLE_SLUGS) return emptyList()
+        if (slug.isBlank() || slug in JUTSU_NON_TITLE_PATHS) return emptyList()
 
         val html = getText(titleUrl, extraHeaders = mapOf("Referer" to "$base/"))
         val episodesBySeason = HashMap<Int, Int>()
@@ -118,31 +120,31 @@ class JutSuSource(
             .also { Log.i(TAG, "jut.su seasons for '$slug': ${it.size}") }
     }.onFailure { Log.i(TAG, "findSeasons: ${it.message}") }.getOrElse { emptyList() }
 
-    private suspend fun resolveTitleUrl(query: String, anime: Anime, base: String): String? = runCatching {
-        val enc = URLEncoder.encode(query, "UTF-8")
-        val resp = client.get("$base/lookfor/$enc") {
-            header(HttpHeaders.UserAgent, DEFAULT_UA)
-            header(HttpHeaders.AcceptLanguage, "ru,en;q=0.9")
+    private suspend fun resolveTitleUrl(anime: Anime, base: String): String? {
+        val aliases = orderedJutSuAliases(anime.titleRu, anime.title, anime.titleEn)
+        val localTitles = aliases.ifEmpty { return null }
+        for (query in jutSuSearchQueries(aliases)) {
+            val selected = runCatching {
+                val enc = URLEncoder.encode(query, "UTF-8")
+                val resp = client.get("$base/lookfor/$enc") {
+                    header(HttpHeaders.UserAgent, DEFAULT_UA)
+                    header(HttpHeaders.AcceptLanguage, "ru,en;q=0.9")
+                }
+                val page = resp.bodyAsText()
+                val finalUrl = resp.call.request.url.toString()
+                selectJutSuSearchResponse(
+                    localTitles = localTitles,
+                    baseUrl = base,
+                    responses = listOf(JutSuSearchResponse(finalUrl, page)),
+                )
+            }.onFailure {
+                Log.w(TAG, "resolveTitleUrl '$query': ${it.message}")
+            }.getOrNull()
+            if (selected != null) return selected.url
+            Log.i(TAG, "lookfor miss or weak match '$query'")
         }
-        resp.bodyAsText()
-        val finalUrl = resp.call.request.url.toString()
-        // Редирект с lookfor приходит на активный домен, поэтому и регэксп строим по нему,
-        // иначе на зеркале слог не распознавался бы и источник молча отдавал бы пусто.
-        val slug = titleUrlRegex(base).find(finalUrl)?.groupValues?.get(1)
-        if (slug == null || slug in NON_TITLE_SLUGS) {
-            Log.i(TAG, "lookfor miss '$query' → $finalUrl")
-            return@runCatching null
-        }
-        val page = getText("$base/$slug/", extraHeaders = mapOf("Referer" to "$base/"))
-        val docTitle = Jsoup.parse(page).selectFirst("h1, .anime_title, title")?.text().orEmpty()
-        val local = listOfNotNull(anime.title, anime.titleRu, anime.titleEn)
-        val remotes = listOfNotNull(docTitle, slug.replace('-', ' '))
-        val score = local.maxOfOrNull { TitleMatcher.bestScore(it, remotes) } ?: 0.0
-        if (score < TITLE_MATCH_THRESHOLD && local.isNotEmpty()) {
-            Log.i(TAG, "weak title score=$score for '$docTitle' (query='$query'), keeping slug=$slug")
-        }
-        "$base/$slug/"
-    }.onFailure { Log.w(TAG, "resolveTitleUrl: ${it.message}") }.getOrNull()
+        return null
+    }
 
     /**
      * URL-ы ТОЛЬКО запрошенного сезона. Никаких перебросов на соседние: раньше список заканчивался
@@ -166,7 +168,7 @@ class JutSuSource(
         }
     }
 
-    private suspend fun scrapeEpisodeSources(pageUrl: String): List<VetroVideo> = runCatching {
+    private suspend fun scrapeEpisode(pageUrl: String): ScrapedJutSuEpisode = runCatching {
         val html = getText(
             pageUrl,
             extraHeaders = mapOf(
@@ -175,30 +177,19 @@ class JutSuSource(
                 HttpHeaders.AcceptLanguage to "ru,en;q=0.9",
             ),
         )
-        val doc = Jsoup.parse(html, pageUrl)
-        val sources = doc.select("source[type=video/mp4], source[src]")
-        if (sources.isEmpty()) return@runCatching emptyList()
-        val firstMediaUrl = sources.firstNotNullOfOrNull { element ->
-            element.attr("src").takeIf { it.startsWith("http") }
-        }
+        val parsed = JutSuEpisodePageParser.parse(html, pageUrl)
+        val firstMediaUrl = parsed.sources.firstOrNull()?.url
         val cookieHeader = firstMediaUrl?.let { mediaUrl ->
             client.cookies(Url(mediaUrl)).joinToString("; ") { cookie ->
                 "${cookie.name}=${cookie.value}"
             }
         }.orEmpty()
 
-        val videos = sources.mapNotNull { el ->
-            val src = el.attr("src").ifBlank { return@mapNotNull null }
-            if (!src.startsWith("http")) return@mapNotNull null
-            val label = el.attr("label").ifBlank {
-                el.attr("res").takeIf { it.isNotBlank() }?.let { "${it}p" } ?: "mp4"
-            }
-            val res = el.attr("res").toIntOrNull()
-                ?: Regex("""(\d{3,4})""").find(label)?.groupValues?.get(1)?.toIntOrNull()
+        val videos = parsed.sources.map { source ->
             VetroVideo(
-                url = src,
-                label = label,
-                resolution = res,
+                url = source.url,
+                label = source.label,
+                resolution = source.resolution,
                 headers = buildMap {
                     put("Referer", pageUrl)
                     put("User-Agent", DEFAULT_UA)
@@ -208,17 +199,27 @@ class JutSuSource(
                     put("Sec-Fetch-Site", "same-site")
                     if (cookieHeader.isNotBlank()) put("Cookie", cookieHeader)
                 },
-                isPreferred = res == 720 || label.contains("720"),
+                timestamps = parsed.timestamps,
+                isPreferred = source.resolution == 720 || source.label.contains("720"),
             )
         }.distinctBy { it.url }
             .sortedByDescending { it.resolution ?: 0 }
 
-        if (videos.isNotEmpty() && videos.none { it.isPreferred }) {
+        val preferred = if (videos.isNotEmpty() && videos.none { it.isPreferred }) {
             listOf(videos.first().copy(isPreferred = true)) + videos.drop(1)
         } else {
             videos
         }
-    }.onFailure { Log.w(TAG, "scrape $pageUrl: ${it.message}") }.getOrElse { emptyList() }
+        val reference = parsed.toSkipReference(SOURCE_NAME)
+        ScrapedJutSuEpisode(
+            videos = preferred.map { it.copy(skipReference = reference) },
+            reference = reference,
+        )
+    }.onFailure {
+        Log.w(TAG, "scrape $pageUrl: ${it.message}")
+    }.getOrElse {
+        ScrapedJutSuEpisode(emptyList(), null)
+    }
 
     override fun headersBuilder(): Map<String, String> = mapOf(
         HttpHeaders.UserAgent to DEFAULT_UA,
@@ -241,9 +242,6 @@ class JutSuSource(
         /** Origin со слэшем — годится как Referer: «https://host/…» → «https://host/». */
         private fun originOf(url: String): String =
             url.substringBefore("://") + "://" + hostOf(url) + "/"
-
-        private fun titleUrlRegex(base: String): Regex =
-            Regex("""^https?://${Regex.escape(hostOf(base))}/([a-z0-9\-]+)/?$""", RegexOption.IGNORE_CASE)
 
         /**
          * Ссылка на тайтл считается «нашей», если её хост — активный домен ИЛИ дефолтный jut.su:
@@ -279,9 +277,10 @@ class JutSuSource(
         private val VALID_HOST =
             Regex("""^[a-z0-9](?:[a-z0-9.\-]*[a-z0-9])?\.[a-z0-9\-]{2,}(?::\d{1,5})?$""")
 
-        private val NON_TITLE_SLUGS = setOf(
-            "anime", "search", "lookfor", "login", "register", "top", "new", "ongoing",
-            "films", "manga", "forum", "user", "pm", "favicon.ico",
-        )
     }
+
+    private data class ScrapedJutSuEpisode(
+        val videos: List<VetroVideo>,
+        val reference: VetroSkipReference?,
+    )
 }

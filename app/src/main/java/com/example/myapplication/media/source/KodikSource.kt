@@ -4,6 +4,7 @@ import android.net.Uri
 import android.util.Base64
 import android.util.Log
 import com.example.myapplication.data.models.Anime
+import com.example.myapplication.domain.seasons.SeasonInfo
 import com.example.myapplication.sync.TitleMatcher
 import java.net.URI
 import kotlinx.coroutines.Dispatchers
@@ -31,18 +32,33 @@ class KodikSource(
     private val client: OkHttpClient,
     private val directSearch: KodikDirectSearch? = null,
 ) {
-    suspend fun resolveEpisode(anime: Anime, episodeNumber: Int): List<VetroHoster> {
+    suspend fun resolveEpisode(
+        anime: Anime,
+        episodeNumber: Int,
+        seasonInfo: SeasonInfo? = null,
+    ): List<VetroHoster> {
         if (episodeNumber <= 0) return emptyList()
+        val seasonQuery = anime.seasonSourceQuery(seasonInfo)
         return withContext(Dispatchers.IO) {
             val (yummy, direct) = coroutineScope {
                 val yummyTask = async(Dispatchers.IO) {
-                    runCatching { yummyCandidates(anime, episodeNumber) }
+                    // Путь больше не отключается на сезонах без собственного названия:
+                    // запрос всегда несёт пригодный набор алиасов.
+                    runCatching { yummyCandidates(seasonQuery.anime, episodeNumber) }
                         .onFailure { Log.i(TAG, "Yummy path failed: ${it.message}") }
                         .getOrDefault(emptyList<KodikIframeCandidate>())
                 }
                 val directTask = async(Dispatchers.IO) {
                     val search = directSearch ?: return@async emptyList<KodikIframeCandidate>()
-                    runCatching { search.findEpisodeCandidates(anime, episodeNumber, MAX_DUBBINGS) }
+                    runCatching {
+                        search.findEpisodeCandidates(
+                            anime = seasonQuery.anime,
+                            episodeNumber = episodeNumber,
+                            seasonNumber = seasonQuery.seasonNumber,
+                            seasonIdentifiable = seasonQuery.seasonIdentifiable,
+                            limit = MAX_DUBBINGS,
+                        )
+                    }
                         .onFailure { Log.i(TAG, "Kodik direct path failed: ${it.message}") }
                         .getOrDefault(emptyList<KodikIframeCandidate>())
                 }
@@ -72,7 +88,8 @@ class KodikSource(
             }.also { hosters ->
                 Log.i(
                     TAG,
-                    "Resolved Kodik ep=$episodeNumber dubbings=${hosters.size} " +
+                    "Resolved Kodik S${seasonInfo?.seasonNumber ?: 1}E$episodeNumber " +
+                        "dubbings=${hosters.size} " +
                         "(yummy=${yummy.size}, direct=${direct.size})",
                 )
             }

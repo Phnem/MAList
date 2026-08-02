@@ -18,6 +18,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.State
 import androidx.core.content.ContextCompat
 import androidx.media3.common.Player
+import androidx.lifecycle.ViewModelProvider
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -68,9 +69,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.myapplication.localplayer.model.LocalEpisode
+import com.example.myapplication.domain.enrichment.CollectionEnrichmentCoordinator
+import com.example.myapplication.domain.enrichment.InteractiveMediaPauseViewModel
 import com.example.myapplication.ui.shared.theme.OneUiTheme
 import com.example.myapplication.ui.shared.theme.SnProFamily
 import org.koin.androidx.compose.koinViewModel
+import org.koin.android.ext.android.inject
 import org.koin.core.parameter.parametersOf
 import java.util.Locale
 
@@ -83,6 +87,7 @@ import java.util.Locale
  */
 class LocalPlayerActivity : ComponentActivity() {
 
+    private val enrichmentCoordinator: CollectionEnrichmentCoordinator by inject()
     private val pipState = androidx.compose.runtime.mutableStateOf(false)
 
     // Плеер для управления из PiP-кнопок; выставляется из PlayerScreen пока плеер жив.
@@ -102,6 +107,10 @@ class LocalPlayerActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ViewModelProvider(
+            this,
+            InteractiveMediaPauseViewModel.factory(enrichmentCoordinator),
+        )[InteractiveMediaPauseViewModel::class.java]
         enableEdgeToEdge()
         ContextCompat.registerReceiver(
             this,
@@ -634,4 +643,3 @@ private fun PillButton(label: String, onClick: () -> Unit) {
         )
     }
 }
-

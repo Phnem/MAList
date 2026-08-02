@@ -8,8 +8,10 @@ import com.example.myapplication.data.remote.GeminiStructuredClient
 import com.example.myapplication.data.repository.AnimeRepository
 import com.example.myapplication.data.repository.AppUpdateRepository
 import com.example.myapplication.data.repository.GenreRepository
+import com.example.myapplication.data.local.CoverDescriptorCacheStore
 import com.example.myapplication.data.local.RecommendationCacheStore
 import com.example.myapplication.domain.inspect.InspectImageUseCase
+import com.example.myapplication.domain.recommendations.CoverDescriptorProvider
 import com.example.myapplication.domain.recommendations.RecommendationEngine
 import com.example.myapplication.domain.search.AddFromApiUseCase
 import com.example.myapplication.domain.settings.ImportAnimeDbUseCase
@@ -85,6 +87,7 @@ val appModule = module {
             animeHeavenSource = get(),
             localDataSource = get(),
             store = get(),
+            seasonEpisodesResolver = get(),
         )
     }
     // Local player (isolated feature — remove these lines to unwire it).
@@ -98,14 +101,17 @@ val appModule = module {
     }
     single { com.example.myapplication.localplayer.domain.FranchiseEpisodeMapper(get()) }
     single {
-        com.example.myapplication.localplayer.domain.AniSkipSegmentProvider(get(), get())
-    }
-    single<com.example.myapplication.localplayer.domain.SkipSegmentProvider> {
-        com.example.myapplication.localplayer.domain.PreferSourceTimestampsSkipProvider(
-            fallback = get<com.example.myapplication.localplayer.domain.AniSkipSegmentProvider>(),
+        com.example.myapplication.localplayer.domain.AniSkipSegmentProvider(
+            httpClient = get<io.ktor.client.HttpClient>(),
+            franchiseMapper =
+                get<com.example.myapplication.localplayer.domain.FranchiseEpisodeMapper>(),
         )
     }
-
+    single {
+        com.example.myapplication.localplayer.domain.SkipSegmentResolver(
+            aniSkip = get<com.example.myapplication.localplayer.domain.AniSkipSegmentProvider>(),
+        )
+    }
     // Manga engine (isolated feature — remove these lines + манифест-запись ридера, чтобы отключить).
     single { com.example.myapplication.manga.data.MangaBindingStore(androidContext()) }
     single { com.example.myapplication.manga.data.MangaChapterCacheStore(androidContext()) }
@@ -234,6 +240,15 @@ val appModule = module {
     single { CollectionPdfGenerator(androidContext()) }
     single<AnimeNotifier> { AnimeNotifierImpl(context = androidContext()) }
     single { RecommendationCacheStore(androidContext()) }
+    single { CoverDescriptorCacheStore(androidContext()) }
+    single {
+        CoverDescriptorProvider(
+            credentialsStore = get(),
+            aiEndpoint = get(),
+            cache = get(),
+            httpClient = get(),
+        )
+    }
     single { StatsExplanationCacheStore(androidContext()) }
     single { StatsCardExplanationUseCase(router = get(), genreRepository = get()) }
     single {
@@ -251,6 +266,8 @@ val appModule = module {
             localDataSource = get(),
             genreRepository = get(),
             cache = get(),
+            coverDescriptorProvider = get(),
+            imageStorageRepository = get(),
         )
     }
 }

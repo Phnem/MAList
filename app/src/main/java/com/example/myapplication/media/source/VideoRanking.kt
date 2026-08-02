@@ -6,7 +6,9 @@ import kotlin.math.abs
 fun flattenVideosWithSource(hosters: List<VetroHoster>): List<VetroVideo> =
     hosters.flatMap { hoster ->
         hoster.videos.orEmpty().map { video ->
-            if (video.sourceName.isNullOrBlank()) video.copy(sourceName = hoster.name) else video
+            video.copy(
+                sourceName = video.sourceName?.takeIf(String::isNotBlank) ?: hoster.name,
+            )
         }
     }
 
