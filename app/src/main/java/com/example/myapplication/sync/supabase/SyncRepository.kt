@@ -84,7 +84,7 @@ class SyncRepository(
                 .map { it.id }
                 .filter { db.animeQueries.getAnimeTags(it).executeAsList().isNotEmpty() }
             val ok = runCatching { pushTagsForAnime(userId, taggedIds) }
-                .onFailure { Log.w(TAG, "Genre resync deferred (anime_tags missing?): ${it.message}") }
+                .onFailure { Log.w(TAG, "Genre resync deferred: ${safeSyncError(it)}") }
                 .isSuccess
             if (ok) syncPrefs.edit().putBoolean("tags_resync_done_v2", true).apply()
         }
@@ -153,8 +153,9 @@ class SyncRepository(
         try {
             supabase.postgrest["anime"].upsert(dtos)
         } catch (e: Exception) {
-            Log.e(TAG, "Push anime failed: ${e.message}", e)
-            return@withContext PushResult(0, e.message ?: e.toString())
+            val safeError = safeSyncError(e)
+            Log.e(TAG, "Push anime failed: $safeError")
+            return@withContext PushResult(0, safeError)
         }
 
         // Аниме уже в облаке — помечаем synced. Теги (жанры) пушим отдельно и best-effort:
@@ -166,7 +167,7 @@ class SyncRepository(
         }
         syncPrefs.edit().putBoolean(initialUploadKey(userId), true).apply()
         runCatching { pushTagsForAnime(userId, syncedIds) }
-            .onFailure { Log.w(TAG, "Push tags failed (genres deferred until anime_tags exists): ${it.message}") }
+            .onFailure { Log.w(TAG, "Push tags deferred: ${safeSyncError(it)}") }
         Log.i(TAG, "Pushed ${dtos.size} anime row(s) to cloud")
         return@withContext PushResult(dtos.size, null)
     }
@@ -320,8 +321,9 @@ class SyncRepository(
             Log.i(TAG, "Pulled ${remoteChanges.size} anime row(s) from cloud")
             return@withContext PullResult(remoteChanges.size, null)
         } catch (e: Exception) {
-            Log.e(TAG, "Pull failed: ${e.message}", e)
-            return@withContext PullResult(0, e.message ?: e.toString())
+            val safeError = safeSyncError(e)
+            Log.e(TAG, "Pull failed: $safeError")
+            return@withContext PullResult(0, safeError)
         }
     }
 
@@ -385,7 +387,7 @@ class SyncRepository(
             }
             result.groupBy({ it.anime_id }, { it.tag })
         }.getOrElse {
-            Log.w(TAG, "Pull tags skipped (anime_tags missing?): ${it.message}")
+            Log.w(TAG, "Pull tags skipped: ${safeSyncError(it)}")
             null
         }
     }
@@ -402,7 +404,7 @@ class SyncRepository(
                 .decodeList<AnimeRemoteDto>()
                 .isNotEmpty()
         } catch (e: Exception) {
-            Log.w(TAG, "remoteHasAnime failed", e)
+            Log.w(TAG, "remoteHasAnime failed: ${safeSyncError(e)}")
             false
         }
     }

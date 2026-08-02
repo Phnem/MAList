@@ -48,7 +48,10 @@ object SupabaseAuthDeeplinkHandler {
         }
 
         uri.getQueryParameter("error")?.let { error ->
-            Log.e(TAG, "OAuth error: $error (${uri.getQueryParameter("error_description")})")
+            val description = sanitizeSensitiveLogText(
+                uri.getQueryParameter("error_description").orEmpty(),
+            )
+            Log.e(TAG, "OAuth error: ${sanitizeSensitiveLogText(error)} ($description)")
             onConsumed()
             return
         }
@@ -68,7 +71,7 @@ object SupabaseAuthDeeplinkHandler {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.e(TAG, "PKCE exchange failed", e)
+                Log.e(TAG, "PKCE exchange failed: ${safeSyncError(e)}")
                 if (lastHandledCode == code) {
                     lastHandledCode = null
                 }

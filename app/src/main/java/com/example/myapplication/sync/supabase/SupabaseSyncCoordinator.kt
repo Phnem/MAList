@@ -9,6 +9,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -77,8 +78,10 @@ class SupabaseSyncCoordinator(
                     syncNow()
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.e(TAG, "Realtime setup failed: ${safeSyncError(e)}")
         }
     }
 
@@ -134,12 +137,19 @@ class SupabaseSyncCoordinator(
                         .putLong("last_sync_time", System.currentTimeMillis())
                         .apply()
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                e.printStackTrace()
-                _lastSyncMessage.value = e.message
+                val safeError = safeSyncError(e)
+                android.util.Log.e(TAG, "Sync failed: $safeError")
+                _lastSyncMessage.value = safeError
             } finally {
                 _isSyncing.value = false
             }
         }
+    }
+
+    private companion object {
+        const val TAG = "SupabaseSync"
     }
 }

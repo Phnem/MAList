@@ -34,7 +34,9 @@ class CollectionImageRestoreCoordinator(
         _isRestoring.value = true
         try {
             runCatching { syncRepository.pullRemoteChanges() }
-                .onFailure { error -> Log.w(TAG, "Pull before cloud restore failed", error) }
+                .onFailure { error ->
+                    Log.w(TAG, "Pull before cloud restore failed: ${safeSyncError(error)}")
+                }
 
             var restored = 0
             for (anime in localDataSource.getAllAnimeList()) {

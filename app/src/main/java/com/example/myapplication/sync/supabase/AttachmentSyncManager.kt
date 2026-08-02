@@ -13,6 +13,7 @@ import io.ktor.client.request.setBody
 import io.ktor.http.content.TextContent
 import io.ktor.http.ContentType
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -152,7 +153,7 @@ class AttachmentSyncManager(
 
             return@withContext cloudUrl
         } catch (e: Exception) {
-            android.util.Log.w(TAG, "uploadAttachment failed for $animeId", e)
+            android.util.Log.w(TAG, "uploadAttachment failed for $animeId: ${safeSyncError(e)}")
             null
         }
     }
@@ -185,10 +186,10 @@ class AttachmentSyncManager(
                     db.animeQueries.markPendingSync(anime.id)
                     android.util.Log.d(TAG, "Retroactive upload success for ${anime.id}")
                 } else {
-                    android.util.Log.w(TAG, "Retroactive upload failed (or file not found) for ${anime.id} / $imagePath")
+                    android.util.Log.w(TAG, "Retroactive upload failed (or file not found) for ${anime.id}")
                 }
             } catch (e: Exception) {
-                android.util.Log.w(TAG, "Retroactive upload error for ${anime.id}", e)
+                android.util.Log.w(TAG, "Retroactive upload error for ${anime.id}: ${safeSyncError(e)}")
             }
         }
     }
@@ -221,8 +222,10 @@ class AttachmentSyncManager(
             val cachedFile = File(syncCacheDir, "$attachmentId.webp")
             cachedFile.writeBytes(bytes)
             cachedFile
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.w(TAG, "downloadAttachment failed: ${safeSyncError(e)}")
             null
         }
     }
@@ -249,7 +252,7 @@ class AttachmentSyncManager(
                 db.animeQueries.updateAnimeImagePath(imagePath = fileName, id = animeId)
                 fileName
             } catch (e: Exception) {
-                android.util.Log.w(TAG, "downloadAndImportToCollection failed for $animeId", e)
+                android.util.Log.w(TAG, "downloadAndImportToCollection failed for $animeId: ${safeSyncError(e)}")
                 null
             }
         }
@@ -272,9 +275,8 @@ class AttachmentSyncManager(
     }
 
     suspend fun deleteAttachment(cloudUrl: String) = withContext(Dispatchers.IO) {
+        val attachmentId = cloudUrl.removePrefix("collection-attachment://")
         try {
-            val attachmentId = cloudUrl.removePrefix("collection-attachment://")
-            
             // 1. Delete from R2 via Edge Function
             supabase.functions.invoke("r2-delete-file") {
                 val req = DeleteFileRequest(attachmentId = attachmentId, hardDelete = true)
@@ -285,7 +287,7 @@ class AttachmentSyncManager(
             // 2. Delete local cache
             findCachedAttachment(attachmentId)?.delete()
         } catch (e: Exception) {
-            android.util.Log.w(TAG, "deleteAttachment failed for $cloudUrl", e)
+            android.util.Log.w(TAG, "deleteAttachment failed for id=$attachmentId: ${safeSyncError(e)}")
         }
     }
 
@@ -311,7 +313,7 @@ class AttachmentSyncManager(
                 else -> resolveLocalImageFile(imagePath)?.readBytes()
             }
         } catch (e: Exception) {
-            android.util.Log.w(TAG, "readLocalImageBytes failed for $imagePath", e)
+            android.util.Log.w(TAG, "readLocalImageBytes failed: ${safeSyncError(e)}")
             null
         }
     }
@@ -365,7 +367,7 @@ class AttachmentSyncManager(
             scaledBitmap.compress(format, 80, outStream)
             outStream.toByteArray()
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.w(TAG, "Image compression failed: ${safeSyncError(e)}")
             originalBytes // Fallback to original if compression fails
         }
     }

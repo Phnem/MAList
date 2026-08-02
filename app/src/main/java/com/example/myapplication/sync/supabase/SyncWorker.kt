@@ -3,6 +3,7 @@ package com.example.myapplication.sync.supabase
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import kotlinx.coroutines.CancellationException
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 
@@ -27,13 +28,19 @@ class SyncWorker(
                 .putLong("last_sync_time", System.currentTimeMillis())
                 .apply()
             Result.success()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.e(TAG, "Background sync failed: ${safeSyncError(e)}")
             if (runAttemptCount < 3) {
                 Result.retry()
             } else {
                 Result.failure()
             }
         }
+    }
+
+    private companion object {
+        const val TAG = "SyncWorker"
     }
 }

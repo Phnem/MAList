@@ -15,6 +15,7 @@ import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.realtime.Realtime
 import io.github.jan.supabase.storage.Storage
 import io.github.jan.supabase.functions.Functions
+import io.github.jan.supabase.logging.LogLevel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import org.koin.android.ext.koin.androidContext
@@ -26,6 +27,8 @@ val supabaseModule = org.koin.dsl.module {
             supabaseUrl = BuildConfig.SUPABASE_URL,
             supabaseKey = BuildConfig.SUPABASE_ANON_KEY
         ) {
+            // SDK error logs may include Realtime URLs with the apikey query parameter.
+            defaultLogLevel = LogLevel.NONE
             install(Auth) {
                 scheme = "vetrocollection"
                 host = "auth-callback"
@@ -115,8 +118,8 @@ class AuthRepository(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            android.util.Log.e("AuthRepository", "signInWithGoogle failed", e)
-            Result.failure(e)
+            android.util.Log.e("AuthRepository", "signInWithGoogle failed: ${safeSyncError(e)}")
+            Result.failure(safeSyncFailure(e))
         }
     }
 
@@ -128,8 +131,8 @@ class AuthRepository(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            android.util.Log.e("AuthRepository", "signInWithGithub failed", e)
-            Result.failure(e)
+            android.util.Log.e("AuthRepository", "signInWithGithub failed: ${safeSyncError(e)}")
+            Result.failure(safeSyncFailure(e))
         }
     }
 
@@ -140,8 +143,8 @@ class AuthRepository(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            android.util.Log.e("AuthRepository", "linkGoogle failed", e)
-            Result.failure(e)
+            android.util.Log.e("AuthRepository", "linkGoogle failed: ${safeSyncError(e)}")
+            Result.failure(safeSyncFailure(e))
         }
     }
 
@@ -152,8 +155,8 @@ class AuthRepository(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            android.util.Log.e("AuthRepository", "linkGithub failed", e)
-            Result.failure(e)
+            android.util.Log.e("AuthRepository", "linkGithub failed: ${safeSyncError(e)}")
+            Result.failure(safeSyncFailure(e))
         }
     }
 
@@ -166,7 +169,7 @@ class AuthRepository(
             isGuest = false
             Result.success(Unit)
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(safeSyncFailure(e))
         }
     }
 
@@ -179,7 +182,7 @@ class AuthRepository(
             isGuest = false
             Result.success(Unit)
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(safeSyncFailure(e))
         }
     }
 
@@ -192,7 +195,7 @@ class AuthRepository(
             )
             Result.success(Unit)
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(safeSyncFailure(e))
         }
     }
 
@@ -203,7 +206,7 @@ class AuthRepository(
             }
             Result.success(Unit)
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(safeSyncFailure(e))
         }
     }
 
@@ -211,8 +214,10 @@ class AuthRepository(
         try {
             isGuest = false
             supabase.auth.signOut()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.e("AuthRepository", "signOut failed: ${safeSyncError(e)}")
         }
     }
 }

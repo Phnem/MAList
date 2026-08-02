@@ -53,14 +53,14 @@ class ProgressSyncRepository(
             val animeIds = db.animeQueries.getAllAnime().executeAsList().map { it.id }
 
             runCatching { pushEpisodes(userId, animeIds) }
-                .onFailure { Log.w(TAG, "Push episode progress failed: ${it.message}") }
+                .onFailure { Log.w(TAG, "Push episode progress failed: ${safeSyncError(it)}") }
             runCatching { pushChapters(userId, animeIds) }
-                .onFailure { Log.w(TAG, "Push manga progress failed: ${it.message}") }
+                .onFailure { Log.w(TAG, "Push manga progress failed: ${safeSyncError(it)}") }
             runCatching { pullEpisodes(userId) }
-                .onFailure { Log.w(TAG, "Pull episode progress failed: ${it.message}") }
+                .onFailure { Log.w(TAG, "Pull episode progress failed: ${safeSyncError(it)}") }
             runCatching { pullChapters(userId) }
-                .onFailure { Log.w(TAG, "Pull manga progress failed: ${it.message}") }
-        }.onFailure { Log.e(TAG, "Progress sync failed: ${it.message}", it) }
+                .onFailure { Log.w(TAG, "Pull manga progress failed: ${safeSyncError(it)}") }
+        }.onFailure { Log.e(TAG, "Progress sync failed: ${safeSyncError(it)}") }
     }
 
     private suspend fun pushEpisodes(userId: String, animeIds: List<String>) {

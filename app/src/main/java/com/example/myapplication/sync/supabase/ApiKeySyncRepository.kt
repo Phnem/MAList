@@ -38,7 +38,7 @@ class ApiKeySyncRepository(
             }
             pullInternal(key)
             pushInternal(key)
-        }.onFailure { Log.e(TAG, "API key sync failed: ${it.message}", it) }
+        }.onFailure { Log.e(TAG, "API key sync failed: ${safeSyncError(it)}") }
     }
 
     /** Точечный push одного ключа (вызывается сразу после сохранения в AI Connect). */
@@ -59,7 +59,7 @@ class ApiKeySyncRepository(
                     deleted_at = null,
                 )
             )
-        }.onFailure { Log.w(TAG, "Push key ${provider.id} failed: ${it.message}") }
+        }.onFailure { Log.w(TAG, "Push key ${provider.id} failed: ${safeSyncError(it)}") }
     }
 
     /** Точечное удаление ключа в облаке (tombstone). */
@@ -76,7 +76,7 @@ class ApiKeySyncRepository(
                     deleted_at = Instant.now().toString(),
                 )
             )
-        }.onFailure { Log.w(TAG, "Delete key ${provider.id} failed: ${it.message}") }
+        }.onFailure { Log.w(TAG, "Delete key ${provider.id} failed: ${safeSyncError(it)}") }
     }
 
     private suspend fun pullInternal(key: javax.crypto.SecretKey) {

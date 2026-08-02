@@ -78,7 +78,7 @@ class SyncPassphraseManager(
             cachedKey = key
             PassphraseUnlock.Unlocked(key)
         } catch (e: Exception) {
-            Log.e(TAG, "Passphrase bootstrap failed: ${e.message}", e)
+            Log.e(TAG, "Passphrase bootstrap failed: ${safeSyncError(e)}")
             PassphraseUnlock.Locked
         }
     }
@@ -102,7 +102,7 @@ class SyncPassphraseManager(
                 .decodeList<SyncPassphraseDto>()
                 .firstOrNull()
         }.getOrElse {
-            Log.w(TAG, "Fetch passphrase failed: ${it.message}")
+            Log.w(TAG, "Fetch passphrase failed: ${safeSyncError(it)}")
             null
         }
 
