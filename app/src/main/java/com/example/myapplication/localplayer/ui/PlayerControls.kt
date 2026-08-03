@@ -77,6 +77,9 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.res.painterResource
+import com.phnem.vetro.R
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -134,6 +137,8 @@ private data class SeekBurst(val forward: Boolean, val steps: Int)
 fun PlayerControlsOverlay(
     player: ExoPlayer,
     title: String,
+    /** Вторая строка шапки — серия и сезон. `null` = заголовок остаётся однострочным. */
+    subtitle: String? = null,
     ambient: PlayerAmbient,
     isPlaying: Boolean,
     isBuffering: Boolean,
@@ -381,7 +386,7 @@ fun PlayerControlsOverlay(
                 exit = fadeOut(MotionTokens.dialogExit()),
             ) {
                 DockIconButton(
-                    icon = Icons.Rounded.Lock,
+                    icon = painterResource(R.drawable.ic_player_lock_open),
                     contentDescription = if (isRuLocale()) "Разблокировать" else "Unlock",
                     tint = ambient.topContent,
                     onClick = { locked = false; showUnlockHint = false; controlsVisible = true },
@@ -486,40 +491,44 @@ fun PlayerControlsOverlay(
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // Левая пилюля в weight-контейнере → правая пилюля всегда прижата к углу.
+                // Капсул в шапке больше нет: иконки и заголовок лежат прямо на кадре. Читаемость
+                // держит затемнение по краям кадра, а не подложка под каждым элементом.
                 Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                    Row(
-                        modifier = Modifier
-                            .ambientDockSurface(Capsule, ambient.topTint, ambient.topBackdrop)
-                            .padding(start = 6.dp, end = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         TransportIcon(
                             Icons.AutoMirrored.Rounded.ArrowBack, 40.dp, 22.dp,
                             tint = ambient.topContent, onClick = onBack,
                         )
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontFamily = SnProFamily,
-                                fontWeight = FontWeight.SemiBold,
-                            ),
-                            color = ambient.topContent,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(start = 4.dp),
-                        )
+                        // Две строки: название и, если есть, серия/сезон под ним.
+                        Column(modifier = Modifier.padding(start = 4.dp)) {
+                            Text(
+                                text = title,
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontFamily = SnProFamily,
+                                    fontWeight = FontWeight.Bold,
+                                ),
+                                color = ambient.topContent,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            if (!subtitle.isNullOrBlank()) {
+                                Text(
+                                    text = subtitle,
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontFamily = SnProFamily,
+                                    ),
+                                    color = ambient.topContent.copy(alpha = 0.72f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
                     }
                 }
 
                 Spacer(Modifier.width(10.dp))
 
-                Row(
-                    modifier = Modifier
-                        .ambientDockSurface(Capsule, ambient.topTint, ambient.topBackdrop)
-                        .padding(horizontal = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     DockIconButton(
                         icon = Icons.Rounded.MusicNote,
                         contentDescription = if (isRuLocale()) "Аудиодорожка" else "Audio track",
@@ -529,7 +538,7 @@ fun PlayerControlsOverlay(
                         },
                     )
                     DockIconButton(
-                        icon = Icons.Rounded.Speed,
+                        icon = painterResource(R.drawable.ic_player_speed),
                         contentDescription = if (isRuLocale()) "Скорость" else "Speed",
                         tint = ambient.topContent,
                         onClick = { menuKind = PlayerMenu.SPEED; menuState.targetState = true },
@@ -546,7 +555,9 @@ fun PlayerControlsOverlay(
             exit = fadeOut(MotionTokens.dialogExit()),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(28.dp)) {
-                TransportIcon(Icons.Rounded.SkipPrevious, 56.dp, 34.dp, enabled = hasPrev) {
+                TransportIcon(
+                    painterResource(R.drawable.ic_player_skip_back), 56.dp, 34.dp, enabled = hasPrev,
+                ) {
                     if (onPrev != null) onPrev() else player.seekToPreviousMediaItem()
                 }
                 // Пока идёт загрузка, место кнопки пустует: индикатор рисует отдельный слой ниже
@@ -554,12 +565,16 @@ fun PlayerControlsOverlay(
                 Box(Modifier.size(72.dp), contentAlignment = Alignment.Center) {
                     if (!isBuffering) {
                         TransportIcon(
-                            if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                            painterResource(
+                                if (isPlaying) R.drawable.ic_player_pause else R.drawable.ic_player_play
+                            ),
                             72.dp, 46.dp,
                         ) { if (isPlaying) player.pause() else player.play() }
                     }
                 }
-                TransportIcon(Icons.Rounded.SkipNext, 56.dp, 34.dp, enabled = hasNext) {
+                TransportIcon(
+                    painterResource(R.drawable.ic_player_skip_forward), 56.dp, 34.dp, enabled = hasNext,
+                ) {
                     if (onNext != null) onNext() else player.seekToNextMediaItem()
                 }
             }
@@ -575,13 +590,22 @@ fun PlayerControlsOverlay(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    // Лёгкое затемнение вместо капсулы под иконками: тянется книзу, где и лежит
+                    // ряд иконок. background до отступов — затемнение доходит до края экрана.
+                    .background(
+                        Brush.verticalGradient(
+                            0f to Color.Transparent,
+                            0.35f to Color.Black.copy(alpha = 0.28f),
+                            1f to Color.Black.copy(alpha = 0.62f),
+                        )
+                    )
                     .navigationBarsPadding()
                     .displayCutoutPadding()
                     .padding(vertical = 12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                // Время, док и полоса — в одном контейнере 90% ширины (5%–95%), чтобы время было
-                // строго над левым концом полосы, а док — над правым.
+                // Время и полоса — в контейнере 90% ширины (5%–95%), чтобы время было строго над
+                // левым концом полосы.
                 Column(modifier = Modifier.fillMaxWidth(0.9f)) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
@@ -601,42 +625,6 @@ fun PlayerControlsOverlay(
                                 player.seekTo(seekForwardTarget(player.currentPosition, duration, SEEK_FORWARD_MS))
                             },
                         )
-                        Spacer(Modifier.width(8.dp))
-                        Row(
-                            modifier = Modifier
-                                .ambientDockSurface(Capsule, ambient.bottomTint, ambient.bottomBackdrop)
-                                .padding(horizontal = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            DockIconButton(
-                                Icons.Rounded.PictureInPictureAlt,
-                                contentDescription = "PiP",
-                                tint = ambient.bottomContent,
-                                onClick = onEnterPip,
-                            )
-                            DockIconButton(
-                                Icons.Rounded.ScreenRotation,
-                                contentDescription = if (isRuLocale()) "Поворот" else "Rotate",
-                                tint = ambient.bottomContent,
-                                onClick = onRotate,
-                            )
-                            DockIconButton(
-                                Icons.Rounded.Lock,
-                                contentDescription = if (isRuLocale()) "Блокировка" else "Lock",
-                                tint = ambient.bottomContent,
-                                onClick = { locked = true; controlsVisible = false },
-                            )
-                            DockIconButton(
-                                if (fit == VideoFit.CROP) Icons.Rounded.CropFree else Icons.Rounded.AspectRatio,
-                                contentDescription = if (isRuLocale()) "Формат кадра" else "Aspect",
-                                tint = ambient.bottomContent,
-                                onClick = {
-                                    onSetFit(
-                                        if (fit == VideoFit.CROP) VideoFit.ORIGINAL else VideoFit.CROP
-                                    )
-                                },
-                            )
-                        }
                     }
 
                     SeekBar(
@@ -651,6 +639,49 @@ fun PlayerControlsOverlay(
                             if (duration > 0) player.seekTo((fraction * duration).toLong())
                         },
                     )
+
+                    // Ряд иконок — под полосой, на затемнении и без капсулы. Только иконки,
+                    // без подписей.
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        DockIconButton(
+                            icon = painterResource(R.drawable.ic_player_pip),
+                            contentDescription = "PiP",
+                            tint = ambient.bottomContent,
+                            onClick = onEnterPip,
+                        )
+                        DockIconButton(
+                            icon = painterResource(R.drawable.ic_player_rotate),
+                            contentDescription = if (isRuLocale()) "Поворот" else "Rotate",
+                            tint = ambient.bottomContent,
+                            onClick = onRotate,
+                        )
+                        DockIconButton(
+                            icon = painterResource(R.drawable.ic_player_lock),
+                            contentDescription = if (isRuLocale()) "Блокировка" else "Lock",
+                            tint = ambient.bottomContent,
+                            onClick = { locked = true; controlsVisible = false },
+                        )
+                        DockIconButton(
+                            icon = painterResource(
+                                if (fit == VideoFit.CROP) {
+                                    R.drawable.ic_player_fit_off
+                                } else {
+                                    R.drawable.ic_player_fit
+                                }
+                            ),
+                            contentDescription = if (isRuLocale()) "Формат кадра" else "Aspect",
+                            tint = ambient.bottomContent,
+                            onClick = {
+                                onSetFit(
+                                    if (fit == VideoFit.CROP) VideoFit.ORIGINAL else VideoFit.CROP
+                                )
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -1168,6 +1199,57 @@ private fun TransportIcon(
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, contentDescription = null, tint = tint.copy(alpha = if (enabled) 1f else 0.35f), modifier = Modifier.size(iconSize))
+    }
+}
+
+/**
+ * То же, но для иконок из ресурсов. Пак плеера — контурный (Tabler, обводка 2), в отличие от
+ * заливных Material-иконок, поэтому он приходит как [Painter], а не [ImageVector].
+ */
+@Composable
+private fun TransportIcon(
+    icon: Painter,
+    size: Dp,
+    iconSize: Dp,
+    enabled: Boolean = true,
+    tint: Color = Color.White,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clickable(
+                enabled = enabled,
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = null, tint = tint.copy(alpha = if (enabled) 1f else 0.35f), modifier = Modifier.size(iconSize))
+    }
+}
+
+/** Иконка-кнопка внутри дока; цвет приходит из [PlayerAmbient] под этим доком. */
+@Composable
+private fun DockIconButton(
+    icon: Painter,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    tint: Color = Color.White,
+    contentDescription: String? = null,
+) {
+    Box(
+        modifier = modifier
+            .size(44.dp)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = contentDescription, tint = tint, modifier = Modifier.size(22.dp))
     }
 }
 
