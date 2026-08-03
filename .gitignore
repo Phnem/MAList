@@ -46,3 +46,11 @@ __pycache__/
 
 # Stray artifact from a mistyped git command
 /-remote --tags origin
+
+# Local debug/scratch artifacts, not meant for the repo
+/.codex-remote-attachments/
+/vetro_logcat.txt
+/katana.html
+/katana_animation.html
+/.scratch/vetro_readme_audit.png
+/Screen_Recording_20260730_153543_Pinterest.mp4
