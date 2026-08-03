@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -14,11 +15,13 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.C
 import androidx.media3.common.PlaybackParameters
@@ -33,6 +36,7 @@ import com.example.myapplication.localplayer.ui.AudioTrackOption
 import com.example.myapplication.localplayer.ui.ImmersivePlayerWindow
 import com.example.myapplication.localplayer.ui.rememberMediaSkipPlayback
 import com.example.myapplication.localplayer.ui.PlayerControlsOverlay
+import com.example.myapplication.ui.shared.loading.BubbleClusterLoader
 import com.example.myapplication.localplayer.ui.PlayerPinchState
 import com.example.myapplication.localplayer.ui.VideoFit
 import com.example.myapplication.localplayer.ui.isDrmProtected
@@ -272,6 +276,16 @@ fun StreamPlayerSurface(
                     }
                 },
                 onSetFit = { fit = it },
+            )
+        }
+
+        // В PiP весь Compose-слой управления не композится, а вместе с ним пропадал бы и
+        // индикатор: окно с замершим кадром неотличимо от зависшего плеера. Доки, кнопки и жесты
+        // в PiP по-прежнему не появляются — только индикатор, и компактнее обычного.
+        if (isInPip && showLoading) {
+            BubbleClusterLoader(
+                modifier = Modifier.align(Alignment.Center).size(28.dp),
+                color = Color.White,
             )
         }
     }

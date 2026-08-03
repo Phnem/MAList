@@ -86,6 +86,7 @@ import com.example.myapplication.SimpGlassCard
 import com.example.myapplication.SortFilterOverlay
 import com.example.myapplication.data.models.*
 import com.example.myapplication.data.repository.GenreRepository
+import com.example.myapplication.domain.seasons.franchiseEpisodeTotal
 import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.sync.ExternalListSyncCoordinator
 import com.example.myapplication.sync.supabase.CollectionImageRestoreCoordinator
@@ -141,6 +142,7 @@ fun HomeScreen(
     val airingMap by viewModel.airingProgress.collectAsStateWithLifecycle()
     val watchedMap by viewModel.watchedEpisodes.collectAsStateWithLifecycle()
     val mangaReadingMap by viewModel.mangaReading.collectAsStateWithLifecycle()
+    val seasonLayoutMap by viewModel.seasonLayouts.collectAsStateWithLifecycle()
     var cloudSyncPillDismissed by remember { mutableStateOf(false) }
     val showCloudSyncPill =
         uiState.isListLoaded &&
@@ -643,7 +645,10 @@ fun HomeScreen(
                                                 val webLinksEntry = webLinksMap[anime.id]
                                                 val airingEntry = airingMap[anime.id]
                                                 val cardProgress = rememberCardProgress(
-                                                    totalEpisodes = anime.episodes,
+                                                    totalEpisodes = franchiseEpisodeTotal(
+                                                        layout = seasonLayoutMap[anime.id],
+                                                        storedEpisodes = anime.episodes,
+                                                    ),
                                                     watched = watchedMap[anime.id],
                                                     airing = airingEntry,
                                                     reading = mangaReadingMap[anime.id],
@@ -1243,9 +1248,12 @@ private fun rememberCardProgress(
             newItems = reading.newChapters,
         )
 
+        // Числитель не подрезается: знаменатель приходит уже в франшизной шкале
+        // (`franchiseEpisodeTotal`), а зажимать реальный прогресс под неразрешённый расклад —
+        // значит показывать пользователю не то, что он посмотрел.
         progress != null -> AiringCardInfo(
             seasonNumber = null,
-            airedEpisodes = progress.coerceAtMost(totalEpisodes.coerceAtLeast(progress)),
+            airedEpisodes = progress,
             totalEpisodes = totalEpisodes.takeIf { it > 0 },
             kind = CardProgressKind.WATCHING,
         )

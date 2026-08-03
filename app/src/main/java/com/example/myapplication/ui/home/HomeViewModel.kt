@@ -98,6 +98,16 @@ class HomeViewModel(
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
+    /**
+     * Разложение тайтлов по сезонам (animeId → расклад) для знаменателя прогресса на карточке.
+     *
+     * Тот же самый расклад, по которому считается [watchedEpisodes]: числитель и знаменатель
+     * обязаны жить в одной шкале, иначе на карточке снова выйдет «просмотрено 15 / 12».
+     * Сумму считает `franchiseEpisodeTotal`.
+     */
+    val seasonLayouts: StateFlow<Map<String, com.example.myapplication.domain.seasons.SeasonEpisodesEntry>> =
+        seasonEpisodesStore.flow
+
     init { viewModelScope.launch { seasonEpisodesStore.ensureLoaded() } }
 
     /**

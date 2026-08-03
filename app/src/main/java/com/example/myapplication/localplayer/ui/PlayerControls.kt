@@ -358,6 +358,17 @@ fun PlayerControlsOverlay(
                 )
             },
     ) {
+        // Индикатор загрузки — собственный слой, а не часть доков. Раньше он жил внутри
+        // AnimatedVisibility(controlsVisible) вместе с рядом prev/play-pause/next и гас вместе с
+        // ним: при автоскрытии через 3.5 c экран выглядел зависшим. Слой стоит до ветки locked,
+        // потому что загрузка не перестаёт идти оттого, что пользователь заблокировал жесты.
+        if (isBuffering) {
+            BubbleClusterLoader(
+                modifier = Modifier.align(Alignment.Center).size(46.dp),
+                color = Color.White,
+            )
+        }
+
         if (locked) {
             AnimatedVisibility(
                 visible = showUnlockHint,
@@ -538,13 +549,10 @@ fun PlayerControlsOverlay(
                 TransportIcon(Icons.Rounded.SkipPrevious, 56.dp, 34.dp, enabled = hasPrev) {
                     if (onPrev != null) onPrev() else player.seekToPreviousMediaItem()
                 }
+                // Пока идёт загрузка, место кнопки пустует: индикатор рисует отдельный слой ниже
+                // по дереву, в той же точке. Слот сохраняется, чтобы ряд не съезжал.
                 Box(Modifier.size(72.dp), contentAlignment = Alignment.Center) {
-                    if (isBuffering) {
-                        BubbleClusterLoader(
-                            modifier = Modifier.size(46.dp),
-                            color = Color.White,
-                        )
-                    } else {
+                    if (!isBuffering) {
                         TransportIcon(
                             if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                             72.dp, 46.dp,

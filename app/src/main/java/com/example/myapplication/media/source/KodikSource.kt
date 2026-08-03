@@ -44,7 +44,9 @@ class KodikSource(
                 val yummyTask = async(Dispatchers.IO) {
                     // Путь больше не отключается на сезонах без собственного названия:
                     // запрос всегда несёт пригодный набор алиасов.
-                    runCatching { yummyCandidates(seasonQuery.anime, episodeNumber) }
+                    runCatching {
+                        yummyCandidates(seasonQuery.anime, episodeNumber, seasonInfo)
+                    }
                         .onFailure { Log.i(TAG, "Yummy path failed: ${it.message}") }
                         .getOrDefault(emptyList<KodikIframeCandidate>())
                 }
@@ -97,8 +99,12 @@ class KodikSource(
     }
 
     /** Прежний путь: YummyAnime отдаёт метаданные серий и готовые iframe_url плеера Kodik. */
-    private fun yummyCandidates(anime: Anime, episodeNumber: Int): List<KodikIframeCandidate> {
-        val release = findRelease(anime) ?: return emptyList()
+    private fun yummyCandidates(
+        anime: Anime,
+        episodeNumber: Int,
+        seasonInfo: SeasonInfo?,
+    ): List<KodikIframeCandidate> {
+        val release = findRelease(anime, seasonInfo) ?: return emptyList()
         val slug = release.optString("anime_url").trim().ifBlank { return emptyList() }
         val details = requestJson("$API_ORIGIN/anime/$slug?need_videos=true")
             ?.optJSONObject("response")
@@ -125,11 +131,21 @@ class KodikSource(
             }
     }
 
-    private fun findRelease(anime: Anime): JSONObject? {
+    /**
+     * Ищет релиз, доказуемо относящийся к запрошенному сезону.
+     *
+     * Отсев по сезону стоит ДО выбора лучшего, а не после: русское название франшизы — это
+     * название первого сезона (см. [seasonSourceQuery]), поэтому при сезоне ≥2 релиз первого
+     * сезона выигрывал бы счёт у правильного и «лучший из всех» всегда оказывался бы чужим.
+     * Отсеяв неподтверждённые, лестница запросов идёт дальше и может найти нужный релиз
+     * английским названием сезона.
+     */
+    private fun findRelease(anime: Anime, seasonInfo: SeasonInfo?): JSONObject? {
         val queries = listOfNotNull(anime.titleRu, anime.title, anime.titleEn)
             .map(String::trim)
             .filter(String::isNotBlank)
             .distinctBy(String::lowercase)
+        var rejectedBySeason = 0
         for (query in queries) {
             val url = "$API_ORIGIN/anime".toHttpUrl().newBuilder()
                 .addQueryParameter("limit", "20")
@@ -138,21 +154,37 @@ class KodikSource(
                 .build()
             val items = requestJson(url.toString())?.optJSONArray("response").objects()
             val localTitles = queries
-            val best = items
+            val eligible = items.filter { item ->
+                yummyReleaseServesSeason(
+                    releaseTitles = releaseTitles(item),
+                    slug = item.optString("anime_url").trim(),
+                    seasonInfo = seasonInfo,
+                ).also { if (!it) rejectedBySeason++ }
+            }
+            val best = eligible
                 .map { item -> item to score(localTitles, item) }
                 .take(MAX_SEARCH_CANDIDATES)
                 .maxByOrNull { it.second }
             if (best != null && best.second >= TitleMatcher.MATCH_THRESHOLD) return best.first
         }
+        if (rejectedBySeason > 0) {
+            Log.i(
+                TAG,
+                "Yummy: no season-confirmed release for S${seasonInfo?.seasonNumber} " +
+                    "($rejectedBySeason rejected)",
+            )
+        }
         return null
     }
 
+    private fun releaseTitles(item: JSONObject): List<String> = buildList {
+        item.optString("title").takeIf(String::isNotBlank)?.let(::add)
+        item.optString("original").takeIf(String::isNotBlank)?.let(::add)
+        item.optJSONArray("other_titles").strings().forEach(::add)
+    }
+
     private fun score(localTitles: List<String>, item: JSONObject): Double {
-        val remote = buildList {
-            item.optString("title").takeIf(String::isNotBlank)?.let(::add)
-            item.optString("original").takeIf(String::isNotBlank)?.let(::add)
-            item.optJSONArray("other_titles").strings().forEach(::add)
-        }
+        val remote = releaseTitles(item)
         return localTitles.maxOfOrNull { TitleMatcher.bestScore(it, remote) } ?: 0.0
     }
 
@@ -371,6 +403,28 @@ private class KodikExtractor(
         private const val DEFAULT_ENDPOINT = "/ftor"
         private val REQUIRED_PARAMS = listOf("d", "d_sign", "pd", "pd_sign", "ref", "ref_sign")
     }
+}
+
+/**
+ * Может ли найденный релиз обслуживать запрошенный сезон.
+ *
+ * Yummy-путь ищет по набору алиасов, где русское название франшизы — это название ПЕРВОГО
+ * сезона: оно намеренно не сужается, потому что иначе русские каталоги перестают находить тайтл
+ * вовсе (см. [seasonSourceQuery]). Значит, чинить надо не запрос, а результат.
+ *
+ * Сезон 1 и «сезон не выбран» однозначны — доказывать нечего. Для сезона ≥2 работает инвариант
+ * «лучше пусто, чем чужой сезон»: без доказательства путь отдаёт пусто, а не первый сезон.
+ * Доказательством считается точное совпадение с сезонным названием либо порядковый маркер —
+ * ровно так же, как у AniLibria ([releaseIdentifiesSelectedSeason]); слаг участвует как алиас,
+ * потому что русские релизы часто несут номер только в нём.
+ */
+internal fun yummyReleaseServesSeason(
+    releaseTitles: List<String>,
+    slug: String,
+    seasonInfo: SeasonInfo?,
+): Boolean {
+    if (seasonInfo == null) return true
+    return releaseIdentifiesSelectedSeason(releaseTitles, slug, seasonInfo)
 }
 
 // internal, а не private: тем же хелпером разбирает ответ соседний KodikDirectSearch.
