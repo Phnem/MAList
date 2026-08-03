@@ -35,8 +35,8 @@ android {
         applicationId = "com.phnem.vetro"
         minSdk = 26
         targetSdk = 36
-        versionCode = 333
-        versionName = "V3.3.3-Alpha"
+        versionCode = 334
+        versionName = "V3.3.4-Beta"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "GITHUB_OWNER", "\"Phnem\"")
