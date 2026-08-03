@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -122,8 +123,20 @@ fun MangaChaptersPage(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val ru = language == AppLanguage.RU
     val context = LocalContext.current
+    val isDark = isAppInDarkTheme()
 
-    Box(modifier = modifier.fillMaxSize()) {
+    // Фон — во всю высоту, включая зону статус-бара; отступ под плавающую шапку получает только
+    // содержимое. Пока отступ накладывался снаружи, он ужимал и фон, и над градиентом оставалась
+    // чёрная полоса корневого экрана Details.
+    // Порядок модификаторов существенен: background стоит ДО отступов, поэтому фон занимает всю
+    // высоту, а под плавающую шапку отодвигается только содержимое.
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(IosDesign.screenGradient(isDark))
+            .statusBarsPadding()
+            .padding(top = 56.dp),
+    ) {
         when (val current = state) {
             MangaLibraryUiState.Loading -> CircularProgressIndicator(
                 color = BrandOrange,
@@ -411,13 +424,9 @@ private fun ChaptersContent(
     val ordered = if (newestFirst) visible.asReversed() else visible
     val groups = remember(ordered, ru) { groupByVolume(ordered, ru) }
 
-    Column(
-        // Тот же фон, что у настроек и меню серий: три списка приложения обязаны выглядеть одним
-        // экраном. Карточки ниже полупрозрачны — засветка читается сквозь них.
-        modifier = Modifier
-            .fillMaxSize()
-            .background(IosDesign.screenGradient(isDark)),
-    ) {
+    // Фон (тот же, что у настроек и меню серий) поднят в MangaChaptersPage, чтобы доходить до
+    // верхнего края экрана. Карточки ниже полупрозрачны — засветка читается сквозь них.
+    Column(modifier = Modifier.fillMaxSize()) {
         ChaptersHeader(
             state = state,
             ru = ru,

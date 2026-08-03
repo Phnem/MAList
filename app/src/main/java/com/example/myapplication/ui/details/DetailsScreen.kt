@@ -189,10 +189,10 @@ fun DetailsScreen(
                         animeTitle = displayTitle,
                         animeTitleEn = current.titleEn,
                         language = language,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .statusBarsPadding()
-                            .padding(top = 56.dp),
+                        // Отступ под шапку страница накладывает сама — на СОДЕРЖИМОЕ, не на фон.
+                        // Снаружи он ужимал и фон тоже, и над градиентом оставалась чёрная полоса
+                        // корневого экрана.
+                        modifier = Modifier.fillMaxSize(),
                     ) else ModernDetailsEpisodesPage(
                         animeId = current.id,
                         animeTitle = displayTitle,
