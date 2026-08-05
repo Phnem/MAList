@@ -649,11 +649,16 @@ fun PlayerControlsOverlay(
                             showLabel = showActionLabels,
                             onClick = onRotate,
                         )
+                        // Перемотка на длину заставки — тот же переход, что был у «+89» над полосой.
                         PlayerActionButton(
-                            icon = painterResource(R.drawable.ic_player_pip),
-                            label = "PiP",
+                            icon = painterResource(R.drawable.ic_player_number_89),
+                            label = "Skip Intro",
                             showLabel = showActionLabels,
-                            onClick = onEnterPip,
+                            onClick = {
+                                player.seekTo(
+                                    seekForwardTarget(player.currentPosition, duration, SEEK_FORWARD_MS)
+                                )
+                            },
                         )
                         // Подпись описывает ДЕЙСТВИЕ, а не текущее состояние: когда кадр обрезан,
                         // нажатие вернёт видео целиком («Fit»), иначе — расширит с обрезкой («Fill»).
@@ -679,16 +684,11 @@ fun PlayerControlsOverlay(
                             showLabel = showActionLabels,
                             onClick = { locked = true; controlsVisible = false },
                         )
-                        // Перемотка на длину заставки — тот же переход, что был у «+89» над полосой.
                         PlayerActionButton(
-                            icon = painterResource(R.drawable.ic_player_number_89),
-                            label = "Skip Intro",
+                            icon = painterResource(R.drawable.ic_player_pip),
+                            label = "PiP",
                             showLabel = showActionLabels,
-                            onClick = {
-                                player.seekTo(
-                                    seekForwardTarget(player.currentPosition, duration, SEEK_FORWARD_MS)
-                                )
-                            },
+                            onClick = onEnterPip,
                         )
                     }
                 }
