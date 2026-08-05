@@ -1,6 +1,7 @@
 package com.example.myapplication.localplayer.ui
 
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * Арифметика жестов плеера — без Compose и без Android, чтобы её можно было покрыть обычным тестом.
@@ -81,3 +82,32 @@ fun isSpeedHoldZone(x: Float, containerWidth: Float): Boolean =
 /** Левая половина экрана — яркость, правая — громкость. */
 fun verticalZoneAt(x: Float, containerWidth: Float): VerticalZone =
     if (containerWidth > 0f && x > containerWidth / 2f) VerticalZone.Volume else VerticalZone.Brightness
+
+/**
+ * Какую долю высоты кадра надо пройти пальцем, чтобы уровень прошёл весь диапазон от 0 до 1.
+ *
+ * Меньше единицы: свайп во весь экран физически неудобен — палец упирается в края раньше, чем
+ * доводит громкость до конца, а в ландшафте высоты и вовсе мало.
+ */
+const val LEVEL_SWIPE_TRAVEL = 0.6f
+
+/**
+ * На сколько сдвинуть уровень (0..1) за вертикальный проезд [dyPx] по контейнеру высотой [heightPx].
+ *
+ * Знак переворачивается: вверх по экрану — это отрицательный `dy`, а прибавка уровня.
+ */
+fun levelDelta(dyPx: Float, heightPx: Float): Float {
+    val travel = heightPx * LEVEL_SWIPE_TRAVEL
+    return if (travel <= 0f) 0f else -dyPx / travel
+}
+
+/**
+ * Ближайшая ступень уровня 0..1 для шкалы, у которой всего [steps] делений.
+ *
+ * Системная громкость дискретна (обычно 15 ступеней), и показывать под пальцем плавный процент,
+ * которого у неё нет, — врать: плашка ехала бы, пока звук стоит на месте.
+ */
+fun quantizeLevel(level: Float, steps: Int): Float {
+    val clamped = level.coerceIn(0f, 1f)
+    return if (steps <= 0) clamped else (clamped * steps).roundToInt() / steps.toFloat()
+}

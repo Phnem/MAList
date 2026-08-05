@@ -15,7 +15,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -93,6 +93,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -109,6 +110,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Locale
+import kotlin.math.roundToInt
 
 private enum class PlayerMenu { AUDIO, SPEED }
 
@@ -198,6 +200,11 @@ fun PlayerControlsOverlay(
     var tapJob by remember { mutableStateOf<Job?>(null) }
     /** Палец держат в правой половине — идёт ускоренное воспроизведение. */
     var speedHeld by remember { mutableStateOf(false) }
+    /** Громкость и яркость вертикальных свайпов — вместе с их плашкой поверх кадра. */
+    val levels = rememberPlayerLevels()
+    /** Последняя показанная зона — чтобы плашке было что рисовать, пока она уезжает. */
+    var lastLevelZone by remember { mutableStateOf(VerticalZone.Brightness) }
+    LaunchedEffect(levels.hud) { levels.hud?.let { lastLevelZone = it } }
     /** Скорость, к которой вернуться после удержания. Читается в момент отпускания, а не подписки. */
     val currentSpeed by rememberUpdatedState(speed)
 
@@ -332,33 +339,71 @@ fun PlayerControlsOverlay(
                 // является. Решение принимается на onDragStart и держится весь драг: переобуться
                 // в середине свайпа — это ровно тот скачок, ради которого ось и лочат.
                 var blocked = false
-                detectHorizontalDragGestures(
-                    onDragStart = {
-                        // Во время удержания палец принадлежит ускорению, а не перемотке.
+                // Ось выбирается один раз за жест и больше не меняется: иначе палец, ведущий
+                // перемотку, соскальзывал бы в яркость от малейшего наклона.
+                var axis = DragAxis.Undecided
+                var totalX = 0f
+                var totalY = 0f
+                val axisThresholdPx = DRAG_AXIS_THRESHOLD_DP * density
+                // Половина экрана, где начался жест, — на весь жест. Палец, переехавший середину,
+                // не должен посреди свайпа перескочить с яркости на громкость.
+                var zone = VerticalZone.Brightness
+                detectDragGestures(
+                    onDragStart = { offset ->
+                        // Во время удержания палец принадлежит ускорению, а не свайпам.
                         blocked = pinchState.swipesBlocked() || speedHeld
-                        if (!blocked) {
-                            startPos = player.currentPosition
-                            target = startPos
-                            seekPreview = SeekPreview(startPos, target, duration)
-                        }
+                        axis = DragAxis.Undecided
+                        totalX = 0f
+                        totalY = 0f
+                        zone = verticalZoneAt(offset.x, size.width.toFloat())
                     },
                     onDragEnd = {
-                        if (!blocked && duration > 0) player.seekTo(target)
-                        if (!blocked) seekPreview = null
+                        if (!blocked && axis == DragAxis.Horizontal && duration > 0) {
+                            player.seekTo(target)
+                        }
+                        seekPreview = null
+                        levels.release()
                         blocked = false
                     },
                     onDragCancel = {
-                        if (!blocked) seekPreview = null
+                        seekPreview = null
+                        levels.release()
                         blocked = false
                     },
-                    onHorizontalDrag = { change, dragAmount ->
+                    onDrag = { change, dragAmount ->
                         if (blocked) {
-                            // Ничего: жест принадлежит щипку, а не перемотке.
-                        } else {
-                            change.consume()
-                            val msPerPx = 120_000f / size.width.coerceAtLeast(1)
-                            target = (target + dragAmount * msPerPx).toLong().coerceIn(0L, duration)
-                            seekPreview = SeekPreview(startPos, target, duration)
+                            // Ничего: жест принадлежит щипку, а не свайпам.
+                            return@detectDragGestures
+                        }
+                        change.consume()
+                        totalX += dragAmount.x
+                        totalY += dragAmount.y
+                        if (axis == DragAxis.Undecided) {
+                            axis = dominantDragAxis(totalX, totalY, axisThresholdPx)
+                            when (axis) {
+                                DragAxis.Horizontal -> {
+                                    startPos = player.currentPosition
+                                    target = startPos
+                                    seekPreview = SeekPreview(startPos, target, duration)
+                                }
+                                DragAxis.Vertical -> levels.begin(zone)
+                                DragAxis.Undecided -> Unit
+                            }
+                        }
+                        when (axis) {
+                            DragAxis.Horizontal -> {
+                                val msPerPx = 120_000f / size.width.coerceAtLeast(1)
+                                target = (target + dragAmount.x * msPerPx)
+                                    .toLong()
+                                    .coerceIn(0L, duration)
+                                seekPreview = SeekPreview(startPos, target, duration)
+                            }
+                            DragAxis.Vertical -> levels.nudge(
+                                zone,
+                                levelDelta(dragAmount.y, size.height.toFloat()),
+                            )
+                            // Порог ещё не пройден — ось не выбрана, и трогать нечего.
+                            DragAxis.Undecided -> Unit
                         }
                     },
                 )
@@ -407,6 +452,20 @@ fun PlayerControlsOverlay(
             exit = fadeOut(tween(280)),
         ) {
             lastBurst?.let { SeekRipple(it) }
+        }
+
+        // Плашка громкости/яркости — там же, где превью перемотки: одновременно они не появятся,
+        // ось жеста залочена на первых же пикселях.
+        AnimatedVisibility(
+            visible = levels.hud != null,
+            modifier = Modifier.align(Alignment.Center),
+            enter = fadeIn(MotionTokens.standard()),
+            exit = fadeOut(MotionTokens.dialogExit()),
+        ) {
+            // Зону запоминаем: на выезде плашки levels.hud уже null, и без этого она бы моргнула
+            // чужой иконкой.
+            val zone = levels.hud ?: lastLevelZone
+            LevelHud(zone = zone, level = levels.levelOf(zone))
         }
 
         // Плашка «2×» — единственный признак, что ускорение включилось: без неё жест неотличим от
@@ -1148,6 +1207,66 @@ private fun SeekPreviewOverlay(preview: SeekPreview, modifier: Modifier = Modifi
             text = "$sign${formatTime(kotlin.math.abs(delta))}",
             style = MaterialTheme.typography.labelLarge.copy(fontFamily = SnProFamily, fontWeight = FontWeight.Medium),
             color = Color.White.copy(alpha = 0.7f),
+        )
+    }
+}
+
+/**
+ * Плашка уровня — капсула с иконкой, полосой и процентом, как у системных регуляторов.
+ *
+ * Полоса без анимации: значение обязано стоять ровно под пальцем, а любой `animate*AsState` между
+ * ними вставил бы задержку — на быстром свайпе плашка бы отставала от звука.
+ */
+@Composable
+private fun LevelHud(zone: VerticalZone, level: Float, modifier: Modifier = Modifier) {
+    val fraction = level.coerceIn(0f, 1f)
+    val icon = when {
+        zone == VerticalZone.Brightness -> R.drawable.ic_player_brightness
+        fraction <= 0f -> R.drawable.ic_player_volume_off
+        else -> R.drawable.ic_player_volume
+    }
+    Row(
+        modifier = modifier
+            .fillMaxWidth(0.7f)
+            .clip(Capsule)
+            .background(Color.Black.copy(alpha = 0.45f))
+            .padding(horizontal = 22.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            painter = painterResource(icon),
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier.size(22.dp),
+        )
+        Spacer(Modifier.width(18.dp))
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(12.dp)
+                .clip(Capsule)
+                .background(Color.White.copy(alpha = 0.28f)),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(fraction)
+                    .clip(Capsule)
+                    .background(Color.White),
+            )
+        }
+        Spacer(Modifier.width(18.dp))
+        Text(
+            // Фиксированная ширина: без неё полоса дёргалась бы туда-сюда на каждом переходе
+            // через 9 → 10 → 100.
+            modifier = Modifier.width(42.dp),
+            text = (fraction * 100).roundToInt().toString(),
+            textAlign = TextAlign.End,
+            style = MaterialTheme.typography.titleMedium.copy(
+                fontFamily = SnProFamily,
+                fontWeight = FontWeight.Medium,
+            ),
+            color = Color.White,
         )
     }
 }

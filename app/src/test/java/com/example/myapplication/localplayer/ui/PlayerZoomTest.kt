@@ -97,4 +97,39 @@ class PlayerZoomTest {
     fun zero_width_defaults_to_brightness_zone() {
         assertEquals(VerticalZone.Brightness, verticalZoneAt(x = 0f, containerWidth = 0f))
     }
+
+    @Test
+    fun swiping_up_raises_the_level() {
+        // Вверх по экрану — это отрицательный dy, а прибавка уровня.
+        assertTrue(levelDelta(dyPx = -100f, heightPx = 1000f) > 0f)
+        assertTrue(levelDelta(dyPx = 100f, heightPx = 1000f) < 0f)
+    }
+
+    @Test
+    fun full_travel_covers_the_whole_range() {
+        val height = 1000f
+        assertEquals(1f, levelDelta(-height * LEVEL_SWIPE_TRAVEL, height), 0.001f)
+    }
+
+    @Test
+    fun level_delta_is_zero_until_the_size_is_known() {
+        // Первый кадр приходит с нулевой высотой — делить на неё нельзя.
+        assertEquals(0f, levelDelta(dyPx = -50f, heightPx = 0f), 0.001f)
+    }
+
+    @Test
+    fun volume_snaps_to_system_steps() {
+        // 15 ступеней — типичная шкала STREAM_MUSIC: показывать между ними нечего.
+        assertEquals(0f, quantizeLevel(0.02f, steps = 15), 0.001f)
+        assertEquals(1f / 15f, quantizeLevel(0.06f, steps = 15), 0.001f)
+        assertEquals(1f, quantizeLevel(0.99f, steps = 15), 0.001f)
+    }
+
+    @Test
+    fun level_stays_inside_the_range() {
+        assertEquals(0f, quantizeLevel(-0.5f, steps = 15), 0.001f)
+        assertEquals(1f, quantizeLevel(1.5f, steps = 15), 0.001f)
+        // Без ступеней (аудио недоступно) — просто зажим, без округления.
+        assertEquals(0.37f, quantizeLevel(0.37f, steps = 0), 0.001f)
+    }
 }
