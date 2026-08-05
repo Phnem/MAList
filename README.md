@@ -52,12 +52,15 @@ Vetro is an Android media library with a local-first core. Build a personal coll
 ## Screens
 
 <p align="center">
-  <img src="images/338SM.png" alt="Vetro collection screen" width="48%" />
-  <img src="images/339SM.png" alt="Vetro title details screen" width="48%" />
+  <img src="images/1.png" alt="Vetro recommendations deck" width="48%" />
+  <img src="images/2.png" alt="Vetro rating screen" width="48%" />
 </p>
 <p align="center">
-  <img src="images/340SM.png" alt="Vetro media screen" width="48%" />
-  <img src="images/341SM.png" alt="Vetro settings screen" width="48%" />
+  <img src="images/3.png" alt="Vetro sync services sheet" width="48%" />
+  <img src="images/4_n.png" alt="Vetro collection screen" width="48%" />
+</p>
+<p align="center">
+  <img src="images/5.png" alt="Vetro sorting sheet" width="48%" />
 </p>
 
 ## Install
