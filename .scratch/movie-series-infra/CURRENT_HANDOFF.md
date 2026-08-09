@@ -13,20 +13,18 @@
 
 ## Current workflow state
 
-READY_FOR_IMPLEMENTATION
+COMPLETE
 
 ## Completed tickets
 
 TICKET-01 (`e73c65a`), TICKET-02 (`b1ea00d`), TICKET-03 (`140d048`), TICKET-04
-(`3b88d85`), TICKET-05 (`e81c5bb`), TICKET-06 (`4810e38`), TICKET-07 (`46bc4f1`).
+(`3b88d85`), TICKET-05 (`e81c5bb`), TICKET-06 (`4810e38`), TICKET-07 (`46bc4f1`),
+TICKET-08 (`1777d36`).
 
-## Active ticket
+## Active / next eligible ticket
 
-None.
-
-## Next eligible ticket
-
-TICKET-08 — SeriesEpisodeCheckUseCase.
+Нет. Все обязательные тикеты завершены, финальные Spec и Architecture/Standards checkpoints
+пройдены без нерешённых BLOCKING/IMPORTANT.
 
 ## Decisions that must be preserved
 
@@ -35,36 +33,34 @@ TICKET-08 — SeriesEpisodeCheckUseCase.
 - RU source priority: Kinopoisk fill-gap + TMDB canonical; EN: TMDB primary.
 - `Failure` не очищает сохранённый id; только `NotFoundById` запускает stale-id repair.
 - Provider id gaps не подавляются generic `EnrichmentGapJournal`.
+- Новая SERIES получает normalization marker атомарно при вставке; legacy/import rows — нет.
+- Home и Worker запускают anime→SERIES проверки через один `EpisodeUpdateCheckCoordinator`.
 
-## Deviations that affect later work
+## Verification performed
 
-HTTP MockEngine тесты data source отложены. Cloud sync новых id ждёт ручного применения
-Supabase migration. Полный repair валидирует все сохранённые movie ids. Ручная проверка на
-реальной коллекции не выполнялась, debug APK и 426 unit tests зелёные.
+- `:core:network:testDebugUnitTest` + `:app:testDebugUnitTest`: 435/435
+  (51 core + 384 app), failures=0, errors=0.
+- `:app:assembleDebug`: успешно.
+- `git diff --check`: успешно.
+- Migration 13/14, production SERIES insertion marker, legacy normalization, stale-id recovery,
+  Failure semantics и shared update-feed покрыты тестами.
 
-## Current repository state
+## Deferred / manual work
 
-Код TICKET-07 закоммичен; после docs-коммита рабочее дерево должно быть чистым.
-
-## Relevant commits
-
-`e73c65a`, `b1ea00d`, `140d048`, `3b88d85`, `e81c5bb`, `4810e38`, `46bc4f1`.
-
-## Verification already performed
-
-Полные unit-тесты `core:network` + `app`: 426/426; `app:assembleDebug`; `git diff --check`.
+- Добавить Ktor `MockEngine` тесты HTTP mapping для TMDB/Kinopoisk.
+- Вручную применить
+  `supabase/migrations/20260809000000_anime_tmdb_kinopoisk_ids.sql`, затем добавить новые id и
+  not-found timestamps в cloud sync DTO/push/pull. До этого provider ids остаются локальными.
+- При доступе к устройству и live API выполнить smoke: RU/EN add/details и locale switch,
+  remake dedup, stale-id recovery, migration 13 на копии реальной БД, offline repair и ongoing
+  SERIES notification/auto-apply.
+- Out of scope остаются recommendations, where-to-watch, AI title translation, SERIES player,
+  season UI, status cadence, Kinopoisk proxy и TMDB animation filtering.
 
 ## Known failures or blockers
 
-Нет.
+Нет. Ручные/live проверки выше не выполнялись, но не являются блокером code acceptance.
 
-## Files most relevant to the next ticket
+## Current repository state
 
-`updates/BatchEpisodeCheckUseCase.kt`, `domain/enrichment/FullEnrichmentWorker.kt`,
-`worker/AnimeUpdateWorker.kt`, `core/network/.../movie/MovieSeriesRepository.kt`,
-`.scratch/movie-series-infra/issues/08-series-episode-check.md`.
-
-## Exact recommended next action
-
-Прочитать TICKET-08 и существующий anime update-feed; сначала написать тесты на legacy
-normalization (12 known → 7 released без update, затем 7 → 8 с update) и Failure/NotFoundById.
+Код всех тикетов закоммичен. После финального docs-коммита рабочее дерево должно быть чистым.

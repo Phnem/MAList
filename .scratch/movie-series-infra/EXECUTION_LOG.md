@@ -412,3 +412,53 @@ AddEdit сохраняет movie provider ids/timestamps.
 ### Next eligible ticket
 
 TICKET-08 — SeriesEpisodeCheckUseCase.
+
+## 2026-08-09 — TICKET-08 завершён
+
+### Outcome
+
+DONE_WITH_DEVIATIONS
+
+### Work completed
+
+Добавлен `SeriesEpisodeCheckUseCase`: он проверяет все SERIES, получает и сохраняет только
+`releasedEpisodes`, молча нормализует legacy-значение при первом успешном проходе и затем
+создаёт обычные `AnimeUpdate` при росте. Протухший TMDB id восстанавливается через title
+resolve; сетевой `Failure` не очищает id и не меняет локальное состояние.
+
+Новые SERIES рождаются нормализованными: `AnimeDatabase.insertNewAnime(anime)` сам определяет
+media type и атомарно вставляет запись вместе с marker в `series_episode_normalization`.
+Миграция 14 создаёт marker-table без timestamp; импортированные/мигрированные legacy-записи
+остаются без marker и проходят одноразовую нормализацию.
+
+Общая политика merge/dedup/auto-apply ленты вынесена в `EpisodeUpdateFeed`, а
+`EpisodeUpdateCheckCoordinator` последовательно запускает anime и SERIES проверки из ручного
+Home trigger и фонового Worker.
+
+### Verification
+
+Полные unit tests `core:network` + `app`: 435/435 (51 + 384), failures=0, errors=0;
+`:app:assembleDebug`; `git diff --check`. Code commit: `1777d36`.
+
+### Review result
+
+Исправлены BLOCKING по маркировке новых SERIES и IMPORTANT по дублированию feed/orchestration;
+production insertion seam покрыт in-memory SQLite тестом. Финальные Spec и Standards re-review
+не нашли нерешённых BLOCKING/IMPORTANT.
+
+### Deviations and manual checks
+
+Реальная проверка ongoing SERIES, уведомления на устройстве и live TMDB/Kinopoisk не запускались;
+эквивалентное поведение покрыто детерминированными тестами и чтением consumers. Ktor MockEngine
+и применение Supabase migration остаются записанными follow-up.
+
+### Next eligible ticket
+
+Нет — TICKET-01…08 завершены.
+
+## 2026-08-09 — финальный feature checkpoint
+
+Spec review принял реализацию requirement-by-requirement. Architecture/Standards checkpoint
+подтвердил, что `MovieSeriesRepository` остаётся глубоким `core/network` модулем без app/DB
+зависимостей, `LookupResult` сохраняет различия outcome, а SERIES episode ownership не дрейфовал.
+Обязательных замечаний нет; feature workflow переведён в COMPLETE.

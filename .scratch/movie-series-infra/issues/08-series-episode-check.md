@@ -1,8 +1,10 @@
 # TICKET-08: SeriesEpisodeCheckUseCase — отслеживание вышедших серий
 
+Status: DONE_WITH_DEVIATIONS
+
 ## Status
 
-PENDING
+DONE_WITH_DEVIATIONS
 
 ## Objective
 
@@ -51,19 +53,20 @@ TICKET-02 (`releasedEpisodesForTv`), TICKET-04 (`resolveTmdbId`), TICKET-01 (`An
 
 ## Acceptance criteria
 
-- [ ] **Регресс-тест (центральный)**: легаси SERIES-запись `episodes = 12` (старое значение —
+- [x] **Регресс-тест (центральный)**: легаси SERIES-запись `episodes = 12` (старое значение —
       заявленное), `releasedEpisodes = 7` → первый проход НЕ создаёт `anime_update "12 → 7"`,
       тихо нормализует `episodes` к `7`. После выхода 8-й серии (`releasedEpisodes = 8`) —
       обычное событие `7 → 8`.
-- [ ] **Регресс-тест**: запись с уже released-семантикой `episodes = 7` — повторный проход без
+- [x] **Регресс-тест**: запись с уже released-семантикой `episodes = 7` — повторный проход без
       изменений на стороне TMDB не создаёт события и не меняет `episodes`.
 - [ ] Реальный онгоинг-сериал (текущий сезон не закончился) — `anime_update` получает
       **вышедшие**, а не все заявленные серии сезона.
-- [ ] Протухший `tmdbId` (`NotFoundById`) восстанавливается через резолв по названию, не
+      Детерминированный repository/use-case сценарий пройден; live API/device smoke отложен.
+- [x] Протухший `tmdbId` (`NotFoundById`) восстанавливается через резолв по названию, не
       оставляет запись немой навсегда.
-- [ ] `EpisodeUpdateStack`/`AnimeNotifier` показывают SERIES-события так же, как аниме-события
+- [x] `EpisodeUpdateStack`/`AnimeNotifier` показывают SERIES-события так же, как аниме-события
       (проверено чтением кода — не фильтруют по `mediaType`).
-- [ ] `./gradlew :app:compileDebugKotlin` зелёный.
+- [x] `./gradlew :app:compileDebugKotlin` зелёный.
 
 ## Verification plan
 
@@ -102,16 +105,41 @@ REQUIRED — легаси-нормализация и released-vs-known срав
 
 ## Implementation notes
 
-Empty before implementation.
+- Добавлена локальная таблица-маркер `series_episode_normalization` и миграция 14. Новые
+  SERIES помечаются атомарно вместе с вставкой через `AnimeDatabase.insertNewAnime(anime)`;
+  импортированные/мигрированные legacy-записи маркера не имеют.
+- Первый успешный lookup legacy SERIES сохраняет только `releasedEpisodes` и ставит маркер без
+  события. Последующий рост создаёт обычный `AnimeUpdate`; `knownEpisodes` не используется.
+- `EpisodeUpdateFeed.publishEpisodeUpdates` централизует merge/dedup/auto-apply общей ленты, а
+  `EpisodeUpdateCheckCoordinator` последовательно запускает anime и SERIES проверки из Home и
+  фонового worker.
+- Протухший сохранённый id проходит `NotFoundById` → повторный resolve по названию; `Failure`
+  ничего не очищает и не нормализует.
 
 ## Deviations
 
-Empty before implementation.
+- Вместо переиспользования несвязанного признака выбран отдельный marker-table без timestamp:
+  семантика явная, а миграция не меняет модель `Anime`.
+- После standards-review общий feed и две точки запуска вынесены в shared policy/coordinator,
+  поэтому `BatchEpisodeCheckUseCase` получил небольшую структурную правку сверх первоначального
+  ожидания «не трогать».
+- Реальная ручная проверка с TMDB и Android-уведомлением не выполнялась; equivalent behavior
+  проверено детерминированными unit/integration тестами и чтением consumers.
 
 ## Review findings
 
-Empty before review.
+- Исправлен BLOCKING: новые SERIES раньше могли ошибочно считаться legacy. Теперь production
+  insertion сам выводит marker из `anime.mediaType == SERIES` и делает обе записи транзакционно.
+- Устранены standards IMPORTANT: дублирование merge/auto-apply общей ленты и orchestration в
+  Home/Worker.
+- Усилен регресс-тест production wiring: `AnimeInsertionTest` вызывает реальный no-flag seam,
+  поэтому ошибка классификации SERIES больше не может быть скрыта fake-настройкой теста.
+- Финальные Spec и Standards re-review: нерешённых BLOCKING/IMPORTANT нет.
 
 ## Completion evidence
 
-Empty before completion.
+- Code commit: `1777d36`.
+- `:core:network:testDebugUnitTest` + `:app:testDebugUnitTest`: 435/435, failures=0, errors=0.
+- `:app:assembleDebug`, `git diff --check`: успешно.
+- Покрыты legacy 12→7 без события, затем 7→8; unchanged; stale-id replacement; Failure;
+  shared-feed preservation; атомарный marker для новых SERIES и его отсутствие у ANIME/MOVIE.

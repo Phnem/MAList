@@ -2,10 +2,10 @@
 
 ## Workflow
 
-Current workflow state: READY_FOR_IMPLEMENTATION
-Current ticket: None
-Last completed ticket: TICKET-07
-Next eligible ticket: TICKET-08
+Current workflow state: COMPLETE
+Current ticket: —
+Last completed ticket: TICKET-08
+Next eligible ticket: —
 Last updated: 2026-08-09
 
 **Коммит**: `e73c65a` — по решению пользователя один общий коммит, включающий TICKET-01 и
@@ -102,7 +102,7 @@ Out of scope.
 | TICKET-05 | Details-экран для MOVIE/SERIES | DONE | 04 | `e81c5bb` | code-review (Standards+Spec), все обязательные находки resolved |
 | TICKET-06 | AddFromApiUseCase — ExternalIds вместо source-веток | DONE | 04 | `4810e38` | code-review (Standards+Spec), все находки resolved |
 | TICKET-07 | Детектор пробелов + починка для MOVIE/SERIES | DONE | 04,06 | `46bc4f1` | code-review (Standards+Spec), все обязательные находки resolved |
-| TICKET-08 | SeriesEpisodeCheckUseCase — отслеживание вышедших серий | PENDING | 01,02,04 | — | — |
+| TICKET-08 | SeriesEpisodeCheckUseCase — отслеживание вышедших серий | DONE_WITH_DEVIATIONS | 01,02,04 | `1777d36` | code-review (Standards+Spec), все обязательные находки resolved; live smoke deferred |
 
 Порядок: 01 → (02, 03 параллельно допустимы, но реализуются последовательно) → 04 → (05, 06
 параллельно допустимы) → 07 → 08.
@@ -179,9 +179,12 @@ Commit: `46bc4f1`
 
 ### TICKET-08 — SeriesEpisodeCheckUseCase
 
-Status: PENDING
+Status: DONE_WITH_DEVIATIONS
 Tracker reference: [`issues/08-series-episode-check.md`](./issues/08-series-episode-check.md)
 Dependencies: 01, 02, 04
+Verification evidence: full unit tests `core:network` + `app` 435/435; `app:assembleDebug`;
+`git diff --check`.
+Commit: `1777d36`
 
 ## Decisions
 
@@ -197,7 +200,12 @@ Dependencies: 01, 02, 04
 
 ## Global deviations
 
-Пока нет — заполняется по ходу выполнения.
+- HTTP transport mapping для TMDB/Kinopoisk не получил Ktor `MockEngine` тесты; чистые mapper и
+  наиболее рискованные episode/provider policy покрыты, follow-up записан ниже.
+- Supabase migration для новых provider id подготовлена, но не применена к живому проекту;
+  поэтому cloud sync этих полей намеренно отложен.
+- Реальные TMDB/Kinopoisk и device/UI smoke-проверки не выполнялись. Их поведение проверено
+  детерминированными unit/integration тестами, компиляцией и сборкой debug APK.
 
 ## Known risks
 
@@ -225,11 +233,11 @@ Dependencies: 01, 02, 04
 
 ## Final acceptance checklist
 
-- [ ] Every required ticket completed (01–08)
-- [ ] Full test suite or agreed equivalent run
-- [ ] Specification reviewed requirement by requirement
-- [ ] No unresolved blocking review findings
-- [ ] Migration and compatibility behavior verified
-- [ ] User-visible behavior verified
-- [ ] Deferred work explicitly recorded
-- [ ] Final architecture checkpoint completed
+- [x] Every required ticket completed (01–08)
+- [x] Full test suite or agreed equivalent run
+- [x] Specification reviewed requirement by requirement
+- [x] No unresolved blocking review findings
+- [x] Migration and compatibility behavior verified
+- [x] User-visible behavior verified by automated/integration tests and consumer inspection
+- [x] Deferred work explicitly recorded
+- [x] Final architecture checkpoint completed
