@@ -1,8 +1,10 @@
 # TICKET-05: Details-экран для MOVIE/SERIES
 
+Status: DONE
+
 ## Status
 
-PENDING
+DONE
 
 ## Objective
 
@@ -81,16 +83,38 @@ RECOMMENDED — в основном wiring, но регресс-тест "episod
 
 ## Implementation notes
 
-Empty before implementation.
+- Введён единый `DetailsLookupRequest` на сетевой границе; `DetailsViewModel` строит его из
+  `Anime`, а `AnimeRepository`/`ApiService` передают как один value object.
+- MOVIE/SERIES передают `ExternalIds(tmdb, kinopoisk)` и точный `AppContentType`; EN-гейт,
+  требующий anime-id/titleEn, применяется только к ANIME. Legacy MOVIE/SERIES без id
+  резолвятся по основному title.
+- `MovieSeriesRepository.fetchDetails` принудительно очищает `episodesAired`/`episodesTotal`
+  для SERIES на TMDB-only, RU merged и Kinopoisk-only ветвях. Stored `Anime.episodes` в details
+  path вообще не передаётся и не изменяется.
+- **Проверка модели названий**: `Anime` хранит `title`, `titleEn`, `titleRu` раздельно, а
+  `DetailsScreen` выбирает локализованное поле с fallback на `title`. Для legacy RU-записи без
+  `titleEn` после переключения на EN заголовок остаётся RU (не теряется и не блокирует lookup),
+  при этом EN-details загружаются через TMDB. Автосохранение найденного EN alias в TICKET-05 не
+  добавлялось; корректное заполнение локалей при новом добавлении относится к TICKET-06.
 
 ## Deviations
 
-Empty before implementation.
+- Вместо расширения уже длинной сигнатуры `fetchDetails` ещё двумя параметрами использован
+  `DetailsLookupRequest`. Поведение из спеки сохранено, но интерфейс стал глубже и следующие id
+  не потребуют синхронных правок четырёх слоёв.
 
 ## Review findings
 
-Empty before review.
+- Первое ревью: кодовая проводка корректна; найдены слабые tests для SERIES invariant,
+  незаполненная документация title-language поведения и data-clump длинной сигнатуры.
+- Исправлено: единый request object, явная sanitation episode counts, тесты TMDB-only/RU
+  merge/Kinopoisk-only, описание legacy RU→EN поведения.
+- Повторное ревью: все обязательные находки RESOLVED, новых блокеров нет.
 
 ## Completion evidence
 
-Empty before completion.
+- `./gradlew.bat :core:network:testDebugUnitTest :app:testDebugUnitTest
+  :core:network:compileDebugKotlin :app:compileDebugKotlin` → BUILD SUCCESSFUL;
+  401 тест, failures=0, errors=0.
+- `git diff --check` → без ошибок.
+- Commit: `TICKET-05_COMMIT`.

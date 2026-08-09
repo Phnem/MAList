@@ -4,8 +4,8 @@
 
 Current workflow state: READY_FOR_IMPLEMENTATION
 Current ticket: None
-Last completed ticket: TICKET-04
-Next eligible ticket: TICKET-05
+Last completed ticket: TICKET-05
+Next eligible ticket: TICKET-06
 Last updated: 2026-08-09
 
 **Коммит**: `e73c65a` — по решению пользователя один общий коммит, включающий TICKET-01 и
@@ -99,7 +99,7 @@ Out of scope.
 | TICKET-02 | TmdbRemoteDataSource — типизированный DTO-слой TMDB | DONE_WITH_DEVIATIONS | 01 | `b1ea00d` | самопроверка, HTTP-слой без mock-тестов (см. тикет) |
 | TICKET-03 | KinopoiskRemoteDataSource — RU-источник | DONE_WITH_DEVIATIONS | 01 | `140d048` | самопроверка, HTTP-слой без mock-тестов (тот же follow-up, что TICKET-02) |
 | TICKET-04 | MovieSeriesRepository + переключение VetroApiService | DONE | 01,02,03 | `3b88d85` | code-review (Standards+Spec), все находки resolved |
-| TICKET-05 | Details-экран для MOVIE/SERIES | PENDING | 04 | — | — |
+| TICKET-05 | Details-экран для MOVIE/SERIES | DONE | 04 | `TICKET-05_COMMIT` | code-review (Standards+Spec), все обязательные находки resolved |
 | TICKET-06 | AddFromApiUseCase — ExternalIds вместо source-веток | PENDING | 04 | — | — |
 | TICKET-07 | Детектор пробелов + починка для MOVIE/SERIES | PENDING | 04,06 | — | — |
 | TICKET-08 | SeriesEpisodeCheckUseCase — отслеживание вышедших серий | PENDING | 01,02,04 | — | — |
@@ -152,9 +152,12 @@ Commit: `3b88d85`
 
 ### TICKET-05 — Details-экран
 
-Status: PENDING
+Status: DONE
 Tracker reference: [`issues/05-details-screen-wiring.md`](./issues/05-details-screen-wiring.md)
 Dependencies: 04
+Verification evidence: full unit tests `core:network` + `app` 401/401; компиляция обоих
+модулей; `git diff --check`.
+Commit: `TICKET-05_COMMIT`
 
 ### TICKET-06 — AddFromApiUseCase
 

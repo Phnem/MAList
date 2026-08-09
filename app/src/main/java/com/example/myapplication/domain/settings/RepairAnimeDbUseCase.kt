@@ -316,7 +316,13 @@ class RepairAnimeDbUseCase(
 
         if (strict) {
             pickBestMatch(anime.title, results)?.let { return it }
-            repository.fetchDetails(anime.title, language, isManga = anime.mediaType == com.example.myapplication.data.models.MediaType.MANGA).getOrNull()?.toApiSearchResult()?.let {
+            repository.fetchDetails(
+                com.example.myapplication.network.DetailsLookupRequest(
+                    title = anime.title,
+                    language = language,
+                    isManga = anime.mediaType == com.example.myapplication.data.models.MediaType.MANGA,
+                )
+            ).getOrNull()?.toApiSearchResult()?.let {
                 sessionLog.debug("fetchDetails fallback for \"${anime.title}\" via ${it.source}")
                 return it
             }

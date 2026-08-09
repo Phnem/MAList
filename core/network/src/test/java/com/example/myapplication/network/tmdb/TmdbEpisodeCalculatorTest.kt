@@ -2,6 +2,7 @@ package com.example.myapplication.network.tmdb
 
 import java.time.LocalDate
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
@@ -94,5 +95,22 @@ class TmdbEpisodeCalculatorTest {
         // Между сезонами TMDB может держать in_production=true без status=Returning Series —
         // не должно ложно классифицироваться как ENDED/CANCELLED.
         assertEquals(SeriesStatus.UPCOMING, TmdbEpisodeCalculator.status("In Production", inProduction = true))
+    }
+
+    @Test
+    fun `details card never exposes known episode count as released`() {
+        val details = TmdbTvDetails(
+            id = 1,
+            name = "Ongoing",
+            overview = "",
+            posterUrl = null,
+            voteAverage = 80,
+            genres = emptyList(),
+            status = SeriesStatus.ONGOING,
+            seasons = listOf(TmdbSeasonSummary(1, episodeCount = 24, airDate = today.minusDays(7))),
+        ).toAnimeDetails()
+
+        assertEquals(0, details.episodesAired)
+        assertNull(details.episodesTotal)
     }
 }

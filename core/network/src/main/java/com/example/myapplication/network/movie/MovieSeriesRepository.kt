@@ -102,8 +102,9 @@ class MovieSeriesRepository internal constructor(
             return LookupResult.Found(
                 if (kinopoiskDetails is LookupResult.Found) {
                     mergeDetails(tmdbDetails.value, kinopoiskDetails.value, contentType)
+                        .withoutSeriesEpisodeCounts(contentType)
                 } else {
-                    tmdbDetails.value
+                    tmdbDetails.value.withoutSeriesEpisodeCounts(contentType)
                 }
             )
         }
@@ -213,6 +214,9 @@ class MovieSeriesRepository internal constructor(
         posterUrl = posterUrl,
         source = "Kinopoisk",
     )
+
+    private fun AnimeDetails.withoutSeriesEpisodeCounts(contentType: AppContentType): AnimeDetails =
+        if (contentType == AppContentType.SERIES) copy(episodesAired = 0, episodesTotal = null) else this
 
     private fun pickBestMatch(
         title: String,

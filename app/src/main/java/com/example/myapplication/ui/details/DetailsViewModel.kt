@@ -87,17 +87,7 @@ class DetailsViewModel(
 
     private fun loadDetails(anime: Anime, language: AppLanguage) {
         viewModelScope.launch {
-            val canLookupEnDescription =
-                anime.anilistId != null ||
-                    anime.malId != null ||
-                    anime.shikimoriId != null ||
-                    !anime.titleEn.isNullOrBlank()
-
-            if (
-                language == AppLanguage.EN &&
-                anime.mediaType != com.example.myapplication.data.models.MediaType.MANGA &&
-                !canLookupEnDescription
-            ) {
+            if (!anime.canLookupDetails(language)) {
                 _uiState.value = DetailsUiState.MissingEnglishTitle
                 return@launch
             }
@@ -105,20 +95,9 @@ class DetailsViewModel(
             _uiState.value = DetailsUiState.Loading
             val startTime = System.currentTimeMillis()
 
-            val lookupTitle = when (language) {
-                AppLanguage.RU -> anime.titleRu?.takeIf { it.isNotBlank() } ?: anime.title
-                AppLanguage.EN -> anime.titleEn?.takeIf { it.isNotBlank() } ?: anime.title
-            }
+            val request = anime.toDetailsLookupRequest(language)
 
-            repository.fetchDetails(
-                title = lookupTitle,
-                language = language,
-                isManga = anime.mediaType == com.example.myapplication.data.models.MediaType.MANGA,
-                malId = anime.malId,
-                anilistId = anime.anilistId,
-                titleEn = anime.titleEn,
-                shikimoriId = anime.shikimoriId,
-            )
+            repository.fetchDetails(request)
                 .fold(
                     onSuccess = { details ->
                         val elapsed = System.currentTimeMillis() - startTime

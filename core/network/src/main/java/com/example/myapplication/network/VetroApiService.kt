@@ -34,33 +34,37 @@ class VetroApiService(
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    override suspend fun fetchDetails(
-        title: String,
-        language: AppLanguage,
-        isManga: Boolean,
-        apiId: String?,
-        malId: Int?,
-        anilistId: Int?,
-        titleEn: String?,
-        shikimoriId: Int?,
-    ): Result<AnimeDetails?> {
+    override suspend fun fetchDetails(request: DetailsLookupRequest): Result<AnimeDetails?> {
         return runCatching {
             heavyRate.acquire()
-            if (isManga) {
-                if (apiId != null) {
-                    val remangaDetails = remanga.getMangaDetails(apiId)
+            if (request.appContentType == AppContentType.MOVIE || request.appContentType == AppContentType.SERIES) {
+                return@runCatching movieSeriesRepository.fetchDetails(
+                    contentType = request.appContentType,
+                    language = request.language,
+                    externalIds = request.externalIds,
+                    title = request.title.trim(),
+                ).valueOrNullOrThrow()
+            }
+            if (request.isManga) {
+                if (request.remangaId != null) {
+                    val remangaDetails = remanga.getMangaDetails(request.remangaId)
                     if (remangaDetails != null) return@runCatching remangaDetails
                 }
-                val query = title.trim()
-                when (language) {
+                val query = request.title.trim()
+                when (request.language) {
                     AppLanguage.EN -> fetchMangaDetailsEn(query)
                     AppLanguage.RU -> shikimori.fetchAnimeDetails(query).getOrNull()
                         ?: aniList.fetchAnimeDetails(query).getOrNull()
                 }
             } else {
-                when (language) {
-                    AppLanguage.EN -> fetchAnimeDetailsEn(anilistId, malId, shikimoriId, titleEn)
-                    AppLanguage.RU -> fetchAnimeDetailsRu(title.trim())
+                when (request.language) {
+                    AppLanguage.EN -> fetchAnimeDetailsEn(
+                        request.anilistId,
+                        request.malId,
+                        request.shikimoriId,
+                        request.titleEn,
+                    )
+                    AppLanguage.RU -> fetchAnimeDetailsRu(request.title.trim())
                 }
             }
         }

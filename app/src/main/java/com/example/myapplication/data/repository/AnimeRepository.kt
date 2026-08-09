@@ -11,6 +11,7 @@ import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.network.ApiSearchResult
 import com.example.myapplication.network.EnrichedTitles
 import com.example.myapplication.network.GithubReleaseInfo
+import com.example.myapplication.network.DetailsLookupRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -108,18 +109,8 @@ class AnimeRepository(
         return updated
     }
 
-    suspend fun fetchDetails(
-        title: String,
-        language: AppLanguage,
-        isManga: Boolean = false,
-        apiId: String? = null,
-        malId: Int? = null,
-        anilistId: Int? = null,
-        titleEn: String? = null,
-        shikimoriId: Int? = null,
-    ): Result<AnimeDetails?> {
-        return apiService.fetchDetails(title, language, isManga, apiId, malId, anilistId, titleEn, shikimoriId)
-    }
+    suspend fun fetchDetails(request: DetailsLookupRequest): Result<AnimeDetails?> =
+        apiService.fetchDetails(request)
 
     suspend fun findTotalEpisodes(
         title: String,

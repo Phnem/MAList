@@ -18,7 +18,7 @@ READY_FOR_IMPLEMENTATION
 ## Completed tickets
 
 TICKET-01 (`e73c65a`), TICKET-02 (`b1ea00d`), TICKET-03 (`140d048`), TICKET-04
-(`3b88d85`).
+(`3b88d85`), TICKET-05 (`TICKET-05_COMMIT`).
 
 ## Active ticket
 
@@ -26,7 +26,7 @@ None.
 
 ## Next eligible ticket
 
-TICKET-05 — Details-экран для MOVIE/SERIES. TICKET-06 также разблокирован, но выбран 05.
+TICKET-06 — AddFromApiUseCase и дедуп по ExternalIds.
 
 ## Decisions that must be preserved
 
@@ -42,16 +42,15 @@ Supabase migration. `ApiSearchResult.originalTitle` добавлен для ко
 
 ## Current repository state
 
-TICKET-04 завершён и должен быть чистым после коммита; следующий тикет может менять app слой.
+TICKET-05 завершён и должен быть чистым после коммита.
 
 ## Relevant commits
 
-`e73c65a`, `b1ea00d`, `140d048`, `3b88d85`.
+`e73c65a`, `b1ea00d`, `140d048`, `3b88d85`, `TICKET-05_COMMIT`.
 
 ## Verification already performed
 
-Полные unit-тесты `core:network` + `app`: 383/383; компиляция обоих модулей; boundary grep;
-inline-TMDB grep; `git diff --check`.
+Полные unit-тесты `core:network` + `app`: 401/401; компиляция обоих модулей; `git diff --check`.
 
 ## Known failures or blockers
 
@@ -59,10 +58,10 @@ inline-TMDB grep; `git diff --check`.
 
 ## Files most relevant to the next ticket
 
-`ApiService.kt`, `VetroApiService.kt`, `AnimeRepository.kt`, `DetailsViewModel.kt`,
-`MovieSeriesRepository.kt`, `.scratch/movie-series-infra/issues/05-details-screen-wiring.md`.
+`AddFromApiUseCase.kt`, `DuplicateTitleRule.kt`, `SaveAnimeParams.kt`, `SaveAnimeUseCase.kt`,
+`ApiSearchResult.kt`, `.scratch/movie-series-infra/issues/06-add-and-dedup.md`.
 
 ## Exact recommended next action
 
-Прочитать TICKET-05 и существующие `fetchDetails` вызовы, добавить TDD/контрактные тесты на
-MOVIE/SERIES details wiring и отсутствие записи known episodes.
+Прочитать TICKET-06 и существующие source-based ветки добавления/поиска дублей; сначала
+добавить тесты на сохранение tmdb/kinopoisk id и разные годы ремейков.

@@ -296,3 +296,44 @@ Boundary grep, удаление inline-TMDB и `git diff --check` подтвер
 ### Next eligible ticket
 
 TICKET-05 (Details wiring) и TICKET-06 (add/dedup) разблокированы; следующий — TICKET-05.
+
+## 2026-08-09 — TICKET-05 завершён
+
+### Outcome
+
+DONE
+
+### Work completed
+
+Details lookup для MOVIE/SERIES проведён end-to-end через единый `DetailsLookupRequest`:
+`DetailsViewModel → AnimeRepository → ApiService → VetroApiService → MovieSeriesRepository`.
+External ids и content type сохраняются, legacy запись резолвится по title, EN anime guard не
+блокирует фильмы/сериалы.
+
+### Decisions made
+
+SERIES details всегда возвращает `episodesAired=0`/`episodesTotal=null`; этот UI-refresh не
+является владельцем released episode count. Счётчик остаётся только в stored `Anime.episodes`
+и будет обновляться TICKET-08.
+
+### Deviations
+
+Два новых параметра не добавлены к длинной сигнатуре по плану буквально; вместо этого весь
+lookup bundle оформлен value object, что устранило data clump без изменения поведения.
+
+### Verification
+
+Полные `core:network` + `app` unit tests: 401/401, compilation обоих модулей, diff check.
+
+### Review result
+
+Двухосевое ревью и повторная проверка после исправлений: обязательных находок не осталось.
+
+### Known limitations
+
+Legacy RU запись без `titleEn` показывает RU fallback-заголовок и в EN режиме, но не теряет
+название и получает EN details. Заполнение обеих локалей при добавлении — TICKET-06.
+
+### Next eligible ticket
+
+TICKET-06 — AddFromApiUseCase и дедуп по ExternalIds.

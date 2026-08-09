@@ -16,6 +16,110 @@ import java.time.Clock
 class MovieSeriesRepositoryTest {
 
     @Test
+    fun `details with saved tmdb id returns populated card`() = runBlocking {
+        val details = details(title = "Dune", description = "Arrakis", posterUrl = "poster")
+        val tmdb = FakeTmdbGateway(
+            checkResult = LookupResult.Found(Unit),
+            detailsResult = LookupResult.Found(details),
+        )
+        val repository = MovieSeriesRepository(tmdb, FakeKinopoiskGateway())
+
+        val found = repository.fetchDetails(
+            contentType = AppContentType.MOVIE,
+            language = AppLanguage.EN,
+            externalIds = ExternalIds(tmdb = 438631),
+            title = "Dune",
+        )
+
+        val card = (found as LookupResult.Found<AnimeDetails>).value
+        assertEquals("Arrakis", card.description)
+        assertEquals("poster", card.posterUrl)
+    }
+
+    @Test
+    fun `legacy details without tmdb id resolves by title before loading card`() = runBlocking {
+        val tmdb = FakeTmdbGateway(
+            searchResult = LookupResult.Found(listOf(result("Dark", 2017, tmdb = 70523))),
+            detailsResult = LookupResult.Found(details(title = "Dark", description = "Time travel")),
+        )
+        val repository = MovieSeriesRepository(tmdb, FakeKinopoiskGateway())
+
+        val found = repository.fetchDetails(
+            contentType = AppContentType.SERIES,
+            language = AppLanguage.EN,
+            externalIds = ExternalIds(),
+            title = "Dark",
+            year = 2017,
+        )
+
+        assertEquals("Time travel", (found as LookupResult.Found<AnimeDetails>).value.description)
+        assertEquals(1, tmdb.searchCalls)
+    }
+
+    @Test
+    fun `series tmdb details strip all episode counts`() = runBlocking {
+        val tmdb = FakeTmdbGateway(
+            checkResult = LookupResult.Found(Unit),
+            detailsResult = LookupResult.Found(
+                details(title = "Ongoing", description = "", episodesAired = 8, episodesTotal = 24)
+            ),
+        )
+        val repository = MovieSeriesRepository(tmdb, FakeKinopoiskGateway())
+
+        val found = repository.fetchDetails(
+            contentType = AppContentType.SERIES,
+            language = AppLanguage.EN,
+            externalIds = ExternalIds(tmdb = 1),
+            title = "Ongoing",
+        ) as LookupResult.Found<AnimeDetails>
+
+        assertEquals(0, found.value.episodesAired)
+        assertEquals(null, found.value.episodesTotal)
+    }
+
+    @Test
+    fun `series ru merged details strip all episode counts`() = runBlocking {
+        val tmdb = FakeTmdbGateway(
+            checkResult = LookupResult.Found(Unit),
+            detailsResult = LookupResult.Found(
+                details(title = "Ongoing", description = "", episodesAired = 8, episodesTotal = 24)
+            ),
+        )
+        val kinopoisk = FakeKinopoiskGateway(
+            detailsResult = LookupResult.Found(kinopoiskDetails(tmdbId = 1)),
+        )
+        val repository = MovieSeriesRepository(tmdb, kinopoisk)
+
+        val found = repository.fetchDetails(
+            contentType = AppContentType.SERIES,
+            language = AppLanguage.RU,
+            externalIds = ExternalIds(tmdb = 1, kinopoisk = 2),
+            title = "Онгоинг",
+        ) as LookupResult.Found<AnimeDetails>
+
+        assertEquals(0, found.value.episodesAired)
+        assertEquals(null, found.value.episodesTotal)
+    }
+
+    @Test
+    fun `series kinopoisk only details expose no episode counts`() = runBlocking {
+        val kinopoisk = FakeKinopoiskGateway(
+            detailsResult = LookupResult.Found(kinopoiskDetails(tmdbId = null)),
+        )
+        val repository = MovieSeriesRepository(FakeTmdbGateway(), kinopoisk)
+
+        val found = repository.fetchDetails(
+            contentType = AppContentType.SERIES,
+            language = AppLanguage.RU,
+            externalIds = ExternalIds(kinopoisk = 2),
+            title = "Онгоинг",
+        ) as LookupResult.Found<AnimeDetails>
+
+        assertEquals(0, found.value.episodesAired)
+        assertEquals(null, found.value.episodesTotal)
+    }
+
+    @Test
     fun `valid tmdb id is retained without title search`() = runBlocking {
         val tmdb = FakeTmdbGateway(checkResult = LookupResult.Found(Unit))
         val repository = MovieSeriesRepository(tmdb, FakeKinopoiskGateway())
@@ -184,6 +288,27 @@ class MovieSeriesRepositoryTest {
         ratingKp = null,
         genres = emptyList(),
         externalTmdbId = tmdbId,
+    )
+
+    private fun details(
+        title: String,
+        description: String,
+        posterUrl: String? = null,
+        episodesAired: Int = 0,
+        episodesTotal: Int? = null,
+    ) = AnimeDetails(
+        title = title,
+        altTitle = null,
+        description = description,
+        type = "TV",
+        status = "ONGOING",
+        episodesAired = episodesAired,
+        episodesTotal = episodesTotal,
+        nextEpisode = null,
+        genres = listOf("Drama"),
+        rating = 80,
+        posterUrl = posterUrl,
+        source = "TMDB",
     )
 }
 
