@@ -250,3 +250,49 @@ follow-up на оба источника сразу).
 ### Next eligible ticket
 
 TICKET-04 (MovieSeriesRepository) — теперь разблокирован полностью (01, 02, 03 готовы).
+
+## 2026-08-09 — TICKET-04 завершён
+
+### Outcome
+
+DONE
+
+### Work completed
+
+`MovieSeriesRepository` стал единственной точкой оркестрации TMDB+Kinopoisk для MOVIE/SERIES:
+RU/EN routing, fill-gap merge, консервативный дедуп, details, `resolveTmdbId`, released-only
+`findTotalEpisodes`/`episodeState`. `VetroApiService` делегирует поиск/число серий и больше не
+содержит inline-TMDB код. DI зарегистрировал новые data source/repository.
+
+### Decisions made
+
+Тестовый seam оставлен internal: production-конструктор принимает реальные data source, тесты
+— два маленьких gateway adapter. Общий `MovieTitleMatcher` живёт рядом с orchestration module,
+порог 0.85 и правила эквивалентны существующему app `TitleMatcher`, но зависимости `core → app`
+нет.
+
+### Deviations
+
+Для выполнения original-title ступени добавлено явное `ApiSearchResult.originalTitle` и поля
+TMDB DTO `original_title`/`original_name`; исходный черновик пытался использовать только
+`title`/`altTitle`, что ревью признало недостаточным.
+
+### Verification
+
+`./gradlew.bat :core:network:testDebugUnitTest :app:testDebugUnitTest
+:core:network:compileDebugKotlin :app:compileDebugKotlin` → BUILD SUCCESSFUL, 383/383 теста.
+Boundary grep, удаление inline-TMDB и `git diff --check` подтверждены отдельно.
+
+### Review result
+
+Двухосевое code-review: два spec BLOCKING + один standards IMPORTANT исправлены; повторное
+ревью подтвердило RESOLVED и отсутствие новых блокеров.
+
+### Architecture observations
+
+Новый module глубокий: вся изменчивая source/fallback/dedup логика скрыта за малым интерфейсом,
+`app` модели и локальная БД не протекли в `core/network`.
+
+### Next eligible ticket
+
+TICKET-05 (Details wiring) и TICKET-06 (add/dedup) разблокированы; следующий — TICKET-05.

@@ -12,7 +12,10 @@ import com.example.myapplication.network.VetroApiService
 import com.example.myapplication.network.WebLinkResolver
 import com.example.myapplication.network.KtorWebLinkResolver
 import com.example.myapplication.network.mangadex.MangaDexRemoteDataSource
+import com.example.myapplication.network.kinopoisk.KinopoiskRemoteDataSource
+import com.example.myapplication.network.movie.MovieSeriesRepository
 import com.example.myapplication.network.remanga.RemangaRemoteDataSource
+import com.example.myapplication.network.tmdb.TmdbRemoteDataSource
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
@@ -84,6 +87,9 @@ val coreNetworkModule = module {
     single { AnilibriaRemoteDataSource(get<HttpClient>(), get(rateBurst)) }
     single { RemangaRemoteDataSource(get<HttpClient>()) }
     single { MangaDexRemoteDataSource(get<HttpClient>(), get(rateBurst)) }
+    single { TmdbRemoteDataSource(get<HttpClient>()) }
+    single { KinopoiskRemoteDataSource(get<HttpClient>()) }
+    single { MovieSeriesRepository(get<TmdbRemoteDataSource>(), get<KinopoiskRemoteDataSource>()) }
     /**
      * Отдельный клиент для скрапа/резолва одобренных сайтов: браузерный User-Agent (без плагина
      * UserAgent, чтобы не слать VetroApp/1.0), короткие таймауты, редиректы по умолчанию.
@@ -117,6 +123,7 @@ val coreNetworkModule = module {
             anilibria = get(),
             remanga = get(),
             mangaDex = get(),
+            movieSeriesRepository = get(),
             heavyRate = get(rateHeavy),
             searchRate = get(rateSearch),
             burstRate = get(rateBurst)

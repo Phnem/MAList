@@ -192,9 +192,10 @@ private fun String.toLocalDateOrNull(): LocalDate? = try {
     null
 }
 
-private fun TmdbSearchResultDto.toApiSearchResult(categoryType: String): ApiSearchResult {
+internal fun TmdbSearchResultDto.toApiSearchResult(categoryType: String): ApiSearchResult {
     val displayTitle = title ?: name.orEmpty()
     val posterUrl = posterPath?.let { "https://image.tmdb.org/t/p/w500$it" }
+    val year = (releaseDate ?: firstAirDate)?.take(4)?.toIntOrNull()
     return ApiSearchResult(
         title = displayTitle,
         altTitle = null,
@@ -206,6 +207,8 @@ private fun TmdbSearchResultDto.toApiSearchResult(categoryType: String): ApiSear
         rating = voteAverage?.let { (it * 10).toInt() },
         source = "TMDB",
         categoryType = categoryType,
+        seasonYear = year,
+        originalTitle = (originalTitle ?: originalName)?.takeIf { it.isNotBlank() },
         externalId = id.toString(),
         externalIds = ExternalIds(tmdb = id),
     )

@@ -2,7 +2,7 @@
 
 ## Status
 
-PENDING
+DONE
 
 ## Objective
 
@@ -99,16 +99,40 @@ review п.6). `VetroApiService` сокращается (удаление ~140 с
 
 ## Implementation notes
 
-Empty before implementation.
+- Добавлен глубокий модуль `MovieSeriesRepository` с внутренними gateway seam'ами: публичный
+  вызывающий код видит операции поиска/деталей/id-resolution/episode-state, а тесты подменяют
+  только сетевые адаптеры.
+- RU-поиск объединяет Kinopoisk (первичный) и TMDB (fill-gap/fallback), EN-поиск обращается
+  только к TMDB. `MovieResultDeduper` объединяет поля без blind replace.
+- `resolveTmdbId` реализует лестницу saved TMDB → Kinopoisk bridge → прямой TMDB title/year
+  search; `Failure` сохраняет существующий id, `NotFoundById` запускает повторный резолв.
+- `VetroApiService` переключён на репозиторий для `searchApi`/`findTotalEpisodes`; старые
+  `searchTmdbMovie`/`searchTmdbTv`/`parseTmdbResults`/`checkTmdb`/`tmdbKey` удалены.
+- DI регистрирует оба data source и `MovieSeriesRepository`.
 
 ## Deviations
 
-Empty before implementation.
+- Плановый `TitleMatcher` из `app` нельзя импортировать в `core/network` без циклической
+  зависимости. Реализован эквивалентный internal `MovieTitleMatcher` с тем же порогом 0.85,
+  token/Jaccard/Levenshtein policy; он общий для дедупа и id-resolution.
+- Для строгой original-title ступени `ApiSearchResult` расширен полем `originalTitle`, а TMDB
+  DTO — `original_title`/`original_name`; Kinopoisk использует `alternativeName`.
 
 ## Review findings
 
-Empty before review.
+- Первое двухосевое ревью нашло два BLOCKING дефекта: отсутствующую original-title ступень и
+  склейку одинакового Kinopoisk id при конфликтующих канонических TMDB id. Оба исправлены и
+  защищены регрессионными тестами.
+- Standards-ось нашла дублирование нормализации/Levenshtein между дедупом и резолвером;
+  устранено общим `MovieTitleMatcher`.
+- Повторное ревью: все три находки RESOLVED, новых блокеров нет.
 
 ## Completion evidence
 
-Empty before completion.
+- `./gradlew.bat :core:network:testDebugUnitTest :app:testDebugUnitTest
+  :core:network:compileDebugKotlin :app:compileDebugKotlin` → `BUILD SUCCESSFUL`;
+  383 теста, failures=0, errors=0.
+- `grep`/`rg`: в `network/movie` нет импортов `Anime`/`AnimeLocalDataSource`; в
+  `VetroApiService` нет inline-TMDB методов/URL.
+- `git diff --check` → без ошибок.
+- Commit: `TICKET-04_COMMIT`.

@@ -1,6 +1,6 @@
 package com.example.myapplication.network
 
-import com.phnem.vetro.network.BuildConfig
+import com.example.myapplication.network.movie.MovieSeriesRepository
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.request.url
@@ -11,7 +11,6 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.booleanOrNull
-import kotlinx.serialization.json.int
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -27,6 +26,7 @@ class VetroApiService(
     private val anilibria: AnilibriaRemoteDataSource,
     private val remanga: com.example.myapplication.network.remanga.RemangaRemoteDataSource,
     private val mangaDex: com.example.myapplication.network.mangadex.MangaDexRemoteDataSource,
+    private val movieSeriesRepository: MovieSeriesRepository,
     private val heavyRate: TokenBucketRateLimiter,
     private val searchRate: TokenBucketRateLimiter,
     private val burstRate: TokenBucketRateLimiter
@@ -155,7 +155,8 @@ class VetroApiService(
                     val res = searchJikanManga(title.trim(), AppLanguage.EN).firstOrNull()
                     res?.episodes?.takeIf { it > 0 }?.let { it to "JIKAN" }
                 }
-                AppContentType.MOVIE, AppContentType.SERIES -> checkTmdb(title.trim())
+                AppContentType.MOVIE, AppContentType.SERIES ->
+                    movieSeriesRepository.findTotalEpisodes(title.trim(), appContentType).valueOrNullOrThrow()
             }
         }
     }
@@ -168,8 +169,8 @@ class VetroApiService(
             val results = when (contentType) {
                 AppContentType.ANIME -> searchAnimeApis(q, language)
                 AppContentType.MANGA -> searchMangaApis(q, language)
-                AppContentType.MOVIE -> filterAndRankByQuery(q, searchTmdbMovie(q))
-                AppContentType.SERIES -> filterAndRankByQuery(q, searchTmdbTv(q))
+                AppContentType.MOVIE, AppContentType.SERIES ->
+                    movieSeriesRepository.search(q, contentType, language).valueOrEmptyOrThrow()
             }
             // Что найдено в разделе «Манга» — манга, и так по каждому разделу. Тип берём из
             // раздела, а не из ответа источника: Shikimori проставляет "ANIME" и результатам
@@ -362,8 +363,6 @@ class VetroApiService(
         searchRate.acquire()
         aniList.trendingAnime(limit).getOrThrow()
     }
-
-    private fun tmdbKey(): String = BuildConfig.TMDB_API_KEY
 
     private enum class SearchMatch { EXACT, PARTIAL, FUZZY, NONE }
 
@@ -751,64 +750,6 @@ class VetroApiService(
             .orEmpty()
     }.getOrElse { emptyList() }
 
-    private suspend fun searchTmdbMovie(query: String): List<ApiSearchResult> = runCatching {
-        val key = tmdbKey()
-        val response = httpClient.get {
-            url {
-                protocol = URLProtocol.HTTPS
-                host = "api.themoviedb.org"
-                appendPathSegments("3", "search", "movie")
-                parameters.append("api_key", key)
-                parameters.append("query", query)
-            }
-        }.bodyAsText()
-        parseTmdbResults(response, "MOVIE")
-    }.getOrElse { emptyList() }
-
-    private suspend fun searchTmdbTv(query: String): List<ApiSearchResult> = runCatching {
-        val key = tmdbKey()
-        val response = httpClient.get {
-            url {
-                protocol = URLProtocol.HTTPS
-                host = "api.themoviedb.org"
-                appendPathSegments("3", "search", "tv")
-                parameters.append("api_key", key)
-                parameters.append("query", query)
-            }
-        }.bodyAsText()
-        parseTmdbResults(response, "SERIES")
-    }.getOrElse { emptyList() }
-
-    private suspend fun parseTmdbResults(jsonStr: String, categoryType: String): List<ApiSearchResult> {
-        val root = json.parseToJsonElement(jsonStr).jsonObject
-        val results = root["results"]?.jsonArray ?: return emptyList()
-        return results.mapNotNull { el ->
-            val obj = el.jsonObject
-            val title = obj["title"]?.jsonPrimitive?.content ?: obj["name"]?.jsonPrimitive?.content ?: return@mapNotNull null
-            val overview = obj["overview"]?.jsonPrimitive?.content ?: ""
-            val posterPath = obj["poster_path"]?.jsonPrimitive?.content
-            val posterUrl = posterPath?.let { "https://image.tmdb.org/t/p/w500$it" }
-            val id = obj["id"]?.jsonPrimitive?.int ?: return@mapNotNull null
-            val voteAvg = obj["vote_average"]?.jsonPrimitive?.content?.toFloatOrNull()?.times(10)?.toInt()
-            val episodeCount = if (categoryType == "SERIES") {
-                obj["number_of_episodes"]?.jsonPrimitive?.intOrNull ?: 0
-            } else 1
-            ApiSearchResult(
-                title = title,
-                altTitle = null,
-                posterUrl = posterUrl,
-                episodes = episodeCount,
-                description = overview,
-                type = if (categoryType == "SERIES") "TV" else "Movie",
-                genres = emptyList(),
-                rating = voteAvg,
-                source = "TMDB",
-                categoryType = categoryType,
-                externalId = id.toString()
-            )
-        }
-    }
-
     override suspend fun checkGithubUpdate(owner: String, repo: String): Result<GithubReleaseInfo?> {
         return runCatching {
             val response = httpClient.get("https://api.github.com/repos/$owner/$repo/releases").bodyAsText()
@@ -852,41 +793,12 @@ class VetroApiService(
         }.getOrNull()
     }
 
-    private suspend fun checkTmdb(query: String): Pair<Int, String>? {
-        return runCatching {
-            val key = tmdbKey()
-            val searchResponse = httpClient.get {
-                url {
-                    protocol = URLProtocol.HTTPS
-                    host = "api.themoviedb.org"
-                    appendPathSegments("3", "search", "tv")
-                    parameters.append("api_key", key)
-                    parameters.append("query", query)
-                }
-            }.bodyAsText()
-            val root = json.parseToJsonElement(searchResponse).jsonObject
-            val results = root["results"]?.jsonArray ?: return@runCatching null
-            val show = results.firstOrNull()?.jsonObject ?: return@runCatching null
-            val id = show["id"]?.jsonPrimitive?.int ?: return@runCatching null
-            val detailsResponse = httpClient.get {
-                url {
-                    protocol = URLProtocol.HTTPS
-                    host = "api.themoviedb.org"
-                    appendPathSegments("3", "tv", id.toString())
-                    parameters.append("api_key", key)
-                }
-            }.bodyAsText()
-            val details = json.parseToJsonElement(detailsResponse).jsonObject
-            val seasons = details["seasons"]?.jsonArray ?: return@runCatching null
-            var total = 0
-            for (s in seasons) {
-                val obj = s.jsonObject
-                val sNum = obj["season_number"]?.jsonPrimitive?.int ?: 0
-                if (sNum > 0 || seasons.size == 1) {
-                    total += obj["episode_count"]?.jsonPrimitive?.int ?: 0
-                }
-            }
-            if (total > 0) total to "TMDB" else null
-        }.getOrNull()
+    private fun <T> LookupResult<T>.valueOrNullOrThrow(): T? = when (this) {
+        is LookupResult.Found -> value
+        is LookupResult.NoMatch, is LookupResult.NotFoundById -> null
+        is LookupResult.Failure -> throw cause
     }
+
+    private fun LookupResult<List<ApiSearchResult>>.valueOrEmptyOrThrow(): List<ApiSearchResult> =
+        valueOrNullOrThrow().orEmpty()
 }

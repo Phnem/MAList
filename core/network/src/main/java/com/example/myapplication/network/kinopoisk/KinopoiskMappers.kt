@@ -39,6 +39,8 @@ fun KinopoiskMovieDto.toApiSearchResult(categoryType: String): ApiSearchResult =
     rating = rating?.kp.toAppRating(),
     source = "Kinopoisk",
     categoryType = categoryType,
+    seasonYear = year,
+    originalTitle = alternativeName?.takeIf { it.isNotBlank() },
     externalId = id.toString(),
     externalIds = ExternalIds(kinopoisk = id, tmdb = externalId?.tmdb),
 )

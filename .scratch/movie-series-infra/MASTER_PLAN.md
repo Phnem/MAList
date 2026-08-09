@@ -4,8 +4,8 @@
 
 Current workflow state: READY_FOR_IMPLEMENTATION
 Current ticket: None
-Last completed ticket: TICKET-03
-Next eligible ticket: TICKET-04
+Last completed ticket: TICKET-04
+Next eligible ticket: TICKET-05
 Last updated: 2026-08-09
 
 **Коммит**: `e73c65a` — по решению пользователя один общий коммит, включающий TICKET-01 и
@@ -95,10 +95,10 @@ Out of scope.
 
 | ID | Title | Status | Blocked by | Commit | Review |
 |---|---|---|---|---|---|
-| TICKET-01 | MediaType split + схема БД + ExternalIds/LookupResult контракты | DONE | — | не коммичен | code-review (Standards+Spec), без блокеров после фикса |
-| TICKET-02 | TmdbRemoteDataSource — типизированный DTO-слой TMDB | DONE_WITH_DEVIATIONS | 01 | не коммичен | самопроверка, HTTP-слой без mock-тестов (см. тикет) |
-| TICKET-03 | KinopoiskRemoteDataSource — RU-источник | DONE_WITH_DEVIATIONS | 01 | не коммичен | самопроверка, HTTP-слой без mock-тестов (тот же follow-up, что TICKET-02) |
-| TICKET-04 | MovieSeriesRepository + переключение VetroApiService | PENDING | 01,02,03 | — | — |
+| TICKET-01 | MediaType split + схема БД + ExternalIds/LookupResult контракты | DONE | — | `e73c65a` | code-review (Standards+Spec), без блокеров после фикса |
+| TICKET-02 | TmdbRemoteDataSource — типизированный DTO-слой TMDB | DONE_WITH_DEVIATIONS | 01 | `b1ea00d` | самопроверка, HTTP-слой без mock-тестов (см. тикет) |
+| TICKET-03 | KinopoiskRemoteDataSource — RU-источник | DONE_WITH_DEVIATIONS | 01 | `140d048` | самопроверка, HTTP-слой без mock-тестов (тот же follow-up, что TICKET-02) |
+| TICKET-04 | MovieSeriesRepository + переключение VetroApiService | DONE | 01,02,03 | `TICKET-04_COMMIT` | code-review (Standards+Spec), все находки resolved |
 | TICKET-05 | Details-экран для MOVIE/SERIES | PENDING | 04 | — | — |
 | TICKET-06 | AddFromApiUseCase — ExternalIds вместо source-веток | PENDING | 04 | — | — |
 | TICKET-07 | Детектор пробелов + починка для MOVIE/SERIES | PENDING | 04,06 | — | — |
@@ -143,9 +143,12 @@ Deviations: тот же HTTP-mock follow-up, что TICKET-02.
 
 ### TICKET-04 — MovieSeriesRepository
 
-Status: PENDING
+Status: DONE
 Tracker reference: [`issues/04-movie-series-repository.md`](./issues/04-movie-series-repository.md)
 Dependencies: 01, 02, 03
+Verification evidence: полные unit-тесты `core:network` + `app` зелёные (383/383), компиляция
+обоих модулей зелёная; boundary/inline-TMDB grep и `git diff --check` зелёные.
+Commit: `TICKET-04_COMMIT`
 
 ### TICKET-05 — Details-экран
 

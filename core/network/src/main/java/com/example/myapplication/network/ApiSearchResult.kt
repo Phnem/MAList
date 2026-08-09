@@ -49,7 +49,13 @@ data class ApiSearchResult(
     val studio: String? = null,
     /** Сезон выхода сырым кодом: `WINTER`, `SPRING`, `SUMMER`, `FALL`. */
     val season: String? = null,
+    /**
+     * Год выпуска. У аниме — год сезона; у MOVIE/SERIES — год релиза/премьеры,
+     * используемый дедупом ремейков и адаптаций-омонимов.
+     */
     val seasonYear: Int? = null,
+    /** Оригинальное название источника для строгой title+year ступени дедупа MOVIE/SERIES. */
+    val originalTitle: String? = null,
     /** TMDB/Kinopoisk id-пара для MOVIE/SERIES результатов. Пусто у аниме/манга-источников. */
     val externalIds: ExternalIds = ExternalIds(),
 )

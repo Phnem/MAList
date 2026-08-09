@@ -66,6 +66,12 @@ class KinopoiskMappersTest {
     }
 
     @Test
+    fun `release year is carried through for dedup`() {
+        val dto = KinopoiskMovieDto(id = 1, name = "X", year = 2021)
+        assertEquals(2021, dto.toApiSearchResult("MOVIE").seasonYear)
+    }
+
+    @Test
     fun `toDetails preserves kp rating unscaled for repair-level consumers`() {
         val dto = KinopoiskMovieDto(id = 1, name = "X", rating = KinopoiskRatingDto(kp = 7.5))
         assertEquals(7.5, dto.toDetails().ratingKp!!, 0.0001)
