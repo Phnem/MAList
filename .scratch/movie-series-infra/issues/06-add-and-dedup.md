@@ -103,4 +103,4 @@ REQUIRED — id-извлечение и duplicate-detection это "fallback sel
   :core:network:compileDebugKotlin :app:compileDebugKotlin` → BUILD SUCCESSFUL;
   412 тестов, failures=0, errors=0.
 - `git diff --check` → без ошибок.
-- Commit: `TICKET-06_COMMIT`.
+- Commit: `4810e38`.

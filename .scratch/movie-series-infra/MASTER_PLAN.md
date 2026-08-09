@@ -100,7 +100,7 @@ Out of scope.
 | TICKET-03 | KinopoiskRemoteDataSource — RU-источник | DONE_WITH_DEVIATIONS | 01 | `140d048` | самопроверка, HTTP-слой без mock-тестов (тот же follow-up, что TICKET-02) |
 | TICKET-04 | MovieSeriesRepository + переключение VetroApiService | DONE | 01,02,03 | `3b88d85` | code-review (Standards+Spec), все находки resolved |
 | TICKET-05 | Details-экран для MOVIE/SERIES | DONE | 04 | `e81c5bb` | code-review (Standards+Spec), все обязательные находки resolved |
-| TICKET-06 | AddFromApiUseCase — ExternalIds вместо source-веток | DONE | 04 | `TICKET-06_COMMIT` | code-review (Standards+Spec), все находки resolved |
+| TICKET-06 | AddFromApiUseCase — ExternalIds вместо source-веток | DONE | 04 | `4810e38` | code-review (Standards+Spec), все находки resolved |
 | TICKET-07 | Детектор пробелов + починка для MOVIE/SERIES | PENDING | 04,06 | — | — |
 | TICKET-08 | SeriesEpisodeCheckUseCase — отслеживание вышедших серий | PENDING | 01,02,04 | — | — |
 
@@ -166,7 +166,7 @@ Tracker reference: [`issues/06-add-and-dedup.md`](./issues/06-add-and-dedup.md)
 Dependencies: 04
 Verification evidence: full unit tests `core:network` + `app` 412/412, compilation обоих
 модулей, `git diff --check`.
-Commit: `TICKET-06_COMMIT`
+Commit: `4810e38`
 
 ### TICKET-07 — Gap detector + repair
 
