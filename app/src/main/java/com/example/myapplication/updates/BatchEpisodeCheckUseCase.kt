@@ -55,36 +55,17 @@ class BatchEpisodeCheckUseCase(
         runCatching { localDataSource.setAiringProgress(detected.airing) }
             .onFailure { Log.w(TAG, "setAiringProgress failed: ${it.message}") }
 
-        val existing = localDataSource.getUpdates()
-        val fresh = detected.updates
-            .distinctBy { it.animeId }
-            // Уже отмеченное этим же проходом/прошлым — не событие: показывать нечего.
-            .filter { f -> existing.none { it.animeId == f.animeId && it.newEpisodes == f.newEpisodes } }
-
-        applyAutomatically(fresh)
-
-        // Свежее событие вытесняет прошлое по тому же тайтлу; остальные плашки держим,
-        // пока пользователь их не смахнёт (с ограничением на размер ленты).
-        val freshIds = fresh.map { it.animeId }.toSet()
-        val kept = existing.filter { it.animeId !in freshIds }
-        localDataSource.setUpdates((fresh + kept).take(MAX_UPDATE_ROWS))
-
-        return fresh
-    }
-
-    /**
-     * Авто-принятие: счётчик серий в коллекции подтягивается к вышедшему.
-     * Ошибка по одной записи не рвёт проход — остальные всё равно применяем.
-     */
-    private suspend fun applyAutomatically(updates: List<AnimeUpdate>) {
-        for (update in updates) {
-            runCatching {
-                val anime = localDataSource.getAnimeById(update.animeId) ?: return@runCatching
-                if (anime.episodes >= update.newEpisodes) return@runCatching
+        return publishEpisodeUpdates(
+            detected = detected.updates,
+            getExisting = localDataSource::getUpdates,
+            applyEpisodes = apply@{ update ->
+                val anime = localDataSource.getAnimeById(update.animeId) ?: return@apply
+                if (anime.episodes >= update.newEpisodes) return@apply
                 localDataSource.updateAnime(anime.copy(episodes = update.newEpisodes))
                 Log.d(TAG, "Auto-applied: \"${anime.title}\" ${anime.episodes} -> ${update.newEpisodes}")
-            }.onFailure { Log.w(TAG, "Auto-apply failed for ${update.animeId}: ${it.message}") }
-        }
+            },
+            setUpdates = localDataSource::setUpdates,
+        )
     }
 
     // ==========================================================
@@ -781,6 +762,5 @@ class BatchEpisodeCheckUseCase(
         /** Сколько держим закрытую плашку «сезон вышел полностью» после завершения. */
         private const val FINISHED_ROW_TTL_MS = 14L * 24L * 60L * 60L * 1000L
         /** Потолок ленты «вышли новые серии»: старые события вытесняются свежими. */
-        private const val MAX_UPDATE_ROWS = 30
     }
 }

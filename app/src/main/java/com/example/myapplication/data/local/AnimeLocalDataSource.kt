@@ -228,47 +228,7 @@ class AnimeLocalDataSource(
     )
 
     suspend fun insertAnime(anime: Anime) {
-        db().animeQueries.transaction {
-            db().animeQueries.insertAnime(
-                id = anime.id,
-                title = anime.title,
-                imagePath = anime.imageFileName,
-                episodes = anime.episodes.toLong(),
-                rating = RatingScale.displayToStored(anime.rating).toLong(),
-                status = "watching",
-                isFavorite = if (anime.isFavorite) 1L else 0L,
-                updatedAt = System.currentTimeMillis(),
-                orderIndex = anime.orderIndex.toLong(),
-                dateAdded = anime.dateAdded,
-                categoryType = anime.categoryType,
-                comment = anime.comment,
-                isAiRecommendation = 0L,
-                anilist_id = anime.anilistId?.toLong(),
-                mal_id = anime.malId?.toLong(),
-                shikimori_id = anime.shikimoriId?.toLong(),
-                anilist_not_found_at = anime.anilistNotFoundAt,
-                mal_not_found_at = anime.malNotFoundAt,
-                shikimori_not_found_at = anime.shikimoriNotFoundAt,
-                isPrivate = 0L,
-                encryptionIv = null,
-                deletedAt = null,
-                mediaType = anime.mediaType.name,
-                title_en = anime.titleEn,
-                title_ru = anime.titleRu,
-                tmdb_id = anime.tmdbId?.toLong(),
-                kinopoisk_id = anime.kinopoiskId?.toLong(),
-                tmdb_not_found_at = anime.tmdbNotFoundAt,
-                kinopoisk_not_found_at = anime.kinopoiskNotFoundAt
-            )
-
-            // Insert tags
-            anime.tags.forEach { tag ->
-                db().animeQueries.insertAnimeTag(
-                    anime_id = anime.id,
-                    tag = tag
-                )
-            }
-        }
+        db().insertNewAnime(anime)
         mirrorCoordinator.requestExportIfEnabled()
     }
 
@@ -664,6 +624,14 @@ class AnimeLocalDataSource(
             updatedAt = System.currentTimeMillis(),
             id = animeId
         )
+        mirrorCoordinator.requestExportIfEnabled()
+    }
+
+    fun isSeriesEpisodesNormalized(animeId: String): Boolean =
+        db().animeQueries.countSeriesEpisodeNormalization(animeId).executeAsOne() > 0
+
+    suspend fun markSeriesEpisodesNormalized(animeId: String) {
+        db().animeQueries.markSeriesEpisodesNormalized(anime_id = animeId)
         mirrorCoordinator.requestExportIfEnabled()
     }
 

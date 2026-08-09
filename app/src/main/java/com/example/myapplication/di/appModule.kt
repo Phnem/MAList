@@ -33,6 +33,8 @@ import com.example.myapplication.domain.stats.StatsCardExplanationUseCase
 import com.example.myapplication.domain.stats.StatsExplanationCoordinator
 import com.example.myapplication.domain.stats.StatsPhraseCatalog
 import com.example.myapplication.updates.BatchEpisodeCheckUseCase
+import com.example.myapplication.updates.SeriesEpisodeCheckUseCase
+import com.example.myapplication.updates.EpisodeUpdateCheckCoordinator
 import com.example.myapplication.notifications.AnimeNotifier
 import com.example.myapplication.notifications.AnimeNotifierImpl
 import kotlinx.coroutines.flow.first
@@ -53,6 +55,8 @@ val appModule = module {
     single { InspectImageUseCase(get(), get(), get(), get()) }
     single { AddFromApiUseCase(get(), get(), get(), get(), get()) }
     single { BatchEpisodeCheckUseCase(repository = get(), localDataSource = get()) }
+    single { SeriesEpisodeCheckUseCase(repository = get(), localDataSource = get()) }
+    single { EpisodeUpdateCheckCoordinator(animeCheck = get(), seriesCheck = get()) }
     single { TitleEnrichmentUseCase(repository = get(), localDataSource = get()) }
     single { RussianTitleEnrichmentUseCase(repository = get(), localDataSource = get()) }
     single { AiTitleTranslationUseCase(router = get(), localDataSource = get()) }

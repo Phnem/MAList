@@ -17,7 +17,7 @@ import com.example.myapplication.data.repository.ImageStorageRepository
 import com.example.myapplication.domain.normalizeForSearch
 import com.example.myapplication.domain.search.AddFromApiUseCase
 import com.example.myapplication.domain.stats.ResolveStatsFooterPhraseUseCase
-import com.example.myapplication.updates.BatchEpisodeCheckUseCase
+import com.example.myapplication.updates.EpisodeUpdateCheckCoordinator
 import com.example.myapplication.network.ApiSearchResult
 import com.example.myapplication.network.AppContentType
 import com.example.myapplication.network.AppLanguage
@@ -61,7 +61,7 @@ class HomeViewModel(
     private val settingsDataStore: DataStore<Preferences>,
     private val addFromApiUseCase: AddFromApiUseCase,
     private val statsFooterPhraseUseCase: ResolveStatsFooterPhraseUseCase,
-    private val batchEpisodeCheckUseCase: BatchEpisodeCheckUseCase,
+    private val episodeUpdateCheckCoordinator: EpisodeUpdateCheckCoordinator,
     private val webLinksStore: com.example.myapplication.data.local.WebLinksStore,
     private val seasonEpisodesStore: com.example.myapplication.data.local.SeasonEpisodesStore,
     private val episodePlaybackStore: com.example.myapplication.media.progress.EpisodePlaybackStore,
@@ -437,7 +437,7 @@ class HomeViewModel(
         viewModelScope.launch {
             runCatching {
                 val language = readLanguageFromSettings()
-                batchEpisodeCheckUseCase.detectAndStore(language)
+                episodeUpdateCheckCoordinator.detectAndStore(language)
                 _uiState.update { it.copy(isCheckingUpdates = false) }
                 // Приложение открыто → системные пуши не показываем: обновления живут
                 // in-app стопкой сверху. Убираем из шторки всё, что мог оставить

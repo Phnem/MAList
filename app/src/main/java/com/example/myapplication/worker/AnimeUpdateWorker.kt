@@ -6,7 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.example.myapplication.updates.BatchEpisodeCheckUseCase
+import com.example.myapplication.updates.EpisodeUpdateCheckCoordinator
 import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.notifications.AnimeNotifier
 import kotlinx.coroutines.Dispatchers
@@ -22,7 +22,7 @@ class AnimeUpdateWorker(
 ) : CoroutineWorker(context, workerParams), KoinComponent {
 
     private val notifier: AnimeNotifier by inject()
-    private val batchEpisodeCheckUseCase: BatchEpisodeCheckUseCase by inject()
+    private val episodeUpdateCheckCoordinator: EpisodeUpdateCheckCoordinator by inject()
     private val seasonEpisodesResolver: com.example.myapplication.domain.seasons.SeasonEpisodesResolver by inject()
     private val settingsDataStore: DataStore<Preferences> by inject(named("settings"))
 
@@ -36,7 +36,7 @@ class AnimeUpdateWorker(
             } catch (e: Exception) {
                 AppLanguage.EN
             }
-            val newlyDetected = batchEpisodeCheckUseCase.detectAndStore(language)
+            val newlyDetected = episodeUpdateCheckCoordinator.detectAndStore(language)
             // Системные пуши шлём ТОЛЬКО когда приложение в фоне/закрыто. Если оно
             // открыто — обновления уже показываются in-app стопкой, дублировать шторкой
             // не нужно (иначе уведомление «мигает» при каждом взаимодействии).

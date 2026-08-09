@@ -395,6 +395,20 @@ CREATE TABLE anime_update (
     PRIMARY KEY (anime_id, new_episodes)
 );
 
+-- Локальный marker перехода SERIES на семантику "episodes = released". Отдельная таблица
+-- намеренно не смешивает нормализацию со статусом provider lookup/not-found.
+CREATE TABLE series_episode_normalization (
+    anime_id TEXT PRIMARY KEY NOT NULL,
+    FOREIGN KEY (anime_id) REFERENCES anime(id) ON DELETE CASCADE
+);
+
+countSeriesEpisodeNormalization:
+SELECT COUNT(*) FROM series_episode_normalization WHERE anime_id = ?;
+
+markSeriesEpisodesNormalized:
+INSERT OR IGNORE INTO series_episode_normalization(anime_id)
+VALUES (?);
+
 CREATE TABLE ignored_update (
     anime_id TEXT PRIMARY KEY NOT NULL,
     new_episodes INTEGER NOT NULL

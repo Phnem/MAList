@@ -1,0 +1,7 @@
+-- Первый успешный TMDB episode check молча переводит legacy SERIES-счётчик из known в released.
+-- Marker локальный: на новом устройстве повторная беззвучная нормализация безопасна и не создаёт
+-- ложного события, а cloud schema не получает служебное scheduler-состояние.
+CREATE TABLE series_episode_normalization (
+    anime_id TEXT PRIMARY KEY NOT NULL,
+    FOREIGN KEY (anime_id) REFERENCES anime(id) ON DELETE CASCADE
+);
