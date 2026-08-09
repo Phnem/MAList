@@ -4,8 +4,8 @@
 
 Current workflow state: READY_FOR_IMPLEMENTATION
 Current ticket: None
-Last completed ticket: TICKET-06
-Next eligible ticket: TICKET-07
+Last completed ticket: TICKET-07
+Next eligible ticket: TICKET-08
 Last updated: 2026-08-09
 
 **Коммит**: `e73c65a` — по решению пользователя один общий коммит, включающий TICKET-01 и
@@ -101,7 +101,7 @@ Out of scope.
 | TICKET-04 | MovieSeriesRepository + переключение VetroApiService | DONE | 01,02,03 | `3b88d85` | code-review (Standards+Spec), все находки resolved |
 | TICKET-05 | Details-экран для MOVIE/SERIES | DONE | 04 | `e81c5bb` | code-review (Standards+Spec), все обязательные находки resolved |
 | TICKET-06 | AddFromApiUseCase — ExternalIds вместо source-веток | DONE | 04 | `4810e38` | code-review (Standards+Spec), все находки resolved |
-| TICKET-07 | Детектор пробелов + починка для MOVIE/SERIES | PENDING | 04,06 | — | — |
+| TICKET-07 | Детектор пробелов + починка для MOVIE/SERIES | DONE | 04,06 | `46bc4f1` | code-review (Standards+Spec), все обязательные находки resolved |
 | TICKET-08 | SeriesEpisodeCheckUseCase — отслеживание вышедших серий | PENDING | 01,02,04 | — | — |
 
 Порядок: 01 → (02, 03 параллельно допустимы, но реализуются последовательно) → 04 → (05, 06
@@ -170,9 +170,12 @@ Commit: `4810e38`
 
 ### TICKET-07 — Gap detector + repair
 
-Status: PENDING
+Status: DONE
 Tracker reference: [`issues/07-gap-detector-and-repair.md`](./issues/07-gap-detector-and-repair.md)
 Dependencies: 04, 06
+Verification evidence: full unit tests `core:network` + `app` 426/426; `app:assembleDebug`;
+`git diff --check`.
+Commit: `46bc4f1`
 
 ### TICKET-08 — SeriesEpisodeCheckUseCase
 

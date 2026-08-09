@@ -1,8 +1,10 @@
 # TICKET-07: Детектор пробелов + починка для MOVIE/SERIES
 
+Status: DONE
+
 ## Status
 
-PENDING
+DONE
 
 ## Objective
 
@@ -49,18 +51,18 @@ TICKET-06 (согласованность с `episodes`-инвариантом �
 
 ## Acceptance criteria
 
-- [ ] `CollectionGapDetector.scan()` включает MOVIE/SERIES записи с пробелами.
-- [ ] Запись `tmdbId != null, kinopoiskId == null` — не выпадает из повторных проходов
+- [x] `CollectionGapDetector.scan()` включает MOVIE/SERIES записи с пробелами.
+- [x] Запись `tmdbId != null, kinopoiskId == null` — не выпадает из повторных проходов
       (retryable optional gap), но и не считается "сломанной" (`needsRepair` не форсит
       бесконечный critical-путь).
-- [ ] Live Maintenance/«Исправить БД» на реальной/тестовой коллекции с недозаполненными
+- [x] Live Maintenance/«Исправить БД» на реальной/тестовой коллекции с недозаполненными
       MOVIE/SERIES дозаполняет `tmdb_id`/`kinopoisk_id`, постер/рейтинг/жанры.
-- [ ] Регресс-тест: смоделированный сетевой сбой (Failure) НЕ проставляет `*_not_found_at`.
-- [ ] Регресс-тест: `applyRepair` для SERIES не изменяет `episodes` ни при каком входе.
-- [ ] `LiveMaintenanceWorker`/`FullEnrichmentWorker` не требуют изменений (уже вызывают
+- [x] Регресс-тест: смоделированный сетевой сбой (Failure) НЕ проставляет `*_not_found_at`.
+- [x] Регресс-тест: `applyRepair` для SERIES не изменяет `episodes` ни при каком входе.
+- [x] `LiveMaintenanceWorker`/`FullEnrichmentWorker` не требуют изменений (уже вызывают
       `CollectionGapDetector`/`RepairAnimeDbUseCase` универсально) — проверить, что это
       действительно так после правок, не предполагать.
-- [ ] `./gradlew :app:compileDebugKotlin` зелёный.
+- [x] `./gradlew :app:compileDebugKotlin` зелёный.
 
 ## Verification plan
 
@@ -96,16 +98,36 @@ architecture review этого тикета явно проверяет, не п
 
 ## Implementation notes
 
-Empty before implementation.
+- `MovieSeriesRepository.lookupForRepair` сохраняет отдельные `LookupResult` провайдеров,
+  валидирует сохранённые id и только на `NotFoundById` помечает их stale. Полный repair очищает
+  stale id и выполняет title re-resolution в том же проходе; `Failure` id не очищает.
+- `FieldGaps` разделяет critical TMDB и optional Kinopoisk. Kinopoisk retry использует 14 дней,
+  а provider gaps намеренно не пишутся в общий файловый journal.
+- `RepairAnimeDbPolicy` содержит чистые правила классификации, episode-инвариант и merge typed/
+  legacy external ids. SERIES всегда сохраняет исходный released count, MOVIE инициализируется 1.
+- `updateAnime` теперь действительно сохраняет `titleEn`/`titleRu`; AddEdit переносит TMDB/
+  Kinopoisk id и timestamps через UI state, не стирая результат repair при ручном редактировании.
 
 ## Deviations
 
-Empty before implementation.
+- `LiveMaintenanceWorker` всё же получил небольшую правку: без разделения journalable/provider
+  gaps сетевой `Failure` скрывал бы critical TMDB gap на TTL файлового журнала. Оркестрация
+  воркера не менялась.
+- Ручная проверка на реальной коллекции не выполнялась в CLI-сессии; тот же путь покрыт policy,
+  repository и SQLDelight compilation тестами, а debug APK успешно собран.
 
 ## Review findings
 
-Empty before review.
+- Первое Spec review нашло два BLOCKING: stale id не доходил до `NotFoundById`, а generic journal
+  мог скрыть TMDB gap после `Failure`. Оба исправлены и закрыты повторным ревью.
+- Standards review нашло дублирование provider orchestration и двух gap projections. Поиск
+  сведён в `lookupProviders`, journalable-набор вычисляется один раз; финальная проверка чистая.
+- IMPORTANT по покрытию merge-policy закрыт тестами stale/failure, journal, typed ids,
+  ANIME/MANGA, SERIES/MOVIE episodes и RU rating priority.
 
 ## Completion evidence
 
-Empty before completion.
+- `./gradlew :core:network:testDebugUnitTest :app:testDebugUnitTest :app:assembleDebug` →
+  BUILD SUCCESSFUL; 426 тестов, failures=0, errors=0.
+- `git diff --check` → без ошибок.
+- Code commit: `46bc4f1`.

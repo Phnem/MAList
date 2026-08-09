@@ -373,3 +373,42 @@ RU search получил второй TMDB запрос ради коррект�
 ### Next eligible ticket
 
 TICKET-07 — gap detector + repair MOVIE/SERIES.
+
+## 2026-08-09 — TICKET-07 завершён
+
+### Outcome
+
+DONE
+
+### Work completed
+
+Gap detector теперь видит ANIME/MOVIE/SERIES, а repair дозаполняет TMDB/Kinopoisk ids,
+локализованные названия и обычные metadata gaps. Critical TMDB и optional Kinopoisk имеют
+разную retry-семантику; provider `Failure` не превращается в not-found и не попадает в generic
+journal. Сохранённые id валидируются, stale id очищается только по `NotFoundById` и сразу
+резолвится заново.
+
+### Decisions made
+
+Provider-id gaps управляются DB timestamps/`LookupResult`, не файловым gap journal. Полный
+repair включает записи с сохранёнными movie ids для их валидации. SERIES episode count остаётся
+под исключительным владением TICKET-08; repair его не меняет.
+
+### Deviations
+
+`LiveMaintenanceWorker` пришлось изменить локально, чтобы он журналировал только legacy field
+gaps. Также исправлена обнаруженная граница сохранения: `updateAnime` пишет title locales, а
+AddEdit сохраняет movie provider ids/timestamps.
+
+### Verification
+
+Полные unit tests `core:network` + `app`: 426/426; `app:assembleDebug`; `git diff --check`.
+
+### Review result
+
+Двухосевое ревью: оба Spec BLOCKING и все Standards/coverage IMPORTANT устранены; финальные
+повторные проверки не нашли новых обязательных замечаний.
+
+### Next eligible ticket
+
+TICKET-08 — SeriesEpisodeCheckUseCase.
