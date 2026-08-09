@@ -6,6 +6,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.lazy.LazyListState
@@ -177,6 +178,8 @@ fun Modifier.fluidClickable(
     scaleDown: Float = 0.95f,
     enabled: Boolean = true,
     role: Role? = Role.Button,
+    /** Долгое удержание. null — обычный clickable, поведение вызывающих не меняется. */
+    onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit
 ) = composed {
     val interactionSource = remember { MutableInteractionSource() }
@@ -189,18 +192,28 @@ fun Modifier.fluidClickable(
         label = "fluidClickScale"
     )
 
-    this
-        .graphicsLayer {
-            scaleX = scale
-            scaleY = scale
-        }
-        .clickable(
+    val base = this.graphicsLayer {
+        scaleX = scale
+        scaleY = scale
+    }
+    if (onLongClick == null) {
+        base.clickable(
             interactionSource = interactionSource,
             indication = null,
             enabled = enabled,
             role = role,
             onClick = onClick
         )
+    } else {
+        base.combinedClickable(
+            interactionSource = interactionSource,
+            indication = null,
+            enabled = enabled,
+            role = role,
+            onLongClick = onLongClick,
+            onClick = onClick
+        )
+    }
 }
 
 // ==========================================

@@ -79,7 +79,12 @@ fun AddEditScreen(
     viewModel: AddEditViewModel,
     animeId: String?,
     sharedTransitionScope: SharedTransitionScope,
-    animatedVisibilityScope: AnimatedVisibilityScope
+    animatedVisibilityScope: AnimatedVisibilityScope,
+    /**
+     * Что делать после успешного сохранения. По умолчанию (маршрут) — уйти назад по стеку.
+     * Страница рабочей области стеком не управляет и передаёт сюда своё «перелистнуть на Главную».
+     */
+    onSaved: (() -> Unit)? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val currentLanguage by viewModel.uiLanguage.collectAsStateWithLifecycle()
@@ -102,7 +107,7 @@ fun AddEditScreen(
     LaunchedEffect(Unit) {
         viewModel.effect.collect { effect ->
             when (effect) {
-                is AddEditEffect.NavigateBack -> navController.popBackStack()
+                is AddEditEffect.NavigateBack -> onSaved?.invoke() ?: run { navController.popBackStack() }
                 is AddEditEffect.ShowError -> android.widget.Toast.makeText(
                     ctx, effect.message, android.widget.Toast.LENGTH_SHORT
                 ).show()

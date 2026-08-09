@@ -72,4 +72,114 @@ class HlsSegmentDownloaderTest {
             destination.delete()
         }
     }
+
+    @Test
+    fun `retries a segment whose connection drops and keeps the file intact`() {
+        val segmentAttempts = mutableListOf<Int>()
+        var failuresLeft = 2
+        val packet = ByteArray(188 * 1000).also { bytes ->
+            bytes.indices.step(188).forEach { bytes[it] = 0x47 }
+        }
+        val client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val path = chain.request().url.encodedPath
+                if (path == "/media.m3u8") {
+                    return@addInterceptor Response.Builder()
+                        .request(chain.request())
+                        .protocol(Protocol.HTTP_1_1)
+                        .code(200)
+                        .message("OK")
+                        .body(
+                            """
+                                #EXTM3U
+                                #EXTINF:4,
+                                segment.ts
+                                #EXT-X-ENDLIST
+                            """.trimIndent()
+                                .toByteArray()
+                                .toResponseBody("application/vnd.apple.mpegurl".toMediaType())
+                        )
+                        .build()
+                }
+                segmentAttempts += segmentAttempts.size + 1
+                if (failuresLeft > 0) {
+                    failuresLeft -= 1
+                    throw java.io.EOFException("connection closed by peer")
+                }
+                Response.Builder()
+                    .request(chain.request())
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(200)
+                    .message("OK")
+                    .body(packet.toResponseBody("video/mp2t".toMediaType()))
+                    .build()
+            }
+            .build()
+        val destination = File.createTempFile("retry-hls", ".mp4").also { it.delete() }
+
+        try {
+            HlsSegmentDownloader(client).download(
+                video = VetroVideo(url = "https://media.test/media.m3u8", label = "720p"),
+                destination = destination,
+            )
+
+            assertEquals(3, segmentAttempts.size)
+            assertTrue(MediaFileValidator.isPlayableVideo(destination))
+            // Only the successful attempt reached the output: the two dropped bodies wrote nothing.
+            assertEquals(packet.size.toLong(), destination.length())
+        } finally {
+            destination.delete()
+        }
+    }
+
+    @Test
+    fun `does not retry a segment the server refuses`() {
+        var segmentRequests = 0
+        val client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val path = chain.request().url.encodedPath
+                if (path == "/media.m3u8") {
+                    return@addInterceptor Response.Builder()
+                        .request(chain.request())
+                        .protocol(Protocol.HTTP_1_1)
+                        .code(200)
+                        .message("OK")
+                        .body(
+                            """
+                                #EXTM3U
+                                #EXTINF:4,
+                                segment.ts
+                                #EXT-X-ENDLIST
+                            """.trimIndent()
+                                .toByteArray()
+                                .toResponseBody("application/vnd.apple.mpegurl".toMediaType())
+                        )
+                        .build()
+                }
+                segmentRequests += 1
+                Response.Builder()
+                    .request(chain.request())
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(403)
+                    .message("Forbidden")
+                    .body(ByteArray(0).toResponseBody("text/plain".toMediaType()))
+                    .build()
+            }
+            .build()
+        val destination = File.createTempFile("refused-hls", ".mp4").also { it.delete() }
+
+        try {
+            val error = runCatching {
+                HlsSegmentDownloader(client).download(
+                    video = VetroVideo(url = "https://media.test/media.m3u8", label = "720p"),
+                    destination = destination,
+                )
+            }.exceptionOrNull()
+
+            assertTrue(error is java.io.IOException)
+            assertEquals(1, segmentRequests)
+        } finally {
+            destination.delete()
+        }
+    }
 }

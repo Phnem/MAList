@@ -201,7 +201,10 @@ fun GlassActionDock(
     onOpenSort: () -> Unit,
     onOpenNotifications: () -> Unit,
     onOpenMediaTypeFilter: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    middleAction: com.example.myapplication.ui.home.TopDockMiddleAction =
+        com.example.myapplication.ui.home.TopDockMiddleAction.SYNC_PANEL,
+    onOpenStats: () -> Unit = {},
 ) {
     val isDark = isAppInDarkTheme()
     val glassEffects = rememberAdaptiveGlassEffects(GlassPreset.Card)
@@ -280,6 +283,8 @@ fun GlassActionDock(
                 dockButtonBackground = buttonBgColor,
                 useDockSizing = true,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                middleAction = middleAction,
+                onOpenStats = onOpenStats,
             )
         }
     }

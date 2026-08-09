@@ -45,14 +45,24 @@ class AnimeRepository(
         filterTags: Flow<List<String>>,
         mediaTypeFilter: Flow<MediaType?>
     ): Flow<List<Anime>> = mediaTypeFilter.flatMapLatest { filterType ->
+        // Плитка "Сериалы" исторически охватывала и фильмы, и сериалы одной строкой
+        // (MediaType.TV_SERIES до разделения на MOVIE/SERIES) — сохраняем это поведение: выбор
+        // SERIES матчит оба типа. DB-уровня фильтрация тут не годится (один exact match), поэтому
+        // при SERIES тянем всё и доотфильтровываем в памяти.
+        val dbFilterType = if (filterType == MediaType.SERIES) null else filterType
         combine(
-            localDataSource.observeAllAnime(filterType),
+            localDataSource.observeAllAnime(dbFilterType),
             searchQuery.debounce(300L).distinctUntilChanged(),
             sortOption.distinctUntilChanged(),
             sortAscending.distinctUntilChanged(),
             filterTags.distinctUntilChanged(),
         ) { list, q, sort, asc, tags ->
-            filterAndSortInMemory(list, q, sort, asc, tags)
+            val scoped = if (filterType == MediaType.SERIES) {
+                list.filter { it.mediaType == MediaType.MOVIE || it.mediaType == MediaType.SERIES }
+            } else {
+                list
+            }
+            filterAndSortInMemory(scoped, q, sort, asc, tags)
         }
     }.flowOn(Dispatchers.Default)
 

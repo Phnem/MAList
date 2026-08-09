@@ -30,7 +30,13 @@ CREATE TABLE anime (
     -- Русское название (обратное обогащение через Shikimori). NULL = ещё не заполнено.
     title_ru TEXT,
     -- Время последней попытки обогащения RU-названия.
-    title_ru_checked_at INTEGER
+    title_ru_checked_at INTEGER,
+    -- TMDB id (MOVIE/SERIES) — канонический внешний id для фильмов/сериалов.
+    tmdb_id INTEGER,
+    tmdb_not_found_at INTEGER,
+    -- Kinopoisk id (RU-обогащение MOVIE/SERIES) — вспомогательный, не канонический.
+    kinopoisk_id INTEGER,
+    kinopoisk_not_found_at INTEGER
 );
 
 -- Delta Sync: rows that need to be pushed to cloud
@@ -73,6 +79,10 @@ SELECT
     anime.mediaType,
     anime.title_en,
     anime.title_ru,
+    anime.tmdb_id,
+    anime.tmdb_not_found_at,
+    anime.kinopoisk_id,
+    anime.kinopoisk_not_found_at,
     GROUP_CONCAT(anime_tags.tag, CHAR(31)) AS tagsConcat
 FROM anime
 LEFT JOIN anime_tags ON anime.id = anime_tags.anime_id
@@ -104,6 +114,10 @@ SELECT
     anime.mediaType,
     anime.title_en,
     anime.title_ru,
+    anime.tmdb_id,
+    anime.tmdb_not_found_at,
+    anime.kinopoisk_id,
+    anime.kinopoisk_not_found_at,
     GROUP_CONCAT(anime_tags.tag, CHAR(31)) AS tagsConcat
 FROM anime
 LEFT JOIN anime_tags ON anime.id = anime_tags.anime_id
@@ -130,9 +144,10 @@ INSERT INTO anime(
     categoryType, sync_status, comment, isAiRecommendation,
     anilist_id, mal_id, shikimori_id,
     anilist_not_found_at, mal_not_found_at, shikimori_not_found_at,
-    isPrivate, encryptionIv, deletedAt, mediaType, title_en, title_ru
+    isPrivate, encryptionIv, deletedAt, mediaType, title_en, title_ru,
+    tmdb_id, kinopoisk_id, tmdb_not_found_at, kinopoisk_not_found_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING_CREATE', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING_CREATE', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 updateAnime:
 UPDATE anime
@@ -157,7 +172,11 @@ SET title = ?,
     isPrivate = ?,
     encryptionIv = ?,
     deletedAt = ?,
-    mediaType = ?
+    mediaType = ?,
+    tmdb_id = ?,
+    kinopoisk_id = ?,
+    tmdb_not_found_at = ?,
+    kinopoisk_not_found_at = ?
 WHERE id = ?;
 
 updateAnimeFromSync:
@@ -190,7 +209,9 @@ updateAnimeKeepingDirty:
 UPDATE anime
 SET anilist_id = coalesce(?, anilist_id),
     mal_id = coalesce(?, mal_id),
-    shikimori_id = coalesce(?, shikimori_id)
+    shikimori_id = coalesce(?, shikimori_id),
+    tmdb_id = coalesce(?, tmdb_id),
+    kinopoisk_id = coalesce(?, kinopoisk_id)
 WHERE id = ?;
 
 
@@ -207,6 +228,26 @@ WHERE id = ?;
 setShikimoriId:
 UPDATE anime
 SET shikimori_id = ?, shikimori_not_found_at = NULL, updatedAt = ?, sync_status = 'PENDING_UPDATE'
+WHERE id = ?;
+
+setTmdbId:
+UPDATE anime
+SET tmdb_id = ?, tmdb_not_found_at = NULL, updatedAt = ?, sync_status = 'PENDING_UPDATE'
+WHERE id = ?;
+
+setKinopoiskId:
+UPDATE anime
+SET kinopoisk_id = ?, kinopoisk_not_found_at = NULL, updatedAt = ?, sync_status = 'PENDING_UPDATE'
+WHERE id = ?;
+
+markTmdbNotFound:
+UPDATE anime
+SET tmdb_not_found_at = ?, updatedAt = ?, sync_status = 'PENDING_UPDATE'
+WHERE id = ?;
+
+markKinopoiskNotFound:
+UPDATE anime
+SET kinopoisk_not_found_at = ?, updatedAt = ?, sync_status = 'PENDING_UPDATE'
 WHERE id = ?;
 
 setTitleEn:
@@ -295,15 +336,28 @@ UPDATE anime SET sync_status = 'PENDING_UPDATE' WHERE sync_status = 'SYNCED';
 deleteAnime:
 DELETE FROM anime WHERE id = ?;
 
+-- INSERT OR REPLACE переписывает строку целиком: колонка, отсутствующая в списке ниже, стала
+-- бы NULL при каждом pull, даже если синк её никогда не передавал. tmdb_id/kinopoisk_id/
+-- *_not_found_at пока НЕ синкаются (нет соответствующих полей в AnimeRemoteDto/облачной
+-- схеме, см. supabase/migrations/20260809000000_anime_tmdb_kinopoisk_ids.sql) — чтобы pull не
+-- стирал локально проставленные значения, они не приходят параметром, а сохраняются через
+-- self-select текущего значения по тому же id (подзапрос читает строку ДО REPLACE).
 upsertFromSync:
 INSERT OR REPLACE INTO anime(
     id, title, imagePath, episodes, rating, status, isFavorite, updatedAt, orderIndex, dateAdded,
     categoryType, sync_status, comment, isAiRecommendation,
     anilist_id, mal_id, shikimori_id,
     anilist_not_found_at, mal_not_found_at, shikimori_not_found_at,
-    isPrivate, encryptionIv, deletedAt, mediaType, title_en, title_en_checked_at, title_ru, title_ru_checked_at
+    isPrivate, encryptionIv, deletedAt, mediaType, title_en, title_en_checked_at, title_ru, title_ru_checked_at,
+    tmdb_id, tmdb_not_found_at, kinopoisk_id, kinopoisk_not_found_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SYNCED', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+VALUES (
+    :id, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SYNCED', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+    (SELECT tmdb_id FROM anime WHERE id = :id),
+    (SELECT tmdb_not_found_at FROM anime WHERE id = :id),
+    (SELECT kinopoisk_id FROM anime WHERE id = :id),
+    (SELECT kinopoisk_not_found_at FROM anime WHERE id = :id)
+);
 
 keepingDirty:
 UPDATE anime

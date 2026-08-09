@@ -9,7 +9,6 @@ import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -21,11 +20,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -71,15 +68,15 @@ import kotlin.math.abs
 import kotlin.math.sign
 
 // ==========================================
-// EpisodeUpdateStack — iOS-style top-of-screen пуш-стопка обновлений серий.
+// EpisodeUpdateStack — iOS-style top-of-screen пуш-стопка «вышла новая серия».
 // Одна карточка — одиночный баннер; несколько — стопка, где старые выглядывают
 // снизу (уже и ниже), как сложенные уведомления на iPhone.
 //
 // Фон карточки НЕПРОЗРАЧНЫЙ: верхняя полностью перекрывает стопку, поэтому текст
 // задних карточек не просвечивает (была «каша» на полупрозрачном стекле).
 //
-// Жесты: свайп верхней влево/вправо = отказ (улетает по горизонтали);
-// кнопка ✓ — улетает вверх (accept); кнопка ✕ — вправо (decline).
+// Кнопок нет: серии проставляются автоматически, карточка только сообщает о выходе.
+// Тап по плашке = открыть Details тайтла; свайп верхней влево/вправо = смахнуть.
 // Callback вызывается ПОСЛЕ анимации; до обновления БД карточка прячется через
 // departedIds, чтобы не мигнула обратно.
 // ==========================================
@@ -96,8 +93,8 @@ private const val SWIPE_DISMISS_FRACTION = 0.32f
 fun EpisodeUpdateStack(
     updates: List<AnimeUpdate>,
     coverPathFor: (animeId: String) -> String?,
-    onAccept: (AnimeUpdate) -> Unit,
-    onDecline: (AnimeUpdate) -> Unit,
+    onOpen: (AnimeUpdate) -> Unit,
+    onDismiss: (AnimeUpdate) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -109,9 +106,6 @@ fun EpisodeUpdateStack(
     val onCard = if (isDark) Color.White else Color(0xFF1C1C1E)
     val hairline = if (isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.06f)
     val accent = Color(0xFFE85002)
-    val onAccent = Color.White
-    val declineBg = if (isDark) Color(0xFF2C2C2E) else Color(0xFFEFEFF0)
-    val declineTint = Color(0xFFE5382B)
 
     // Улетевшие, но ещё не удалённые из БД карточки: скрываем до обновления Flow.
     val departedIds: SnapshotStateList<String> = remember { mutableStateListOf() }
@@ -142,17 +136,19 @@ fun EpisodeUpdateStack(
             scope.launch {
                 offsetX.animateTo(direction * flyOutXPx, animationSpec = tween(240))
                 departedIds += update.animeId
-                onDecline(update)
+                onDismiss(update)
             }
         }
 
-        fun flyOutUp(update: AnimeUpdate) {
+        /** Тап: карточка уходит вверх и открывает Details — как «раскрытие» iOS-пуша. */
+        fun openAndFlyUp(update: AnimeUpdate) {
             if (departing) return
             departing = true
+            onOpen(update)
             scope.launch {
                 offsetY.animateTo(-flyOutYPx, animationSpec = tween(280))
                 departedIds += update.animeId
-                onAccept(update)
+                onDismiss(update)
             }
         }
 
@@ -238,13 +234,9 @@ fun EpisodeUpdateStack(
                             onCard = onCard,
                             hairline = hairline,
                             accent = accent,
-                            onAccent = onAccent,
-                            declineBg = declineBg,
-                            declineTint = declineTint,
                             dimmed = !isTop,
-                            actionsEnabled = isTop && !departing,
-                            onAccept = { flyOutUp(update) },
-                            onDecline = { flyOutHorizontally(1f, update) },
+                            clickEnabled = isTop && !departing,
+                            onClick = { openAndFlyUp(update) },
                         )
                     }
                 }
@@ -254,7 +246,7 @@ fun EpisodeUpdateStack(
 }
 
 // ==========================================
-// Карточка: [обложка] [название + счётчик серий] [✓] [✕]
+// Карточка: [обложка] [название + счётчик серий] — вся плашка кликабельна (→ Details)
 // ==========================================
 
 @Composable
@@ -266,13 +258,9 @@ private fun EpisodeUpdateCard(
     onCard: Color,
     hairline: Color,
     accent: Color,
-    onAccent: Color,
-    declineBg: Color,
-    declineTint: Color,
     dimmed: Boolean,
-    actionsEnabled: Boolean,
-    onAccept: () -> Unit,
-    onDecline: () -> Unit,
+    clickEnabled: Boolean,
+    onClick: () -> Unit,
 ) {
     val tileShape = RoundedCornerShape(22.dp)
 
@@ -284,6 +272,11 @@ private fun EpisodeUpdateCard(
             .clip(tileShape)
             .background(cardColor)
             .border(1.dp, hairline, tileShape)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                enabled = clickEnabled,
+            ) { onClick() }
     ) {
         Row(
             modifier = Modifier
@@ -342,62 +335,19 @@ private fun EpisodeUpdateCard(
             }
             Spacer(Modifier.width(8.dp))
 
-            // —— Кнопки-иконки: Принять / Отказать —— //
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                CircleIconButton(
-                    background = accent,
-                    enabled = actionsEnabled,
-                    onClick = onAccept,
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = null,
-                        tint = onAccent,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
-                CircleIconButton(
-                    background = declineBg,
-                    enabled = actionsEnabled,
-                    onClick = onDecline,
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = null,
-                        tint = declineTint,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
+            // —— Шеврон: плашка кликабельна целиком (→ Details) —— //
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = onCard.copy(alpha = 0.35f),
+                modifier = Modifier.size(22.dp)
+            )
         }
 
         // Лёгкое затемнение задних карточек стопки для ощущения глубины.
         if (dimmed) {
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.10f)))
         }
-    }
-}
-
-@Composable
-private fun CircleIconButton(
-    background: Color,
-    enabled: Boolean,
-    onClick: () -> Unit,
-    content: @Composable () -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .size(40.dp)
-            .clip(CircleShape)
-            .background(background)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                enabled = enabled,
-            ) { onClick() },
-        contentAlignment = Alignment.Center
-    ) {
-        content()
     }
 }
 

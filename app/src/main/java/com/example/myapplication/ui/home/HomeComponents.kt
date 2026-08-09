@@ -86,7 +86,9 @@ fun LibraryMediaTypeFilterRow(
         FilterTile(null, allLabel, Icons.Outlined.GridView, Color(0xFFA7A7A7)),
         FilterTile(MediaType.ANIME, strings.typeAnime, Icons.Outlined.AutoAwesome, Color(0xFFE85002)),
         FilterTile(MediaType.MANGA, strings.typeManga, Icons.AutoMirrored.Outlined.MenuBook, Color(0xFFD9C3AB)),
-        FilterTile(MediaType.TV_SERIES, strings.typeSeries, Icons.Outlined.Tv, Color(0xFFFFB067)),
+        // Одна плитка на MOVIE+SERIES (был единый TV_SERIES) — комбинированное сопоставление
+        // живёт в AnimeRepository.observeAnimeList, не здесь.
+        FilterTile(MediaType.SERIES, strings.typeSeries, Icons.Outlined.Tv, Color(0xFFFFB067)),
     )
 
     @Composable
@@ -148,7 +150,9 @@ fun MediaTypeFilterOverlay(
         TypeOption(null, allLabel, Icons.Outlined.GridView, Color(0xFFA7A7A7), if (ru) "Вся коллекция" else "Whole collection"),
         TypeOption(MediaType.ANIME, strings.typeAnime, Icons.Outlined.AutoAwesome, Color(0xFFE85002), if (ru) "Только аниме" else "Anime only"),
         TypeOption(MediaType.MANGA, strings.typeManga, Icons.AutoMirrored.Outlined.MenuBook, Color(0xFFD9C3AB), if (ru) "Только манга" else "Manga only"),
-        TypeOption(MediaType.TV_SERIES, strings.typeSeries, Icons.Outlined.Tv, Color(0xFFFFB067), if (ru) "Только сериалы" else "Series only"),
+        // MOVIE+SERIES под одной опцией (см. HomeComponents.tiles выше) — комбинированное
+        // сопоставление в AnimeRepository.observeAnimeList.
+        TypeOption(MediaType.SERIES, strings.typeSeries, Icons.Outlined.Tv, Color(0xFFFFB067), if (ru) "Фильмы и сериалы" else "Movies & series"),
     )
 
     Box(modifier = Modifier.fillMaxSize()) {

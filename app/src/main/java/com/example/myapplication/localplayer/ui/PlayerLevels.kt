@@ -16,6 +16,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalView
 import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 
 /** Сколько плашка уровня висит после того, как палец оторвали. */
 private const val LEVEL_HUD_HOLD_MS = 700L
@@ -50,7 +51,18 @@ class PlayerLevels internal constructor(
     /** Сколько делений у системной громкости. 0 = аудио недоступно, жест ничего не делает. */
     val volumeSteps: Int = audio?.getStreamMaxVolume(AudioManager.STREAM_MUSIC) ?: 0
 
-    var volume by mutableFloatStateOf(readSystemVolume())
+    /**
+     * Непрерывная позиция пальца по шкале громкости — то, что накапливает свайп.
+     *
+     * Отдельно от [volume] потому, что наружу уходит уже округлённое до ступени значение, и
+     * складывать следующий сдвиг с ним нельзя: одно событие драга приносит доли процента, а ступень
+     * системной громкости — целых 4–7%, так что округление съедало бы каждый такой сдвиг обратно в
+     * ту же ступень. Громкость тогда стоит на месте и прыгает только на редком резком движении,
+     * которое в одно событие перевалило половину ступени.
+     */
+    private var volumeRaw: Float = readSystemVolume()
+
+    var volume by mutableFloatStateOf(quantizeLevel(volumeRaw, volumeSteps))
         private set
 
     var brightness by mutableFloatStateOf(systemBrightness)
@@ -76,7 +88,10 @@ class PlayerLevels internal constructor(
      * значило бы швырнуть звук скачком.
      */
     fun begin(zone: VerticalZone) {
-        if (zone == VerticalZone.Volume) volume = readSystemVolume()
+        if (zone == VerticalZone.Volume) {
+            volumeRaw = readSystemVolume()
+            volume = quantizeLevel(volumeRaw, volumeSteps)
+        }
         hud = zone
         hudPinned = true
     }
@@ -84,8 +99,9 @@ class PlayerLevels internal constructor(
     /** Сдвиг уровня на [delta] (в долях полного диапазона). */
     fun nudge(zone: VerticalZone, delta: Float) {
         when (zone) {
-            VerticalZone.Volume -> {
-                val next = quantizeLevel(volume + delta, volumeSteps)
+            VerticalZone.Volume -> if (volumeSteps > 0) {
+                volumeRaw = (volumeRaw + delta).coerceIn(0f, 1f)
+                val next = quantizeLevel(volumeRaw, volumeSteps)
                 if (next != volume) {
                     volume = next
                     // Без FLAG_SHOW_UI: системная шторка громкости поверх кадра — ровно то, что
@@ -93,7 +109,7 @@ class PlayerLevels internal constructor(
                     runCatching {
                         audio?.setStreamVolume(
                             AudioManager.STREAM_MUSIC,
-                            (next * volumeSteps).toInt(),
+                            (next * volumeSteps).roundToInt(),
                             0,
                         )
                     }

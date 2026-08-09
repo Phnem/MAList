@@ -58,6 +58,9 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -77,6 +80,7 @@ import com.example.myapplication.ui.shared.GlassBackdropRecovery
 import com.example.myapplication.ui.shared.ListSyncLoadingOverlay
 import com.example.myapplication.ui.shared.LocalAdaptiveGlassScrollInProgress
 import com.example.myapplication.ui.shared.customOverscroll
+import com.example.myapplication.ui.shared.rememberDockAutoHide
 
 import com.example.myapplication.GlassActionDock
 import com.example.myapplication.GlassBottomNavigation
@@ -100,6 +104,8 @@ import com.example.myapplication.ui.home.recommendations.RecommendationsSheet
 import com.example.myapplication.ui.home.recommendations.RecommendationsUiState
 import com.example.myapplication.ui.home.recommendations.RecommendationsViewModel
 import com.example.myapplication.ui.home.recommendations.getRecommendationsStrings
+import com.example.myapplication.ui.home.cardmenu.CardActionMenuOverlay
+import com.example.myapplication.ui.home.cardmenu.CardMenuTarget
 import com.example.myapplication.ui.home.updates.EpisodeUpdateStack
 import com.example.myapplication.ui.navigation.navigateToAddEdit
 import com.example.myapplication.ui.navigation.navigateToDetails
@@ -122,6 +128,29 @@ fun HomeScreen(
     viewModel: HomeViewModel,
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
+    /**
+     * true — главная показана страницей рабочей области. Отсюда следует всё сразу:
+     * свой нижний док она не рисует (навигацией занят док рабочей области), действия над
+     * карточкой открываются долгим удержанием вместо свайпов, а средняя кнопка верхнего дока
+     * открывает статистику (панель подключения переехала в настройки).
+     *
+     * Значение постоянно на всё время жизни вызова (маршрут — всегда false, страница — всегда
+     * true): переключать его на лету нельзя, размонтирование потребителя роняет запись
+     * [layerBackdrop] в плоскую заливку.
+     */
+    hostedInWorkspace: Boolean = false,
+    /** Сообщает наружу, что карточка выделена: хозяин запирает свайп страниц. */
+    onCardSelectionChange: (Boolean) -> Unit = {},
+    /** Сообщает наружу, что открыт любой оверлей/шторка/диалог: хозяин прячет док. */
+    onOverlayVisibleChange: (Boolean) -> Unit = {},
+    /**
+     * Список скроллится (жест или инерция). Хозяин переводит стекло своего дока в экономный
+     * режим: `LocalAdaptiveGlassScrollInProgress` предоставляется внутри этой страницы и до
+     * соседнего дока не достаёт.
+     */
+    onContentScrollChange: (Boolean) -> Unit = {},
+    /** Автоскрытие (D9): скролл вниз прячет док хозяина, скролл вверх возвращает. */
+    onDockVisibleChange: (Boolean) -> Unit = {},
 ) {
     val genreRepository: GenreRepository = koinInject()
     val listSyncCoordinator: ExternalListSyncCoordinator = koinInject()
@@ -181,6 +210,21 @@ fun HomeScreen(
     var animeToDelete by remember { mutableStateOf<Anime?>(null) }
     var animeToFavorite by remember { mutableStateOf<Anime?>(null) }
     var pendingSwipeReset by remember { mutableStateOf<(suspend () -> Unit)?>(null) }
+    /** Карточка, поднятая долгим удержанием (контекстное меню). */
+    var cardMenuTarget by remember { mutableStateOf<CardMenuTarget?>(null) }
+    LaunchedEffect(cardMenuTarget != null) { onCardSelectionChange(cardMenuTarget != null) }
+    DisposableEffect(Unit) {
+        onDispose {
+            onCardSelectionChange(false)
+            onOverlayVisibleChange(false)
+        }
+    }
+    // Запись пропала из списка (удалена, отфильтрована, сменился поиск) — выделение снимаем:
+    // держать поднятой карточку, которой больше нет, нельзя.
+    LaunchedEffect(list) {
+        val id = cardMenuTarget?.state?.id ?: return@LaunchedEffect
+        if (list.none { it.id == id }) cardMenuTarget = null
+    }
     val scope = rememberCoroutineScope()
     val playerPromoTarget = remember(list) {
         val playable = list.filter { it.mediaType == MediaType.ANIME && it.episodes > 0 }
@@ -244,21 +288,9 @@ fun HomeScreen(
         }
     }
 
-    var isDockVisible by remember { mutableStateOf(true) }
-    val finalDockVisible = isDockVisible || isSearchVisible
-    val nestedScrollConnection = remember {
-        object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
-            override fun onPreScroll(available: androidx.compose.ui.geometry.Offset, source: androidx.compose.ui.input.nestedscroll.NestedScrollSource): androidx.compose.ui.geometry.Offset {
-                val threshold = 10f
-                if (available.y < -threshold) {
-                    if (isDockVisible) isDockVisible = false
-                } else if (available.y > threshold) {
-                    if (!isDockVisible) isDockVisible = true
-                }
-                return androidx.compose.ui.geometry.Offset.Zero
-            }
-        }
-    }
+    // Правило автоскрытия общее с доком рабочей области — оно живёт в `rememberDockAutoHide`.
+    val dockAutoHide = rememberDockAutoHide()
+    val finalDockVisible = dockAutoHide.visible || isSearchVisible
 
     BackHandler(enabled = isSearchVisible || uiState.searchQuery.isNotEmpty()) {
         performHaptic(view, "light")
@@ -291,7 +323,7 @@ fun HomeScreen(
     val shouldBlur = (isSearchVisible && uiState.searchQuery.isBlank()) ||
             showCSheet || animeToDelete != null || animeToFavorite != null ||
             uiState.isGenreFilterVisible || showNotificationsOverlay || showSortOverlay ||
-            showMediaTypeFilterOverlay || listSyncUi.isRunning
+            showMediaTypeFilterOverlay || listSyncUi.isRunning || cardMenuTarget != null
     val blurAmount by animateDpAsState(
         targetValue = when {
             notificationsBlockingChildDialog -> 20.dp
@@ -305,7 +337,13 @@ fun HomeScreen(
     // При видимом доке держим её выше плавающей кнопки поиска (её верх ≈162dp над нав-панелью),
     // чтобы кнопки не слипались.
     val scrollToTopBottomPadding by animateDpAsState(
-        targetValue = if (finalDockVisible) 180.dp else 88.dp,
+        targetValue = when {
+            !finalDockVisible -> 88.dp
+            // В рабочей области своего нижнего дока у главной нет, а чужой ниже и тоньше:
+            // 180dp держали пустоту под несуществующей кнопкой поиска.
+            hostedInWorkspace -> 112.dp
+            else -> 180.dp
+        },
         animationSpec = MotionTokens.standard(),
         label = "scrollToTopBottom"
     )
@@ -352,6 +390,21 @@ fun HomeScreen(
         label = "homePush",
     )
 
+    // Любая шторка/диалог/оверлей поверх главной → док рабочей области уезжает вниз: он
+    // соседний узел, сам про эти состояния не знает.
+    val anyOverlayVisible = shouldBlur || anyHomeSheetOpen || showRecsSheet || isSearchVisible
+    LaunchedEffect(anyOverlayVisible) { onOverlayVisibleChange(anyOverlayVisible) }
+    LaunchedEffect(listScrollInProgress) { onContentScrollChange(listScrollInProgress) }
+    LaunchedEffect(finalDockVisible) { onDockVisibleChange(finalDockVisible) }
+    // Уход со страницы посреди скролла не должен оставить чужой док спрятанным или его стекло
+    // в экономном режиме навсегда.
+    DisposableEffect(Unit) {
+        onDispose {
+            onContentScrollChange(false)
+            onDockVisibleChange(true)
+        }
+    }
+
     Scaffold(
         containerColor = Color.Transparent,
         bottomBar = {},
@@ -381,14 +434,6 @@ fun HomeScreen(
                         onCheckUpdates = {
                             performHaptic(view, "light")
                             viewModel.checkForUpdates(force = true)
-                        },
-                        onAcceptUpdate = { update ->
-                            performHaptic(view, "success")
-                            viewModel.acceptUpdate(update, ctx)
-                        },
-                        onDismissUpdate = { update ->
-                            performHaptic(view, "light")
-                            viewModel.dismissUpdate(update, ctx)
                         },
                         onBlockingChildDialogChange = { notificationsBlockingChildDialog = it }
                     )
@@ -512,7 +557,7 @@ fun HomeScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .nestedScroll(nestedScrollConnection)
+                                .nestedScroll(dockAutoHide.connection)
                                 // Верхнюю «резинку» отключаем — верхний пулл целиком у pull-to-refresh.
                                 .customOverscroll(listState, topEnabled = { false }) { overscrollAmount = it }
                                 // Сдвиг контента = overscroll + раскрытие pull-to-refresh. Тот же
@@ -619,30 +664,7 @@ fun HomeScreen(
                                             key = { it.id },
                                             contentType = { "anime_card" }
                                         ) { anime ->
-                                            val dismissState = rememberSwipeToDismissBoxState(
-                                                positionalThreshold = { totalDistance -> totalDistance * 0.4f }
-                                            )
-                                            LaunchedEffect(dismissState.currentValue) {
-                                                when (dismissState.currentValue) {
-                                                    SwipeToDismissBoxValue.StartToEnd -> {
-                                                        performHaptic(view, "success")
-                                                        animeToFavorite = anime
-                                                        pendingSwipeReset = { dismissState.reset() }
-                                                    }
-                                                    SwipeToDismissBoxValue.EndToStart -> {
-                                                        performHaptic(view, "warning")
-                                                        animeToDelete = anime
-                                                        pendingSwipeReset = { dismissState.reset() }
-                                                    }
-                                                    SwipeToDismissBoxValue.Settled -> Unit
-                                                }
-                                            }
-                                            SwipeToDismissBox(
-                                                state = dismissState,
-                                                backgroundContent = { SwipeBackground(dismissState) },
-                                                modifier = Modifier.padding(horizontal = 16.dp) // .animateItem() убран: конфликт с SharedTransition при возврате
-                                            ) {
-                                                val webLinksEntry = webLinksMap[anime.id]
+                                            val webLinksEntry = webLinksMap[anime.id]
                                                 val airingEntry = airingMap[anime.id]
                                                 val cardProgress = rememberCardProgress(
                                                     totalEpisodes = franchiseEpisodeTotal(
@@ -688,26 +710,82 @@ fun HomeScreen(
                                                         mediaTypeLabel = when (anime.mediaType) {
                                                             com.example.myapplication.data.models.MediaType.ANIME -> strings.typeAnime
                                                             com.example.myapplication.data.models.MediaType.MANGA -> strings.typeManga
-                                                            com.example.myapplication.data.models.MediaType.TV_SERIES -> strings.typeSeries
+                                                            com.example.myapplication.data.models.MediaType.MOVIE -> strings.typeMovie
+                                                            com.example.myapplication.data.models.MediaType.SERIES -> strings.typeSeries
                                                         },
                                                         airing = cardProgress,
                                                         isFavorite = anime.isFavorite,
                                                     )
                                                 }
-                                                with(sharedTransitionScope) {
-                                                    OneUiAnimeCard(
-                                                        state = cardState,
-                                                        animatedVisibilityScope = animatedVisibilityScope,
-                                                        // Тап по карточке — полноэкранные детали; кнопка справа-внизу — редактирование.
-                                                        onClick = {
-                                                            performHaptic(view, "light")
-                                                            navController.navigateToDetails(anime.id)
-                                                        },
-                                                        onEditClick = {
-                                                            performHaptic(view, "light")
-                                                            navController.navigateToAddEdit(anime.id)
+
+                                            // Тап по карточке — полноэкранные детали; кнопка справа-внизу — редактирование.
+                                            val openDetails: () -> Unit = {
+                                                performHaptic(view, "light")
+                                                navController.navigateToDetails(anime.id)
+                                            }
+                                            val openEdit: () -> Unit = {
+                                                performHaptic(view, "light")
+                                                navController.navigateToAddEdit(anime.id)
+                                            }
+                                            val rowModifier = Modifier.padding(horizontal = 16.dp)
+                                            // .animateItem() не добавляем: конфликт с SharedTransition при возврате.
+
+                                            if (hostedInWorkspace) {
+                                                // Горизонтальная ось отдана навигации: действия — по удержанию.
+                                                var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+                                                Box(
+                                                    modifier = rowModifier.onGloballyPositioned { coords = it },
+                                                ) {
+                                                    with(sharedTransitionScope) {
+                                                        OneUiAnimeCard(
+                                                            state = cardState,
+                                                            animatedVisibilityScope = animatedVisibilityScope,
+                                                            onClick = openDetails,
+                                                            onEditClick = openEdit,
+                                                            onLongClick = {
+                                                                val bounds = coords?.boundsInRoot() ?: return@OneUiAnimeCard
+                                                                performHaptic(view, "light")
+                                                                cardMenuTarget = CardMenuTarget(
+                                                                    state = cardState,
+                                                                    isFavorite = anime.isFavorite,
+                                                                    boundsInRoot = bounds,
+                                                                )
+                                                            },
+                                                        )
+                                                    }
+                                                }
+                                            } else {
+                                                val dismissState = rememberSwipeToDismissBoxState(
+                                                    positionalThreshold = { totalDistance -> totalDistance * 0.4f }
+                                                )
+                                                LaunchedEffect(dismissState.currentValue) {
+                                                    when (dismissState.currentValue) {
+                                                        SwipeToDismissBoxValue.StartToEnd -> {
+                                                            performHaptic(view, "success")
+                                                            animeToFavorite = anime
+                                                            pendingSwipeReset = { dismissState.reset() }
                                                         }
-                                                    )
+                                                        SwipeToDismissBoxValue.EndToStart -> {
+                                                            performHaptic(view, "warning")
+                                                            animeToDelete = anime
+                                                            pendingSwipeReset = { dismissState.reset() }
+                                                        }
+                                                        SwipeToDismissBoxValue.Settled -> Unit
+                                                    }
+                                                }
+                                                SwipeToDismissBox(
+                                                    state = dismissState,
+                                                    backgroundContent = { SwipeBackground(dismissState) },
+                                                    modifier = rowModifier
+                                                ) {
+                                                    with(sharedTransitionScope) {
+                                                        OneUiAnimeCard(
+                                                            state = cardState,
+                                                            animatedVisibilityScope = animatedVisibilityScope,
+                                                            onClick = openDetails,
+                                                            onEditClick = openEdit,
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
@@ -758,7 +836,7 @@ fun HomeScreen(
                 }
             }
 
-            if (!isSearchVisible && animeToDelete == null && animeToFavorite == null && !showCSheet) {
+            if (!hostedInWorkspace && !isSearchVisible && animeToDelete == null && animeToFavorite == null && !showCSheet) {
                 Box(modifier = Modifier.align(Alignment.BottomCenter).zIndex(3f).navigationBarsPadding()) {
                     AnimatedVisibility(
                         // !showRecsSheet — внутри visible, НЕ в структурном if выше: иначе
@@ -827,7 +905,9 @@ fun HomeScreen(
                         val filters = listOf(
                             com.example.myapplication.data.models.MediaType.ANIME to strings.typeAnime,
                             com.example.myapplication.data.models.MediaType.MANGA to strings.typeManga,
-                            com.example.myapplication.data.models.MediaType.TV_SERIES to strings.typeSeries
+                            // Одна опция на MOVIE+SERIES (был единый TV_SERIES) — при выборе ищем
+                            // раздел SERIES (см. HomeViewModel), MOVIE-раздел отсюда пока не достижим.
+                            com.example.myapplication.data.models.MediaType.SERIES to strings.typeSeries
                         )
                         filters.forEach { (type, label) ->
                             val isSelected = uiState.searchMediaTypeFilter == type
@@ -1004,6 +1084,19 @@ fun HomeScreen(
                             dockButtonBackground = Color.Transparent,
                             useDockSizing = false,
                             modifier = Modifier.align(Alignment.CenterEnd),
+                            // Та же средняя кнопка, что и у плавающего дока ниже: это два вида
+                            // ОДНОЙ шапки (список вверху / список прокручен), и разъезжаться
+                            // они не должны — иначе статистика видна только в одном из них.
+                            middleAction = if (hostedInWorkspace) {
+                                TopDockMiddleAction.STATS
+                            } else {
+                                TopDockMiddleAction.SYNC_PANEL
+                            },
+                            onOpenStats = {
+                                performHaptic(view, "light")
+                                dismissCloudSyncPill()
+                                showCSheet = true
+                            },
                         )
                     }
                 }
@@ -1017,7 +1110,19 @@ fun HomeScreen(
                         onOpenSort = openWorkspaceSort,
                         onOpenNotifications = openWorkspaceNotifications,
                         onOpenMediaTypeFilter = openMediaTypeFilter,
-                        modifier = Modifier.padding(top = 12.dp)
+                        modifier = Modifier.padding(top = 12.dp),
+                        // В рабочей области середина верхнего дока — статистика: панель
+                        // подключения оттуда уехала отдельным пунктом в настройки.
+                        middleAction = if (hostedInWorkspace) {
+                            TopDockMiddleAction.STATS
+                        } else {
+                            TopDockMiddleAction.SYNC_PANEL
+                        },
+                        onOpenStats = {
+                            performHaptic(view, "light")
+                            dismissCloudSyncPill()
+                            showCSheet = true
+                        },
                     )
                 }
             }
@@ -1030,11 +1135,11 @@ fun HomeScreen(
                     coverPathFor = { animeId ->
                         viewModel.getImgPath(viewModel.getAnimeById(animeId)?.imageFileName)
                     },
-                    onAccept = { update ->
-                        performHaptic(view, "success")
-                        viewModel.acceptUpdate(update, ctx)
+                    onOpen = { update ->
+                        performHaptic(view, "light")
+                        navController.navigateToDetails(update.animeId)
                     },
-                    onDecline = { update ->
+                    onDismiss = { update ->
                         performHaptic(view, "light")
                         viewModel.dismissUpdate(update, ctx)
                     },
@@ -1043,6 +1148,41 @@ fun HomeScreen(
                         .zIndex(40f)
                         .statusBarsPadding()
                         .padding(top = 8.dp, start = 12.dp, end = 12.dp)
+                )
+            }
+
+            // Контекстное меню карточки — поверх всего содержимого главной. Блюр фона делает
+            // homeScrollBlur (cardMenuTarget входит в shouldBlur), здесь только затемнение,
+            // поднятая копия карточки и ряд действий.
+            cardMenuTarget?.let { target ->
+                val systemBars = WindowInsets.systemBars.asPaddingValues()
+                CardActionMenuOverlay(
+                    target = target,
+                    // Ряд кнопок не должен уезжать под док рабочей области и нав-бар.
+                    bottomInset = systemBars.calculateBottomPadding() + 100.dp,
+                    topInset = systemBars.calculateTopPadding() + 8.dp,
+                    onDismiss = { cardMenuTarget = null },
+                    onToggleFavorite = {
+                        performHaptic(view, "light")
+                        animeToFavorite = list.firstOrNull { it.id == target.state.id }
+                        cardMenuTarget = null
+                    },
+                    onDelete = {
+                        performHaptic(view, "warning")
+                        animeToDelete = list.firstOrNull { it.id == target.state.id }
+                        cardMenuTarget = null
+                    },
+                    onEdit = {
+                        performHaptic(view, "light")
+                        cardMenuTarget = null
+                        navController.navigateToAddEdit(target.state.id)
+                    },
+                    onDetails = {
+                        performHaptic(view, "light")
+                        cardMenuTarget = null
+                        navController.navigateToDetails(target.state.id)
+                    },
+                    modifier = Modifier.zIndex(50f),
                 )
             }
         }
@@ -1211,7 +1351,8 @@ private fun LazyListScope.apiSearchResultsSection(
             mediaTypeLabel = when (uiState.searchMediaTypeFilter) {
                 com.example.myapplication.data.models.MediaType.ANIME -> strings.typeAnime
                 com.example.myapplication.data.models.MediaType.MANGA -> strings.typeManga
-                com.example.myapplication.data.models.MediaType.TV_SERIES -> strings.typeSeries
+                com.example.myapplication.data.models.MediaType.MOVIE -> strings.typeMovie
+                com.example.myapplication.data.models.MediaType.SERIES -> strings.typeSeries
             }
         )
     }

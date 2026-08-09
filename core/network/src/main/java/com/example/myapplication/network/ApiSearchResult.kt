@@ -1,6 +1,21 @@
 package com.example.myapplication.network
 
 /**
+ * Внешние id результата поиска — единая структура вместо bonus-полей по образцу [malId] на
+ * этом же классе (тот паттерн не масштабируется: следующий источник — снова новое поле,
+ * снова ветвление по строке [ApiSearchResult.source]). Используется новым MOVIE/SERIES-кодом
+ * (TMDB/Kinopoisk); аниме/манга-источники продолжают жить на старых полях
+ * [ApiSearchResult.externalId]/[ApiSearchResult.malId] — их миграция сюда вне скоупа этой фичи.
+ */
+data class ExternalIds(
+    val anilist: Int? = null,
+    val mal: Int? = null,
+    val shikimori: Int? = null,
+    val tmdb: Int? = null,
+    val kinopoisk: Int? = null,
+)
+
+/**
  * Unified model for API search results (Shikimori, AniList, Jikan, TMDB).
  * Used for display in search UI and for adding to local DB.
  */
@@ -35,4 +50,6 @@ data class ApiSearchResult(
     /** Сезон выхода сырым кодом: `WINTER`, `SPRING`, `SUMMER`, `FALL`. */
     val season: String? = null,
     val seasonYear: Int? = null,
+    /** TMDB/Kinopoisk id-пара для MOVIE/SERIES результатов. Пусто у аниме/манга-источников. */
+    val externalIds: ExternalIds = ExternalIds(),
 )

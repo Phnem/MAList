@@ -289,7 +289,8 @@ class HomeViewModel(
             val contentType = when (mediaType) {
                 com.example.myapplication.data.models.MediaType.ANIME -> AppContentType.ANIME
                 com.example.myapplication.data.models.MediaType.MANGA -> AppContentType.MANGA
-                com.example.myapplication.data.models.MediaType.TV_SERIES -> AppContentType.SERIES
+                com.example.myapplication.data.models.MediaType.MOVIE -> AppContentType.MOVIE
+                com.example.myapplication.data.models.MediaType.SERIES -> AppContentType.SERIES
             }
             val language = uiLanguage.value
             repository.searchApi(trimmed, contentType, language)
@@ -464,18 +465,12 @@ class HomeViewModel(
         return runCatching { AppLanguage.valueOf(raw) }.getOrElse { AppLanguage.EN }
     }
 
-    fun acceptUpdate(update: AnimeUpdate, ctx: Context) {
-        val anime = getAnimeById(update.animeId) ?: return
-        viewModelScope.launch {
-            localDataSource.updateAnime(anime.copy(episodes = update.newEpisodes))
-            localDataSource.removeUpdate(update.animeId)
-            cancelAnimeUpdateNotification(ctx, update.animeId)
-        }
-    }
-
+    /**
+     * Смахнули карточку «вышла новая серия». Серия уже проставлена автоматически
+     * при проверке — здесь только убираем плашку (и её пуш из шторки).
+     */
     fun dismissUpdate(update: AnimeUpdate, ctx: Context) {
         viewModelScope.launch {
-            localDataSource.addIgnored(update.animeId, update.newEpisodes)
             localDataSource.removeUpdate(update.animeId)
             cancelAnimeUpdateNotification(ctx, update.animeId)
         }

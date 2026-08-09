@@ -1,15 +1,12 @@
 package com.example.myapplication.media.ui
 
-import android.app.PictureInPictureParams
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
-import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
 import android.util.Log
-import android.util.Rational
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -89,7 +86,7 @@ import kotlin.math.abs
 /**
  * Header-aware remote playback using the same custom Exo controls as the local player.
  */
-class StreamPlayerActivity : ComponentActivity() {
+class StreamPlayerActivity : ComponentActivity(), PipHostActivity {
 
     private val mediaGateway: MediaGateway by inject()
     private val okHttpClient: OkHttpClient by inject()
@@ -103,6 +100,11 @@ class StreamPlayerActivity : ComponentActivity() {
     private var activeSeason: Int = 1
     private var activeEpisode: Int = 1
     private val pipState = mutableStateOf(false)
+    private val pipActions = PipActionsController(this)
+
+    override fun updatePipCommands(commands: PipPlaybackCommands?) {
+        pipActions.setCommands(commands)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -111,6 +113,7 @@ class StreamPlayerActivity : ComponentActivity() {
             InteractiveMediaPauseViewModel.factory(enrichmentCoordinator),
         )[InteractiveMediaPauseViewModel::class.java]
         enableEdgeToEdge()
+        pipActions.register()
 
         val legacyVideo = intent.getStringExtra(EXTRA_VIDEO_JSON)
             ?.let { runCatching { json.decodeFromString(VetroVideo.serializer(), it) }.getOrNull() }
@@ -193,6 +196,9 @@ class StreamPlayerActivity : ComponentActivity() {
                 var switchingTo by remember { mutableStateOf<Int?>(null) }
                 var failedSwitchTarget by remember { mutableStateOf<Int?>(null) }
                 var switchError by remember { mutableStateOf<String?>(null) }
+                // Играет ли сейчас — только для иконки в PiP-окне; сама поверхность следит за этим
+                // отдельно и своим состоянием ни с кем не делится.
+                var pipPlaying by remember { mutableStateOf(false) }
 
                 // Прогресс пишется под текущую серию и после переключения — тоже (onStop читает
                 // именно эти поля).
@@ -468,6 +474,10 @@ class StreamPlayerActivity : ComponentActivity() {
                         .setId("vetro-stream-${System.currentTimeMillis()}")
                         .build()
                     val listener = object : Player.Listener {
+                        override fun onIsPlayingChanged(playing: Boolean) {
+                            pipPlaying = playing
+                        }
+
                         override fun onPlayerError(error: PlaybackException) {
                             if (recoveryOwner === player) return
                             Log.w(TAG, "Playback failed: ${error.errorCodeName}")
@@ -539,6 +549,24 @@ class StreamPlayerActivity : ComponentActivity() {
                         if (activePlayer === player) activePlayer = null
                         player.release()
                     }
+                }
+
+                // В PiP-окне нашего оверлея нет, а серия здесь не элемент плейлиста ExoPlayer —
+                // «дальше» обязано идти тем же путём резолва, что и кнопка на экране.
+                LaunchedEffect(player, episode, switchingTo, availableEpisodes, pipPlaying) {
+                    updatePipCommands(
+                        PipPlaybackCommands(
+                            isPlaying = pipPlaying,
+                            hasPrevious = EpisodeRange.hasPrevious(episode) && switchingTo == null,
+                            hasNext = EpisodeRange.hasNext(episode, availableEpisodes) &&
+                                switchingTo == null,
+                            onPrevious = { switchToEpisode(EpisodeRange.previousOf(episode)) },
+                            onPlayPause = { if (player.isPlaying) player.pause() else player.play() },
+                            onNext = {
+                                switchToEpisode(EpisodeRange.nextOf(episode, availableEpisodes))
+                            },
+                        )
+                    )
                 }
 
                 Box(Modifier.fillMaxSize().background(Color.Black)) {
@@ -650,14 +678,12 @@ class StreamPlayerActivity : ComponentActivity() {
     }
 
     private fun enterPip() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        runCatching {
-            enterPictureInPictureMode(
-                PictureInPictureParams.Builder()
-                    .setAspectRatio(Rational(16, 9))
-                    .build()
-            )
-        }
+        pipActions.enterPip()
+    }
+
+    override fun onDestroy() {
+        pipActions.unregister()
+        super.onDestroy()
     }
 
     private fun persistActivePlayer() {

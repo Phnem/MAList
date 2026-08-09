@@ -222,14 +222,56 @@ private fun courEstimatedTotal(aired: Int): Int {
     return cours * 12
 }
 
-@OptIn(ExperimentalSharedTransitionApi::class, ExperimentalLayoutApi::class)
+/**
+ * Карточка в списке: тело [AnimeCardBody] плюс модификаторы shared-element для перехода
+ * в Details. Копия карточки в контекстном меню (долгое удержание) рисует ТО ЖЕ тело, но без
+ * этих модификаторов — ключ shared-element уже занят карточкой в списке, второй узел с тем же
+ * ключом Compose не разрешает.
+ */
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun SharedTransitionScope.OneUiAnimeCard(
     state: AnimeCardState,
     animatedVisibilityScope: AnimatedVisibilityScope,
     onClick: () -> Unit,
     onEditClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
+) {
+    AnimeCardBody(
+        state = state,
+        modifier = modifier.sharedBounds(
+            sharedContentState = rememberSharedContentState(key = "anime_${state.id}_bounds"),
+            animatedVisibilityScope = animatedVisibilityScope,
+            resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
+            clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(24.dp))
+        ),
+        posterModifier = Modifier
+            .sharedElement(
+                sharedContentState = rememberSharedContentState(key = "anime_${state.id}"),
+                animatedVisibilityScope = animatedVisibilityScope
+            )
+            .skipToLookaheadSize(),
+        onClick = onClick,
+        onLongClick = onLongClick,
+        onEditClick = onEditClick,
+    )
+}
+
+/**
+ * Тело карточки без привязки к shared-element и к списку.
+ *
+ * @param onClick null — карточка не реагирует на нажатия (копия в оверлее контекстного меню).
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun AnimeCardBody(
+    state: AnimeCardState,
+    modifier: Modifier = Modifier,
+    posterModifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
+    onEditClick: (() -> Unit)? = null,
 ) {
     val isDark = isAppInDarkTheme()
     // Рамка избранного — затухающая: золотая в левом верхнем углу и уходящая в прозрачность к
@@ -253,15 +295,17 @@ fun SharedTransitionScope.OneUiAnimeCard(
 
     Box(
         modifier = modifier
-            .sharedBounds(
-                sharedContentState = rememberSharedContentState(key = "anime_${state.id}_bounds"),
-                animatedVisibilityScope = animatedVisibilityScope,
-                resizeMode = SharedTransitionScope.ResizeMode.RemeasureToBounds,
-                clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(24.dp))
-            )
             .fillMaxWidth()
             .height(180.dp)
-            .fluidClickable(scaleDown = 0.975f, onClick = onClick)
+            .then(
+                if (onClick != null) {
+                    Modifier.fluidClickable(
+                        scaleDown = 0.975f,
+                        onLongClick = onLongClick,
+                        onClick = onClick,
+                    )
+                } else Modifier
+            )
             .shadow(
                 elevation = if (isDark) 8.dp else 4.dp,
                 shape = RoundedCornerShape(24.dp),
@@ -283,11 +327,7 @@ fun SharedTransitionScope.OneUiAnimeCard(
                 modifier = Modifier
                     .fillMaxHeight()
                     .aspectRatio(0.7f)
-                    .sharedElement(
-                        sharedContentState = rememberSharedContentState(key = "anime_${state.id}"),
-                        animatedVisibilityScope = animatedVisibilityScope
-                    )
-                    .skipToLookaheadSize()
+                    .then(posterModifier)
                     .clip(RoundedCornerShape(16.dp))
                     .background(if (isDark) Color(0xFF2C2C2C) else Color(0xFFE8E8E8)),
                 contentAlignment = Alignment.Center
@@ -467,7 +507,8 @@ fun SharedTransitionScope.OneUiAnimeCard(
                         )
                     }
                     FilledTonalButton(
-                        onClick = onEditClick,
+                        onClick = { onEditClick?.invoke() },
+                        enabled = onEditClick != null,
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(
                             horizontal = 16.dp,
                             vertical = 0.dp

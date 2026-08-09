@@ -59,6 +59,8 @@ import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.ViewCarousel
 import androidx.compose.material.icons.outlined.BrightnessAuto
 import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.DarkMode
@@ -76,6 +78,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -86,6 +89,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -95,6 +99,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -109,6 +114,7 @@ import com.example.myapplication.data.models.UiStrings
 import com.example.myapplication.network.AppContentType
 import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.ui.navigation.navigateToWelcome
+import com.example.myapplication.ui.shared.rememberDockAutoHide
 import com.example.myapplication.ui.shared.components.GlassMenuHeader
 import com.example.myapplication.ui.shared.components.GrabberReservedTop
 import com.example.myapplication.ui.shared.components.IosDialogAnimatedContent
@@ -164,7 +170,26 @@ fun SettingsScreen(
     navController: NavController,
     viewModel: SettingsViewModel,
     sharedTransitionScope: SharedTransitionScope,
-    animatedVisibilityScope: AnimatedVisibilityScope
+    animatedVisibilityScope: AnimatedVisibilityScope,
+    /**
+     * Что делает «назад». null — кнопки в шапке нет: экран показан страницей рабочей области,
+     * где уходить некуда, а системный Back перехватывает хозяин (TICKET-07).
+     */
+    onBack: (() -> Unit)? = null,
+    /** Резерв снизу под чужой док (рабочая область). 0 — экран сам себе хозяин. */
+    bottomInset: Dp = 0.dp,
+    /**
+     * Открыть панель подключения и синхронизации. Не-null только в рабочей области: там она
+     * уехала из верхнего дока сюда отдельным пунктом. В старой навигации панель по-прежнему
+     * висит в доке главной, и пункта здесь нет.
+     */
+    onOpenSyncPanel: (() -> Unit)? = null,
+    /** Сообщает наружу, что открыта шторка/диалог: хозяин прячет док. */
+    onOverlayVisibleChange: (Boolean) -> Unit = {},
+    /** Список скроллится: хозяин переводит стекло своего дока в экономный режим. */
+    onContentScrollChange: (Boolean) -> Unit = {},
+    /** Автоскрытие (D9): скролл вниз прячет док хозяина, скролл вверх возвращает. */
+    onDockVisibleChange: (Boolean) -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val isDark = isAppInDarkTheme()
@@ -204,10 +229,25 @@ fun SettingsScreen(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { viewModel.onReturnedFromInstallSettings(context) }
 
-    BackHandler(
-        enabled = showCloudSheet || showAiConnectSheet || showEnrichmentSheet || showContactSheet || showUpdateChangelogSheet || activePicker != null ||
-            uiState.showRepairDbLogDialog || uiState.showTitleDubbingNoAiDialog || showFdroidUpdateDialog || showGithubUpdatesEnableDialog,
-    ) {
+    val anyOverlayVisible = showCloudSheet || showAiConnectSheet || showEnrichmentSheet ||
+        showContactSheet || showUpdateChangelogSheet || activePicker != null ||
+        uiState.showRepairDbLogDialog || uiState.showTitleDubbingNoAiDialog ||
+        showFdroidUpdateDialog || showGithubUpdatesEnableDialog
+    LaunchedEffect(anyOverlayVisible) { onOverlayVisibleChange(anyOverlayVisible) }
+
+    // Автоскрытие и экономный режим стекла для дока рабочей области: он соседний узел и про
+    // скролл настроек сам не знает. Правило направления общее с главной (TICKET-04, D9).
+    val dockAutoHide = rememberDockAutoHide()
+    LaunchedEffect(dockAutoHide.visible) { onDockVisibleChange(dockAutoHide.visible) }
+    DisposableEffect(Unit) {
+        onDispose {
+            onOverlayVisibleChange(false)
+            onContentScrollChange(false)
+            onDockVisibleChange(true)
+        }
+    }
+
+    BackHandler(enabled = anyOverlayVisible) {
         when {
             showGithubUpdatesEnableDialog -> showGithubUpdatesEnableDialog = false
             showFdroidUpdateDialog -> showFdroidUpdateDialog = false
@@ -334,16 +374,25 @@ fun SettingsScreen(
                     .background(settingsBackground)
             ) {
                 val listState = rememberLazyListState()
+                val settingsScrollInProgress by remember {
+                    derivedStateOf { listState.isScrollInProgress }
+                }
+                LaunchedEffect(settingsScrollInProgress) {
+                    onContentScrollChange(settingsScrollInProgress)
+                }
 
                 LazyColumn(
                     state = listState,
                     modifier = Modifier
                         .fillMaxSize()
-                        .layerBackdrop(backdrop),
+                        // Строго ПОСЛЕ layerBackdrop: над узлом-провайдером бэкдропа лишних
+                        // модификаторов не заводим (правило кодовой базы).
+                        .layerBackdrop(backdrop)
+                        .nestedScroll(dockAutoHide.connection),
                     contentPadding = PaddingValues(
                         // Резерв под плавающую стеклянную шапку (§11): statusBar + пузырёк 48 + отступы.
                         top = statusBarTop + 76.dp,
-                        bottom = 120.dp,
+                        bottom = 120.dp + bottomInset,
                     ),
                     verticalArrangement = Arrangement.spacedBy(30.dp),
                 ) {
@@ -409,6 +458,27 @@ fun SettingsScreen(
                                         onClick = { performHaptic(view, "light"); showCloudSheet = true },
                                     )
                                 },
+                                *(if (onOpenSyncPanel != null) {
+                                    // Панель подключения: в рабочей области она уехала из
+                                    // верхнего дока сюда. Подписи зашиты рядом — в UiStrings
+                                    // свободных полей почти не осталось (252 из 254).
+                                    val ru = uiState.language == AppLanguage.RU
+                                    arrayOf<@Composable () -> Unit>({
+                                        IosRow(
+                                            title = if (ru) "Синхронизация" else "Sync",
+                                            subtitle = if (ru) {
+                                                "Аккаунты, списки и проверка новых серий"
+                                            } else {
+                                                "Accounts, lists and episode checks"
+                                            },
+                                            isDark = isDark,
+                                            icon = Icons.Filled.Sync,
+                                            iconWell = false,
+                                            showChevron = true,
+                                            onClick = { performHaptic(view, "light"); onOpenSyncPanel() },
+                                        )
+                                    })
+                                } else emptyArray()),
                                 {
                                     IosRow(
                                         title = enrichmentStrings.cardTitle,
@@ -569,6 +639,7 @@ fun SettingsScreen(
                                 onHideShareToggle = { performHaptic(view, "light"); viewModel.setDevHideShare(it) },
                                 onFpsOverlayToggle = { performHaptic(view, "light"); viewModel.setDevFpsOverlay(it) },
                                 onAdaptiveGlassToggle = { performHaptic(view, "light"); viewModel.setDevAdaptiveGlassScroll(it) },
+                                onSelectDockNavigationToggle = { performHaptic(view, "light"); viewModel.setDevSelectDockNavigation(it) },
                                 onGithubUpdatesToggle = { enabled ->
                                     performHaptic(view, "light")
                                     if (enabled) showGithubUpdatesEnableDialog = true
@@ -602,7 +673,7 @@ fun SettingsScreen(
                 GlassMenuHeader(
                     backdrop = backdrop,
                     title = strings.settingsScreenTitle,
-                    onBack = { navController.popBackStack() },
+                    onBack = onBack,
                     isDark = isDark,
                     contentColor = textC,
                     iconModifier = Modifier.sharedElement(
@@ -618,7 +689,7 @@ fun SettingsScreen(
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .padding(bottom = 24.dp, end = 24.dp)
+                        .padding(bottom = 24.dp + bottomInset, end = 24.dp)
                 ) {
                     // Тот же рецепт жидкого стекла, что у бегунка рейтинга: сэмплируем
                     // общий backdrop списка, слабый blur + крупная линза преломляют контент
@@ -834,6 +905,7 @@ private fun DeveloperGroups(
     onHideShareToggle: (Boolean) -> Unit,
     onFpsOverlayToggle: (Boolean) -> Unit,
     onAdaptiveGlassToggle: (Boolean) -> Unit,
+    onSelectDockNavigationToggle: (Boolean) -> Unit,
     onGithubUpdatesToggle: (Boolean) -> Unit,
     onExportLogs: () -> Unit,
     onExportPdf: () -> Unit,
@@ -883,6 +955,29 @@ private fun DeveloperGroups(
                         icon = Icons.Filled.Code,
                         iconBackground = devIcon,
                         trailing = { IosSwitch(checked = uiState.devAdaptiveGlassScroll, onCheckedChange = onAdaptiveGlassToggle) },
+                    )
+                },
+                {
+                    // Подписи зашиты здесь, а не в UiStrings: там 252 поля из 254 допустимых
+                    // (за пределом RELEASE падает с VerifyError в clinit), а тумблер временный —
+                    // уедет вместе со старым доком.
+                    val ru = strings.languageName == "RU"
+                    IosRow(
+                        title = if (ru) "Навигация свайпом" else "Swipe navigation",
+                        subtitle = if (ru) {
+                            "Док-селектор и пять страниц вместо открытия окон"
+                        } else {
+                            "Select dock with five pages instead of opening screens"
+                        },
+                        isDark = isDark,
+                        icon = Icons.Filled.ViewCarousel,
+                        iconBackground = devIcon,
+                        trailing = {
+                            IosSwitch(
+                                checked = uiState.devSelectDockNavigation,
+                                onCheckedChange = onSelectDockNavigationToggle,
+                            )
+                        },
                     )
                 },
                 {

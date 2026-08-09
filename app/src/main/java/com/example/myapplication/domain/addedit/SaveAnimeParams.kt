@@ -37,5 +37,9 @@ data class SaveAnimeParams(
     val shikimoriId: Int? = null,
     val anilistNotFoundAt: Long? = null,
     val malNotFoundAt: Long? = null,
-    val shikimoriNotFoundAt: Long? = null
+    val shikimoriNotFoundAt: Long? = null,
+    val tmdbId: Int? = null,
+    val kinopoiskId: Int? = null,
+    val tmdbNotFoundAt: Long? = null,
+    val kinopoiskNotFoundAt: Long? = null
 )

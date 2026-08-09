@@ -113,6 +113,7 @@ private fun mergeSettingsUi(
         autoSkipSegments = prefs[LocalPlayerViewModel.AUTO_SKIP_KEY] ?: false,
         autoNextEpisode = prefs[LocalPlayerViewModel.AUTO_NEXT_KEY] ?: true,
         devAdaptiveGlassScroll = prefs[DevPreferencesKeys.ADAPTIVE_GLASS_SCROLL] ?: false,
+        devSelectDockNavigation = prefs[DevPreferencesKeys.SELECT_DOCK_NAVIGATION] ?: false,
         devGithubUpdatesEnabled = githubUpdatesEnabled,
         isExportingLogs = t.isExportingLogs,
         isExportingPdf = t.isExportingPdf,
@@ -327,6 +328,12 @@ class SettingsViewModel(
     fun setDevAdaptiveGlassScroll(enabled: Boolean) {
         viewModelScope.launch {
             settingsDataStore.edit { it[DevPreferencesKeys.ADAPTIVE_GLASS_SCROLL] = enabled }
+        }
+    }
+
+    fun setDevSelectDockNavigation(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsDataStore.edit { it[DevPreferencesKeys.SELECT_DOCK_NAVIGATION] = enabled }
         }
     }
 

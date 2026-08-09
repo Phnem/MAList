@@ -51,6 +51,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
@@ -71,7 +72,19 @@ fun InspectScreen(
     navController: NavController,
     viewModel: InspectViewModel,
     sharedTransitionScope: SharedTransitionScope,
-    animatedVisibilityScope: AnimatedVisibilityScope
+    animatedVisibilityScope: AnimatedVisibilityScope,
+    /**
+     * Что делает «назад». null — кнопки в шапке нет: экран показан страницей рабочей области,
+     * где уходить некуда, а системный Back перехватывает хозяин (TICKET-07).
+     */
+    onBack: (() -> Unit)? = null,
+    /**
+     * Промо «подключить ИИ». null — открыть маршрут настроек (старая навигация); страница
+     * рабочей области передаёт «перелистни на Настройки».
+     */
+    onOpenSettings: (() -> Unit)? = null,
+    /** Резерв снизу под чужой док (рабочая область). 0 — экран сам себе хозяин. */
+    bottomInset: Dp = 0.dp,
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -158,9 +171,11 @@ fun InspectScreen(
                         InspectHeader(
                             toolbarTitle = strings.inspectVisualSearchToolbarTitle,
                             brandLabel = strings.appName.uppercase(),
-                            onBack = {
-                                performHaptic(view, "light")
-                                navController.popBackStack()
+                            onBack = onBack?.let { back ->
+                                {
+                                    performHaptic(view, "light")
+                                    back()
+                                }
                             },
                             backContentDescription = strings.inspectBack,
                             modifier = Modifier.padding(horizontal = 8.dp)
@@ -195,7 +210,9 @@ fun InspectScreen(
                                 buttonLabel = aiConnectStrings.connectButton,
                                 onOpenAiConnect = {
                                     performHaptic(view, "light")
-                                    navController.navigateToSettings()
+                                    // В рабочей области настройки — соседняя страница, а не
+                                    // маршрут: push поверх пейджера увёл бы из области целиком.
+                                    onOpenSettings?.invoke() ?: navController.navigateToSettings()
                                 },
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -306,7 +323,7 @@ fun InspectScreen(
                                         .zIndex(0f)
                                         .fillMaxWidth()
                                         .padding(horizontal = 16.dp)
-                                        .padding(bottom = 88.dp, top = 10.dp)
+                                        .padding(bottom = 88.dp + bottomInset, top = 10.dp)
                                 )
                                 Box(
                                     modifier = Modifier
@@ -400,7 +417,9 @@ fun InspectScreen(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .navigationBarsPadding()
-                            .padding(bottom = 16.dp)
+                            // Внутренний док режимов встаёт НАД доком рабочей области: оба
+                            // прижаты к низу, и без резерва они наезжали бы друг на друга.
+                            .padding(bottom = 16.dp + bottomInset)
                             .zIndex(3f),
                     )
                 }

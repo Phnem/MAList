@@ -23,7 +23,8 @@ import androidx.compose.ui.unit.dp
 fun InspectHeader(
     toolbarTitle: String,
     brandLabel: String,
-    onBack: () -> Unit,
+    /** null — кнопки «назад» нет: экран показан страницей рабочей области, уходить некуда. */
+    onBack: (() -> Unit)?,
     backContentDescription: String,
     modifier: Modifier = Modifier
 ) {
@@ -32,24 +33,26 @@ fun InspectHeader(
             .fillMaxWidth()
             .padding(top = 8.dp, bottom = 4.dp)
     ) {
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterStart)
-                .padding(start = 4.dp)
-                .size(48.dp)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = onBack
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = backContentDescription,
-                tint = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.size(24.dp)
-            )
+        if (onBack != null) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .padding(start = 4.dp)
+                    .size(48.dp)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onBack
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = backContentDescription,
+                    tint = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
         }
         Text(
             text = toolbarTitle,

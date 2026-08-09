@@ -225,6 +225,9 @@ dependencies {
 
     // Test
     testImplementation(libs.junit)
+    // JVM SQLite driver — прогон SQLDelight-миграций в JUnit-тестах (не android-driver, тому
+    // нужен Android runtime).
+    testImplementation(libs.sqldelight.sqlite.driver)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.compose.bom))

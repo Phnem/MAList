@@ -87,10 +87,6 @@
             android:supportsPictureInPicture="true"
             android:theme="@style/Theme.MyApplication" />
 
-        <receiver
-            android:name="com.example.myapplication.receiver.AnimeUpdateReceiver"
-            android:exported="false" />
-
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

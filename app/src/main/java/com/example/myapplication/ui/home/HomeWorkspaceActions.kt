@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material.icons.rounded.QueryStats
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -30,8 +31,21 @@ import com.example.myapplication.isAppInDarkTheme
 import com.example.myapplication.ui.shared.theme.BrandBlue
 import com.example.myapplication.ui.shared.theme.BrandRed
 
+/** Что делает средняя кнопка верхнего дока. */
+enum class TopDockMiddleAction {
+    /** Старая навигация: панель подключения и обновлений. */
+    SYNC_PANEL,
+
+    /** Рабочая область: статистика (панель подключения переехала в настройки). */
+    STATS,
+}
+
 /**
  * Sort + notifications + media-type filter actions for workspace header and glass dock.
+ *
+ * В рабочей области ([middleAction] = [TopDockMiddleAction.STATS]) средняя кнопка открывает
+ * статистику: панель подключения оттуда переехала отдельным пунктом в настройки, а статистика
+ * осталась шторкой и ей нужна точка входа.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,6 +59,8 @@ fun WorkspaceSortNotificationActions(
     dockButtonBackground: Color,
     useDockSizing: Boolean,
     modifier: Modifier = Modifier,
+    middleAction: TopDockMiddleAction = TopDockMiddleAction.SYNC_PANEL,
+    onOpenStats: () -> Unit = {},
 ) {
     // Иконки дока — ярче/белее: чистый белый на полной непрозрачности в тёмной теме.
     val iconTint = if (isAppInDarkTheme()) Color.White else MaterialTheme.colorScheme.onSurface
@@ -80,7 +96,8 @@ fun WorkspaceSortNotificationActions(
         BadgedBox(
             modifier = notifModifier,
             badge = {
-                if (updatesCount > 0) {
+                // Счётчик обновлений относится к панели подключения; у статистики его нет.
+                if (middleAction == TopDockMiddleAction.SYNC_PANEL && updatesCount > 0) {
                     Badge(
                         containerColor = BrandRed,
                         contentColor = Color.White,
@@ -96,12 +113,21 @@ fun WorkspaceSortNotificationActions(
             },
         ) {
             IconButton(
-                onClick = onOpenNotifications,
+                onClick = when (middleAction) {
+                    TopDockMiddleAction.SYNC_PANEL -> onOpenNotifications
+                    TopDockMiddleAction.STATS -> onOpenStats
+                },
                 modifier = if (useDockSizing) Modifier.fillMaxSize() else Modifier,
             ) {
                 Icon(
-                    imageVector = HeroiconsRectangleStack,
-                    contentDescription = strings.cdNotifications,
+                    imageVector = when (middleAction) {
+                        TopDockMiddleAction.SYNC_PANEL -> HeroiconsRectangleStack
+                        TopDockMiddleAction.STATS -> Icons.Rounded.QueryStats
+                    },
+                    contentDescription = when (middleAction) {
+                        TopDockMiddleAction.SYNC_PANEL -> strings.cdNotifications
+                        TopDockMiddleAction.STATS -> strings.statsTitle
+                    },
                     tint = iconTint,
                 )
             }

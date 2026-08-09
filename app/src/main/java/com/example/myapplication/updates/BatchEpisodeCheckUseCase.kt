@@ -36,8 +36,14 @@ class BatchEpisodeCheckUseCase(
 ) {
 
     /**
-     * Полный проход: детект → фильтр игнора → merge с текущими → персист.
-     * @return только НОВЫЕ предложения (их нужно показать в системных уведомлениях).
+     * Полный проход: детект → авто-применение → merge с текущими плашками → персист.
+     *
+     * Новые серии проставляются в коллекцию САМИ (подтверждение пользователя больше
+     * не спрашивается). Строки `anime_update` остаются как лента уведомлений «вышла
+     * новая серия»: они живут, пока пользователь не смахнёт карточку, и показывают
+     * «было → стало».
+     *
+     * @return только НОВЫЕ события (их нужно показать в системных уведомлениях).
      */
     suspend fun detectAndStore(language: AppLanguage): List<AnimeUpdate> {
         val animeOnly = localDataSource.getAllAnimeList()
@@ -49,26 +55,35 @@ class BatchEpisodeCheckUseCase(
         runCatching { localDataSource.setAiringProgress(detected.airing) }
             .onFailure { Log.w(TAG, "setAiringProgress failed: ${it.message}") }
 
-        val candidates = detected.updates
-        val ignored = localDataSource.getIgnoredMap()
-        val fresh = candidates
-            .filter { ignored[it.animeId] != it.newEpisodes }
-            .distinctBy { it.animeId }
         val existing = localDataSource.getUpdates()
-        val localById = animeOnly.associateBy { it.id }
+        val fresh = detected.updates
+            .distinctBy { it.animeId }
+            // Уже отмеченное этим же проходом/прошлым — не событие: показывать нечего.
+            .filter { f -> existing.none { it.animeId == f.animeId && it.newEpisodes == f.newEpisodes } }
 
-        // Свежий результат авторитетен; старые записи держим, только пока они всё ещё
-        // актуальны (серий действительно больше) и не перекрыты свежим детектом/игнором.
+        applyAutomatically(fresh)
+
+        // Свежее событие вытесняет прошлое по тому же тайтлу; остальные плашки держим,
+        // пока пользователь их не смахнёт (с ограничением на размер ленты).
         val freshIds = fresh.map { it.animeId }.toSet()
-        val kept = existing.filter { u ->
-            u.animeId !in freshIds &&
-                ignored[u.animeId] != u.newEpisodes &&
-                (localById[u.animeId]?.episodes ?: Int.MAX_VALUE) < u.newEpisodes
-        }
-        localDataSource.setUpdates(fresh + kept)
+        val kept = existing.filter { it.animeId !in freshIds }
+        localDataSource.setUpdates((fresh + kept).take(MAX_UPDATE_ROWS))
 
-        return fresh.filter { f ->
-            existing.none { it.animeId == f.animeId && it.newEpisodes == f.newEpisodes }
+        return fresh
+    }
+
+    /**
+     * Авто-принятие: счётчик серий в коллекции подтягивается к вышедшему.
+     * Ошибка по одной записи не рвёт проход — остальные всё равно применяем.
+     */
+    private suspend fun applyAutomatically(updates: List<AnimeUpdate>) {
+        for (update in updates) {
+            runCatching {
+                val anime = localDataSource.getAnimeById(update.animeId) ?: return@runCatching
+                if (anime.episodes >= update.newEpisodes) return@runCatching
+                localDataSource.updateAnime(anime.copy(episodes = update.newEpisodes))
+                Log.d(TAG, "Auto-applied: \"${anime.title}\" ${anime.episodes} -> ${update.newEpisodes}")
+            }.onFailure { Log.w(TAG, "Auto-apply failed for ${update.animeId}: ${it.message}") }
         }
     }
 
@@ -765,5 +780,7 @@ class BatchEpisodeCheckUseCase(
         private const val ANILIBRIA_MAX_LOOKUPS = 10
         /** Сколько держим закрытую плашку «сезон вышел полностью» после завершения. */
         private const val FINISHED_ROW_TTL_MS = 14L * 24L * 60L * 60L * 1000L
+        /** Потолок ленты «вышли новые серии»: старые события вытесняются свежими. */
+        private const val MAX_UPDATE_ROWS = 30
     }
 }

@@ -12,6 +12,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -34,9 +35,15 @@ import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.example.myapplication.localplayer.model.LocalEpisode
+import com.example.myapplication.media.download.DownloadedEpisodeSkip
+import com.example.myapplication.media.download.DownloadedSkipStore
+import com.example.myapplication.media.ui.PipHostActivity
+import com.example.myapplication.media.ui.PipPlaybackCommands
 import com.example.myapplication.ui.shared.theme.MotionTokens
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 import kotlin.math.max
 
 /** Один вариант аудиодорожки для выбора (например «Русский», «English», «Japanese»). */
@@ -112,10 +119,11 @@ fun PlayerScreen(
     // не в EpisodePlaybackStore: до кросс-сессионного хранения это не требование тикета.
     var preferredAudioLabel by remember { mutableStateOf<String?>(null) }
     var speed by remember { mutableStateOf(1f) }
+    // Положение кадра переживает переключение серии: сезон смотрят одним подряд, и разворачивать
+    // кадр заново на каждой серии — работа, которую пользователь уже сделал. Пересчёт под новое
+    // соотношение сторон делает cropScale ниже, так что перенос выбора безопасен и для серий с
+    // другой геометрией.
     var fit by remember { mutableStateOf(VideoFit.ORIGINAL) }
-    // Новая серия не должна открываться обрезанной — положение кадра переживать переключение не
-    // обязано.
-    androidx.compose.runtime.LaunchedEffect(currentIndex) { fit = VideoFit.ORIGINAL }
     androidx.compose.runtime.LaunchedEffect(autoNextEnabled) {
         // Выключенная настройка = остановиться на последнем кадре серии, а не поехать дальше по
         // плейлисту. Кнопка «дальше» при этом продолжает работать.
@@ -140,6 +148,11 @@ fun PlayerScreen(
 
     val currentEpisode = episodes.getOrNull(currentIndex)
     val currentMediaId = currentEpisode?.documentUri.orEmpty()
+    // Тайминги, сохранённые рядом с серией при скачивании (jut.su/AniLiberty). Без них локальному
+    // плееру остаётся только сетевой AniSkip, то есть офлайн — ничего.
+    val storedSkip by produceState<DownloadedEpisodeSkip?>(null, currentMediaId) {
+        value = withContext(Dispatchers.IO) { DownloadedSkipStore.loadFor(currentMediaId) }
+    }
     val skipPlayback = rememberMediaSkipPlayback(
         player = exoPlayer,
         mediaId = currentMediaId,
@@ -150,6 +163,9 @@ fun PlayerScreen(
         durationMs = duration,
         positionMs = position,
         autoSkipEnabled = autoSkipEnabled,
+        exactTimestamps = storedSkip?.timestamps.orEmpty(),
+        exactOrigin = storedSkip?.origin,
+        reference = storedSkip?.reference,
     )
     val activeSegment = skipPlayback.activeSegment
 
@@ -219,22 +235,41 @@ fun PlayerScreen(
         onDispose { session.release() }
     }
 
-    // PiP: отдаём плеер Activity, чтобы её кнопки управления слали команды сюда.
-    val pipActivity = remember(context) {
-        var c: android.content.Context? = context
-        var found: LocalPlayerActivity? = null
-        while (c is android.content.ContextWrapper) {
-            if (c is LocalPlayerActivity) { found = c; break }
-            c = c.baseContext
+    // PiP: в окне «картинка в картинке» наш оверлей скрыт, поэтому перемотку по сериям и паузу
+    // рисует система — по этому описанию состояния.
+    val pipHost = remember(context) {
+        var candidate: android.content.Context? = context
+        var found: PipHostActivity? = null
+        while (candidate is android.content.ContextWrapper) {
+            if (candidate is PipHostActivity) { found = candidate; break }
+            candidate = candidate.baseContext
         }
         found
     }
-    DisposableEffect(exoPlayer, pipActivity) {
-        pipActivity?.attachPipPlayer(exoPlayer)
-        onDispose { pipActivity?.attachPipPlayer(null) }
+    androidx.compose.runtime.LaunchedEffect(
+        pipHost,
+        exoPlayer,
+        isPlaying,
+        currentIndex,
+        episodes.size,
+    ) {
+        pipHost?.updatePipCommands(
+            PipPlaybackCommands(
+                isPlaying = isPlaying,
+                hasPrevious = currentIndex > 0,
+                hasNext = currentIndex < episodes.lastIndex,
+                // Кнопка «следующая» в PiP значит «включи следующую»: при выключенном автопереходе
+                // плеер остановлен на последнем кадре, и одна перемотка оставила бы его на паузе.
+                onPrevious = { exoPlayer.seekToPreviousMediaItem(); exoPlayer.play() },
+                onPlayPause = { if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play() },
+                onNext = { exoPlayer.seekToNextMediaItem(); exoPlayer.play() },
+            )
+        )
     }
-    androidx.compose.runtime.LaunchedEffect(isPlaying, pipActivity) {
-        pipActivity?.refreshPipParams()
+    // Уход с экрана плеера снимает кнопки: Activity живёт дольше, и осиротевшие команды дёргали бы
+    // отпущенный ExoPlayer.
+    DisposableEffect(pipHost) {
+        onDispose { pipHost?.updatePipCommands(null) }
     }
 
     // Опрос позиции (дешевле, чем per-frame; хватает для плавной полосы).

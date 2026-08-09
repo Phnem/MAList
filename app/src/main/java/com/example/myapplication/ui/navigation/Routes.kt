@@ -38,6 +38,15 @@ fun NavDestination?.isSplashDestination(): Boolean {
         route.contains("SplashRoute")
 }
 
+/**
+ * Граф дошёл до основного экрана и на него можно push'ить [DetailsRoute]
+ * (тап по пушу о новой серии). На сплэше и логине навигация ещё бессмысленна.
+ */
+fun NavDestination?.isDeepLinkReady(): Boolean {
+    val route = this?.route ?: return false
+    return !isSplashDestination() && !route.contains("WelcomeRoute")
+}
+
 /** Определяет, что destination — [DetailsRoute] (для эффекта «вдавливания» Home под деталями). */
 fun NavDestination?.isDetailsDestination(): Boolean {
     val route = this?.route ?: return false

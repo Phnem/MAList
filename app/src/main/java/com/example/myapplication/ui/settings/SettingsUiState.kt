@@ -23,6 +23,8 @@ data class SettingsUiState(
     /** Включать следующую серию по концу текущей. По умолчанию ВКЛ — см. `AUTO_NEXT_KEY`. */
     val autoNextEpisode: Boolean = true,
     val devAdaptiveGlassScroll: Boolean = false,
+    /** Новая корневая навигация (док-селектор + рабочая область из пяти страниц). */
+    val devSelectDockNavigation: Boolean = false,
     val devGithubUpdatesEnabled: Boolean = false,
     val isExportingLogs: Boolean = false,
     val isExportingPdf: Boolean = false,

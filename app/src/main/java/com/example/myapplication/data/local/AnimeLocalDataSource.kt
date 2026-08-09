@@ -53,7 +53,11 @@ class AnimeLocalDataSource(
                             anilistNotFoundAt = row.anilist_not_found_at,
                             malNotFoundAt = row.mal_not_found_at,
                             shikimoriNotFoundAt = row.shikimori_not_found_at,
-                            mediaType = runCatching { MediaType.valueOf(row.mediaType) }.getOrDefault(MediaType.ANIME)
+                            mediaType = MediaType.fromPersistedValue(row.mediaType),
+                            tmdbId = row.tmdb_id?.toInt(),
+                            kinopoiskId = row.kinopoisk_id?.toInt(),
+                            tmdbNotFoundAt = row.tmdb_not_found_at,
+                            kinopoiskNotFoundAt = row.kinopoisk_not_found_at
                         )
                     }
                 }
@@ -82,7 +86,11 @@ class AnimeLocalDataSource(
                             anilistNotFoundAt = row.anilist_not_found_at,
                             malNotFoundAt = row.mal_not_found_at,
                             shikimoriNotFoundAt = row.shikimori_not_found_at,
-                            mediaType = runCatching { MediaType.valueOf(row.mediaType) }.getOrDefault(MediaType.ANIME)
+                            mediaType = MediaType.fromPersistedValue(row.mediaType),
+                            tmdbId = row.tmdb_id?.toInt(),
+                            kinopoiskId = row.kinopoisk_id?.toInt(),
+                            tmdbNotFoundAt = row.tmdb_not_found_at,
+                            kinopoiskNotFoundAt = row.kinopoisk_not_found_at
                         )
                     }
                 }
@@ -122,7 +130,11 @@ class AnimeLocalDataSource(
                     shikimoriId = row.shikimori_id,
                     anilistNotFoundAt = row.anilist_not_found_at,
                     shikimoriNotFoundAt = row.shikimori_not_found_at,
-                    mediaType = row.mediaType
+                    mediaType = row.mediaType,
+                    tmdbId = row.tmdb_id,
+                    kinopoiskId = row.kinopoisk_id,
+                    tmdbNotFoundAt = row.tmdb_not_found_at,
+                    kinopoiskNotFoundAt = row.kinopoisk_not_found_at
                 )
             }
     }
@@ -150,7 +162,11 @@ class AnimeLocalDataSource(
                     shikimoriId = row.shikimori_id,
                     anilistNotFoundAt = row.anilist_not_found_at,
                     shikimoriNotFoundAt = row.shikimori_not_found_at,
-                    mediaType = row.mediaType
+                    mediaType = row.mediaType,
+                    tmdbId = row.tmdb_id,
+                    kinopoiskId = row.kinopoisk_id,
+                    tmdbNotFoundAt = row.tmdb_not_found_at,
+                    kinopoiskNotFoundAt = row.kinopoisk_not_found_at
                 )
             }
     }
@@ -179,7 +195,11 @@ class AnimeLocalDataSource(
         anilistNotFoundAt: Long? = null,
         malNotFoundAt: Long? = null,
         shikimoriNotFoundAt: Long? = null,
-        mediaType: String = MediaType.ANIME.name
+        mediaType: String = MediaType.ANIME.name,
+        tmdbId: Long? = null,
+        kinopoiskId: Long? = null,
+        tmdbNotFoundAt: Long? = null,
+        kinopoiskNotFoundAt: Long? = null
     ): Anime = Anime(
         id = id,
         title = title,
@@ -200,7 +220,11 @@ class AnimeLocalDataSource(
         anilistNotFoundAt = anilistNotFoundAt,
         malNotFoundAt = malNotFoundAt,
         shikimoriNotFoundAt = shikimoriNotFoundAt,
-        mediaType = runCatching { MediaType.valueOf(mediaType) }.getOrDefault(MediaType.ANIME)
+        mediaType = MediaType.fromPersistedValue(mediaType),
+        tmdbId = tmdbId?.toInt(),
+        kinopoiskId = kinopoiskId?.toInt(),
+        tmdbNotFoundAt = tmdbNotFoundAt,
+        kinopoiskNotFoundAt = kinopoiskNotFoundAt
     )
 
     suspend fun insertAnime(anime: Anime) {
@@ -230,7 +254,11 @@ class AnimeLocalDataSource(
                 deletedAt = null,
                 mediaType = anime.mediaType.name,
                 title_en = anime.titleEn,
-                title_ru = anime.titleRu
+                title_ru = anime.titleRu,
+                tmdb_id = anime.tmdbId?.toLong(),
+                kinopoisk_id = anime.kinopoiskId?.toLong(),
+                tmdb_not_found_at = anime.tmdbNotFoundAt,
+                kinopoisk_not_found_at = anime.kinopoiskNotFoundAt
             )
 
             // Insert tags
@@ -268,6 +296,10 @@ class AnimeLocalDataSource(
                 encryptionIv = null,
                 deletedAt = null,
                 mediaType = anime.mediaType.name,
+                tmdb_id = anime.tmdbId?.toLong(),
+                kinopoisk_id = anime.kinopoiskId?.toLong(),
+                tmdb_not_found_at = anime.tmdbNotFoundAt,
+                kinopoisk_not_found_at = anime.kinopoiskNotFoundAt,
                 id = anime.id
             )
 
@@ -319,7 +351,11 @@ class AnimeLocalDataSource(
                     deletedAt = null,
                     mediaType = anime.mediaType.name,
                     title_en = anime.titleEn,
-                    title_ru = anime.titleRu
+                    title_ru = anime.titleRu,
+                    tmdb_id = anime.tmdbId?.toLong(),
+                    kinopoisk_id = anime.kinopoiskId?.toLong(),
+                    tmdb_not_found_at = anime.tmdbNotFoundAt,
+                    kinopoisk_not_found_at = anime.kinopoiskNotFoundAt
                 )
                 anime.tags.forEach { tag ->
                     db().animeQueries.insertAnimeTag(
@@ -614,6 +650,42 @@ class AnimeLocalDataSource(
     suspend fun markShikimoriNotFound(animeId: String, atMillis: Long) {
         db().animeQueries.markShikimoriNotFound(
             shikimori_not_found_at = atMillis,
+            updatedAt = System.currentTimeMillis(),
+            id = animeId
+        )
+        mirrorCoordinator.requestExportIfEnabled()
+    }
+
+    suspend fun setTmdbId(animeId: String, tmdbId: Int) {
+        db().animeQueries.setTmdbId(
+            tmdb_id = tmdbId.toLong(),
+            updatedAt = System.currentTimeMillis(),
+            id = animeId
+        )
+        mirrorCoordinator.requestExportIfEnabled()
+    }
+
+    suspend fun setKinopoiskId(animeId: String, kinopoiskId: Int) {
+        db().animeQueries.setKinopoiskId(
+            kinopoisk_id = kinopoiskId.toLong(),
+            updatedAt = System.currentTimeMillis(),
+            id = animeId
+        )
+        mirrorCoordinator.requestExportIfEnabled()
+    }
+
+    suspend fun markTmdbNotFound(animeId: String, atMillis: Long) {
+        db().animeQueries.markTmdbNotFound(
+            tmdb_not_found_at = atMillis,
+            updatedAt = System.currentTimeMillis(),
+            id = animeId
+        )
+        mirrorCoordinator.requestExportIfEnabled()
+    }
+
+    suspend fun markKinopoiskNotFound(animeId: String, atMillis: Long) {
+        db().animeQueries.markKinopoiskNotFound(
+            kinopoisk_not_found_at = atMillis,
             updatedAt = System.currentTimeMillis(),
             id = animeId
         )

@@ -6,7 +6,6 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.example.myapplication.data.local.AnimeLocalDataSource
 import com.example.myapplication.updates.BatchEpisodeCheckUseCase
 import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.notifications.AnimeNotifier
@@ -22,7 +21,6 @@ class AnimeUpdateWorker(
     workerParams: WorkerParameters
 ) : CoroutineWorker(context, workerParams), KoinComponent {
 
-    private val localDataSource: AnimeLocalDataSource by inject()
     private val notifier: AnimeNotifier by inject()
     private val batchEpisodeCheckUseCase: BatchEpisodeCheckUseCase by inject()
     private val seasonEpisodesResolver: com.example.myapplication.domain.seasons.SeasonEpisodesResolver by inject()
@@ -43,8 +41,7 @@ class AnimeUpdateWorker(
             // открыто — обновления уже показываются in-app стопкой, дублировать шторкой
             // не нужно (иначе уведомление «мигает» при каждом взаимодействии).
             if (newlyDetected.isNotEmpty() && !isAppInForeground()) {
-                newlyDetected.forEach { update -> notifier.showUpdateNotification(update, language) }
-                notifier.refreshGroupSummary(localDataSource.getUpdates().size, language)
+                notifier.showUpdateNotifications(newlyDetected, language)
             }
             // Серии по сезонам: дорезолвливаем протухшие записи тем же фоновым проходом.
             // Ошибки не роняют воркер — проверка новых серий важнее.

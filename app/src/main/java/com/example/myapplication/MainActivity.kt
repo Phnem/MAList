@@ -41,7 +41,12 @@ import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.data.models.AppTheme
 import com.example.myapplication.sync.ExternalListSyncCoordinator
 import com.example.myapplication.ui.navigation.AppNavGraph
+import com.example.myapplication.ui.navigation.isDeepLinkReady
 import com.example.myapplication.ui.navigation.isSplashDestination
+import com.example.myapplication.ui.navigation.navigateToDetails
+import com.example.myapplication.notifications.ACTION_OPEN_ANIME
+import com.example.myapplication.notifications.EXTRA_OPEN_ANIME_ID
+import kotlinx.coroutines.flow.MutableStateFlow
 import com.example.myapplication.sync.supabase.SupabaseAuthDeeplinkHandler
 import io.github.jan.supabase.SupabaseClient
 import com.example.myapplication.ui.settings.UpdateChangelogSheet
@@ -57,6 +62,9 @@ class MainActivity : ComponentActivity() {
 
     private val externalListSyncCoordinator: ExternalListSyncCoordinator by inject()
     private val supabaseClient: SupabaseClient by inject()
+
+    /** id тайтла из тапа по пушу «вышла новая серия»; открываем Details, когда граф готов. */
+    private val pendingAnimeId = MutableStateFlow<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -78,6 +86,7 @@ class MainActivity : ComponentActivity() {
         }
         handleSupabaseAuthDeeplink(intent)
         handleExternalListOAuthIntent(intent)
+        handleOpenAnimeIntent(intent)
 
         setContent {
             val isSystemDark = isSystemInDarkTheme()
@@ -112,6 +121,17 @@ class MainActivity : ComponentActivity() {
                 val navController = rememberNavController()
                 val navEntry by navController.currentBackStackEntryAsState()
                 val splashDestId = navEntry?.destination?.id
+
+                // Тап по пушу «вышла новая серия» → Details тайтла. Ждём, пока граф
+                // уйдёт со сплэша/логина: раньше push'ить Details некуда.
+                val openAnimeId by pendingAnimeId.collectAsStateWithLifecycle()
+                LaunchedEffect(openAnimeId, splashDestId) {
+                    val animeId = openAnimeId ?: return@LaunchedEffect
+                    val destination = navEntry?.destination
+                    if (!destination.isDeepLinkReady()) return@LaunchedEffect
+                    pendingAnimeId.value = null
+                    navController.navigateToDetails(animeId)
+                }
 
                 var showStartupUpdateOverlay by remember { mutableStateOf(false) }
                 LaunchedEffect(startupOverlayEligible, splashDestId) {
@@ -205,6 +225,16 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         handleSupabaseAuthDeeplink(intent)
         handleExternalListOAuthIntent(intent)
+        handleOpenAnimeIntent(intent)
+    }
+
+    /** Тап по пушу о новой серии: запоминаем id, навигация — когда NavHost дойдёт до Home. */
+    private fun handleOpenAnimeIntent(intent: Intent?) {
+        if (intent?.action != ACTION_OPEN_ANIME) return
+        val animeId = intent.getStringExtra(EXTRA_OPEN_ANIME_ID) ?: return
+        pendingAnimeId.value = animeId
+        // Иначе поворот экрана/возврат в активити повторно открыл бы тот же тайтл.
+        intent.removeExtra(EXTRA_OPEN_ANIME_ID)
     }
 
     private fun handleSupabaseAuthDeeplink(intent: Intent?) {

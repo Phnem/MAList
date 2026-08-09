@@ -1,23 +1,13 @@
 package com.example.myapplication.localplayer.ui
 
-import android.app.PendingIntent
-import android.app.PictureInPictureParams
-import android.app.RemoteAction
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
-import android.graphics.drawable.Icon
-import android.os.Build
 import android.os.Bundle
-import android.util.Rational
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.State
-import androidx.core.content.ContextCompat
-import androidx.media3.common.Player
 import androidx.lifecycle.ViewModelProvider
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -71,6 +61,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.myapplication.localplayer.model.LocalEpisode
 import com.example.myapplication.domain.enrichment.CollectionEnrichmentCoordinator
 import com.example.myapplication.domain.enrichment.InteractiveMediaPauseViewModel
+import com.example.myapplication.media.ui.PipActionsController
+import com.example.myapplication.media.ui.PipHostActivity
+import com.example.myapplication.media.ui.PipPlaybackCommands
 import com.example.myapplication.ui.shared.theme.OneUiTheme
 import com.example.myapplication.ui.shared.theme.SnProFamily
 import org.koin.androidx.compose.koinViewModel
@@ -85,24 +78,16 @@ import java.util.Locale
  * Удаление фичи: убрать этот Activity из манифеста, удалить пакет localplayer, снять DI-строки и
  * кнопку-иконку в DetailsScreen. Больше нигде состояния нет.
  */
-class LocalPlayerActivity : ComponentActivity() {
+class LocalPlayerActivity : ComponentActivity(), PipHostActivity {
 
     private val enrichmentCoordinator: CollectionEnrichmentCoordinator by inject()
     private val pipState = androidx.compose.runtime.mutableStateOf(false)
 
-    // Плеер для управления из PiP-кнопок; выставляется из PlayerScreen пока плеер жив.
-    private var pipPlayer: Player? = null
+    // Кнопки PiP-окна; состояние в них присылает PlayerScreen, пока плеер жив.
+    private val pipActions = PipActionsController(this)
 
-    private val pipReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            val p = pipPlayer ?: return
-            when (intent?.getIntExtra(EXTRA_PIP_CODE, 0)) {
-                PIP_PLAY_PAUSE -> if (p.isPlaying) p.pause() else p.play()
-                PIP_NEXT -> p.seekToNextMediaItem()
-                PIP_PREV -> p.seekToPreviousMediaItem()
-            }
-            refreshPipParams()
-        }
+    override fun updatePipCommands(commands: PipPlaybackCommands?) {
+        pipActions.setCommands(commands)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -112,12 +97,7 @@ class LocalPlayerActivity : ComponentActivity() {
             InteractiveMediaPauseViewModel.factory(enrichmentCoordinator),
         )[InteractiveMediaPauseViewModel::class.java]
         enableEdgeToEdge()
-        ContextCompat.registerReceiver(
-            this,
-            pipReceiver,
-            IntentFilter(ACTION_PIP_CONTROL),
-            ContextCompat.RECEIVER_NOT_EXPORTED,
-        )
+        pipActions.register()
         val animeId = intent.getStringExtra(EXTRA_ANIME_ID).orEmpty()
         val animeTitle = intent.getStringExtra(EXTRA_ANIME_TITLE).orEmpty()
         val animeMalId = intent.getIntExtra(EXTRA_ANIME_MAL_ID, -1).takeIf { it > 0 }
@@ -154,53 +134,9 @@ class LocalPlayerActivity : ComponentActivity() {
         }
     }
 
-    /** PlayerScreen отдаёт сюда живой плеер, чтобы PiP-кнопки управляли им. */
-    fun attachPipPlayer(player: Player?) {
-        pipPlayer = player
-        refreshPipParams()
-    }
-
-    /** Обновить набор PiP-действий (иконка play/pause зависит от состояния). */
-    fun refreshPipParams() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        runCatching { setPictureInPictureParams(buildPipParams()) }
-    }
-
     /** Вход в режим «картинка в картинке» (только API 26+, что совпадает с minSdk проекта). */
     private fun enterPip() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        runCatching { enterPictureInPictureMode(buildPipParams()) }
-    }
-
-    private fun buildPipParams(): PictureInPictureParams {
-        val builder = PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9))
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            pipPlayer?.let { p ->
-                builder.setActions(
-                    listOf(
-                        pipAction(android.R.drawable.ic_media_previous, "Previous", PIP_PREV),
-                        if (p.isPlaying) {
-                            pipAction(android.R.drawable.ic_media_pause, "Pause", PIP_PLAY_PAUSE)
-                        } else {
-                            pipAction(android.R.drawable.ic_media_play, "Play", PIP_PLAY_PAUSE)
-                        },
-                        pipAction(android.R.drawable.ic_media_next, "Next", PIP_NEXT),
-                    ),
-                )
-            }
-        }
-        return builder.build()
-    }
-
-    private fun pipAction(iconRes: Int, title: String, code: Int): RemoteAction {
-        val intent = Intent(ACTION_PIP_CONTROL).setPackage(packageName).putExtra(EXTRA_PIP_CODE, code)
-        val pending = PendingIntent.getBroadcast(
-            this,
-            code,
-            intent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
-        return RemoteAction(Icon.createWithResource(this, iconRes), title, title, pending)
+        pipActions.enterPip()
     }
 
     override fun onPictureInPictureModeChanged(
@@ -212,7 +148,7 @@ class LocalPlayerActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        runCatching { unregisterReceiver(pipReceiver) }
+        pipActions.unregister()
         super.onDestroy()
     }
 
@@ -222,12 +158,6 @@ class LocalPlayerActivity : ComponentActivity() {
         private const val EXTRA_ANIME_MAL_ID = "anime_mal_id"
         private const val EXTRA_ANIME_ANILIST_ID = "anime_anilist_id"
         private const val EXTRA_START_INDEX = "start_index"
-
-        private const val ACTION_PIP_CONTROL = "com.phnem.vetro.localplayer.PIP_CONTROL"
-        private const val EXTRA_PIP_CODE = "pip_code"
-        private const val PIP_PREV = 1
-        private const val PIP_PLAY_PAUSE = 2
-        private const val PIP_NEXT = 3
 
         fun intent(
             context: Context,

@@ -11,7 +11,6 @@ import com.example.myapplication.MainActivity
 import com.phnem.vetro.R
 import com.example.myapplication.data.models.AnimeUpdate
 import com.example.myapplication.network.AppLanguage
-import com.example.myapplication.receiver.AnimeUpdateReceiver
 import com.example.myapplication.utils.getNotificationStrings
 import java.util.Locale
 
@@ -21,12 +20,18 @@ fun animeUpdateNotificationId(animeId: String): Int = animeId.hashCode()
 const val ANIME_UPDATES_GROUP = "anime_updates_group"
 const val ANIME_UPDATES_SUMMARY_ID = 0x5E71E5
 
+/** Тап по пушу открывает Details тайтла: action + extra читает [MainActivity]. */
+const val ACTION_OPEN_ANIME = "com.phnem.vetro.action.OPEN_ANIME"
+const val EXTRA_OPEN_ANIME_ID = "com.phnem.vetro.extra.OPEN_ANIME_ID"
+
 /** Абстракция для тестирования и инверсии зависимостей (SOLID). */
 interface AnimeNotifier {
-    fun showUpdateNotification(update: AnimeUpdate, language: AppLanguage)
-
-    /** Пересобрать/убрать сводку группы после действия пользователя. */
-    fun refreshGroupSummary(remainingUpdates: Int, language: AppLanguage)
+    /**
+     * Показать пуши «вышла новая серия» одной пачкой. Серии к этому моменту уже
+     * проставлены в коллекции (авто-принятие) — уведомление только информирует,
+     * кнопок действий у него нет; тап открывает Details тайтла.
+     */
+    fun showUpdateNotifications(updates: List<AnimeUpdate>, language: AppLanguage)
 
     /**
      * Убрать из системной шторки ВСЕ пуши обновлений серий (+ групповую сводку).
@@ -61,40 +66,18 @@ class AnimeNotifierImpl(
         }
     }
 
-    override fun showUpdateNotification(update: AnimeUpdate, language: AppLanguage) {
+    override fun showUpdateNotifications(updates: List<AnimeUpdate>, language: AppLanguage) {
+        if (updates.isEmpty()) return
+        updates.forEach { showOne(it, language) }
+        // Сводку вешаем только когда детей реально несколько. Снимать её отдельно
+        // не пытаемся: cancel() сводки на многих прошивках уносит и все дочерние
+        // уведомления разом (из-за этого раньше «пропадали все» после пары действий).
+        if (updates.size >= 2) showSummary(updates.size, language)
+    }
+
+    private fun showOne(update: AnimeUpdate, language: AppLanguage) {
         val strings = getNotificationStrings(language)
         val notifId = animeUpdateNotificationId(update.animeId)
-
-        val intent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-        }
-        val pendingIntent = PendingIntent.getActivity(
-            context, 0, intent, PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val acceptIntent = Intent(context, AnimeUpdateReceiver::class.java).apply {
-            action = AnimeUpdateReceiver.ACTION_ACCEPT
-            putExtra(AnimeUpdateReceiver.EXTRA_ANIME_ID, update.animeId)
-            putExtra(AnimeUpdateReceiver.EXTRA_NEW_EPS, update.newEpisodes)
-            putExtra(AnimeUpdateReceiver.EXTRA_NOTIF_ID, notifId)
-            putExtra(AnimeUpdateReceiver.EXTRA_LANG, language.name)
-        }
-        val acceptPendingIntent = PendingIntent.getBroadcast(
-            context, notifId, acceptIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val dismissIntent = Intent(context, AnimeUpdateReceiver::class.java).apply {
-            action = AnimeUpdateReceiver.ACTION_DISMISS
-            putExtra(AnimeUpdateReceiver.EXTRA_ANIME_ID, update.animeId)
-            putExtra(AnimeUpdateReceiver.EXTRA_NEW_EPS, update.newEpisodes)
-            putExtra(AnimeUpdateReceiver.EXTRA_NOTIF_ID, notifId)
-            putExtra(AnimeUpdateReceiver.EXTRA_LANG, language.name)
-        }
-        val dismissPendingIntent = PendingIntent.getBroadcast(
-            context, notifId + 10000, dismissIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
 
         val title = String.format(Locale.getDefault(), strings.notifUpdateTitleFormat, update.title)
         val body = String.format(
@@ -109,33 +92,29 @@ class AnimeNotifierImpl(
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-            .setContentIntent(pendingIntent)
-            .addAction(0, strings.notifAccept, acceptPendingIntent)
-            .addAction(0, strings.notifDecline, dismissPendingIntent)
+            .setContentIntent(openAnimeIntent(update.animeId, notifId))
             .setGroup(ANIME_UPDATES_GROUP)
+            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY)
             .setAutoCancel(true)
             .build()
 
         manager.notify(notifId, notification)
     }
 
-    override fun refreshGroupSummary(remainingUpdates: Int, language: AppLanguage) {
-        if (remainingUpdates <= 1) {
-            manager.cancel(ANIME_UPDATES_SUMMARY_ID)
-            return
-        }
+    private fun showSummary(count: Int, language: AppLanguage) {
         val strings = getNotificationStrings(language)
         val intent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val pendingIntent = PendingIntent.getActivity(
-            context, 0, intent, PendingIntent.FLAG_IMMUTABLE
+            context, ANIME_UPDATES_SUMMARY_ID, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val summary = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_launcher_monochrome)
             .setContentTitle(strings.notifChannelName)
             .setContentText(
-                String.format(Locale.getDefault(), strings.notifGroupSummaryFormat, remainingUpdates)
+                String.format(Locale.getDefault(), strings.notifGroupSummaryFormat, count)
             )
             .setContentIntent(pendingIntent)
             .setGroup(ANIME_UPDATES_GROUP)
@@ -143,6 +122,22 @@ class AnimeNotifierImpl(
             .setAutoCancel(true)
             .build()
         manager.notify(ANIME_UPDATES_SUMMARY_ID, summary)
+    }
+
+    /**
+     * Тап по плашке → MainActivity с id тайтла. requestCode = notifId: с общим кодом
+     * PendingIntent'ы переиспользуются, и все пуши открывали бы один и тот же тайтл.
+     */
+    private fun openAnimeIntent(animeId: String, notifId: Int): PendingIntent {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            action = ACTION_OPEN_ANIME
+            putExtra(EXTRA_OPEN_ANIME_ID, animeId)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        return PendingIntent.getActivity(
+            context, notifId, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
     }
 
     override fun cancelAllUpdateNotifications(animeIds: List<String>) {

@@ -1,13 +1,10 @@
 package com.example.myapplication.localplayer.ui
 
-import android.app.PictureInPictureParams
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
-import android.os.Build
 import android.os.Bundle
-import android.util.Rational
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -31,6 +28,9 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.media3.exoplayer.ExoPlayer
 import com.example.myapplication.localplayer.model.LocalEpisode
 import com.example.myapplication.media.progress.EpisodePlaybackStore
+import com.example.myapplication.media.ui.PipActionsController
+import com.example.myapplication.media.ui.PipHostActivity
+import com.example.myapplication.media.ui.PipPlaybackCommands
 import com.example.myapplication.ui.shared.theme.OneUiTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
@@ -43,7 +43,7 @@ import org.koin.core.qualifier.named
 /**
  * Plays app-owned downloaded files in the same custom Exo UI as the SAF local library.
  */
-class DownloadedPlayerActivity : ComponentActivity() {
+class DownloadedPlayerActivity : ComponentActivity(), PipHostActivity {
 
     private val playbackStore: EpisodePlaybackStore by inject()
     private val settings: DataStore<Preferences> by inject(named("settings"))
@@ -51,10 +51,16 @@ class DownloadedPlayerActivity : ComponentActivity() {
     private var animeId: String = ""
     private var episodes: List<LocalEpisode> = emptyList()
     private val pipState = mutableStateOf(false)
+    private val pipActions = PipActionsController(this)
+
+    override fun updatePipCommands(commands: PipPlaybackCommands?) {
+        pipActions.setCommands(commands)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        pipActions.register()
 
         animeId = intent.getStringExtra(EXTRA_ANIME_ID).orEmpty()
         val title = intent.getStringExtra(EXTRA_ANIME_TITLE).orEmpty()
@@ -139,14 +145,12 @@ class DownloadedPlayerActivity : ComponentActivity() {
     }
 
     private fun enterPip() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        runCatching {
-            enterPictureInPictureMode(
-                PictureInPictureParams.Builder()
-                    .setAspectRatio(Rational(16, 9))
-                    .build()
-            )
-        }
+        pipActions.enterPip()
+    }
+
+    override fun onDestroy() {
+        pipActions.unregister()
+        super.onDestroy()
     }
 
     private suspend fun persistCurrentProgress() {

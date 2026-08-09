@@ -38,4 +38,12 @@ object DevPreferencesKeys {
 
     /** TEMP V3.3.3 promo. Delete this key together with PlayerPowerPromoDialog. */
     val TEMP_PLAYER_PROMO_V333_DISMISSED = booleanPreferencesKey("temp_player_promo_v333_dismissed")
+
+    /**
+     * Новая корневая навигация: док-селектор + рабочая область из пяти страниц
+     * (см. `ui/workspace/WorkspaceScreen.kt`). Отсутствие ключа = ВЫКЛ, приложение
+     * ведёт себя как раньше. Временный ключ: удаляется вместе со старым доком
+     * после обкатки.
+     */
+    val SELECT_DOCK_NAVIGATION = booleanPreferencesKey("dev_select_dock_navigation")
 }

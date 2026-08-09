@@ -42,6 +42,7 @@ import com.example.myapplication.ui.inspect.InspectViewModel
 import com.example.myapplication.ui.settings.SettingsScreen
 import com.example.myapplication.ui.settings.SettingsViewModel
 import com.example.myapplication.ui.splash.SplashViewModel
+import com.example.myapplication.ui.workspace.WorkspaceScreen
 import com.example.myapplication.ui.splash.VetroSplashScreen
 import com.example.myapplication.utils.getStrings
 import com.example.myapplication.utils.getWelcomeStrings
@@ -239,12 +240,27 @@ fun AppNavGraph(
                     }
                 },
             ) {
-                HomeScreen(
-                    navController = navController,
-                    viewModel = homeViewModel,
-                    sharedTransitionScope = this@SharedTransitionLayout,
-                    animatedVisibilityScope = this,
-                )
+                // ЕДИНСТВЕННАЯ точка чтения флага новой навигации: ниже по дереву его не знают.
+                // Две навигации никогда не смонтированы одновременно — иначе задвоятся ключи
+                // shared-element (иконки старого дока и экраны-цели).
+                val settingsState by settingsViewModel.uiState.collectAsStateWithLifecycle()
+                if (settingsState.devSelectDockNavigation) {
+                    WorkspaceScreen(
+                        navController = navController,
+                        homeViewModel = homeViewModel,
+                        inspectViewModel = inspectViewModel,
+                        settingsViewModel = settingsViewModel,
+                        sharedTransitionScope = this@SharedTransitionLayout,
+                        animatedVisibilityScope = this,
+                    )
+                } else {
+                    HomeScreen(
+                        navController = navController,
+                        viewModel = homeViewModel,
+                        sharedTransitionScope = this@SharedTransitionLayout,
+                        animatedVisibilityScope = this,
+                    )
+                }
             }
 
             // Полноэкранные детали (iOS push): въезжают справа, назад — уезжают вправо.
@@ -292,7 +308,10 @@ fun AppNavGraph(
                     navController = navController,
                     viewModel = settingsViewModel,
                     sharedTransitionScope = this@SharedTransitionLayout,
-                    animatedVisibilityScope = this
+                    animatedVisibilityScope = this,
+                    // Маршрут — значит есть куда возвращаться, и кнопка «назад» в шапке нужна.
+                    // На странице рабочей области onBack не передают, и кнопки нет (TICKET-07).
+                    onBack = { navController.popBackStack() },
                 )
             }
 
@@ -301,7 +320,8 @@ fun AppNavGraph(
                     navController = navController,
                     viewModel = inspectViewModel,
                     sharedTransitionScope = this@SharedTransitionLayout,
-                    animatedVisibilityScope = this
+                    animatedVisibilityScope = this,
+                    onBack = { navController.popBackStack() },
                 )
             }
 

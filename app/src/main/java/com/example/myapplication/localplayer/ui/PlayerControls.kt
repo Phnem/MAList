@@ -126,6 +126,14 @@ private const val SINGLE_TAP_DELAY_MS = 220L
 /** Сколько серия перемотки живёт после последнего тапа — окно накопления и время показа плашки. */
 private const val SEEK_BURST_HOLD_MS = 750L
 
+/**
+ * Аудиодорожка и скорость в верхнем доке — крупнее остальных иконок дока (22.dp).
+ *
+ * Обе рисуются штриховыми глифами, и в общем размере читались хуже сплошных: тонкие линии на кадре
+ * теряются. Растёт только глиф — слот кнопки остаётся 44.dp, чтобы ряд не разъезжал.
+ */
+private val TOP_DOCK_ICON = 29.dp
+
 private fun isRuLocale() = Locale.getDefault().language == "ru"
 
 /** Активная серия дабл-тапов: сторона и сколько шагов по [SEEK_STEP_MS] уже накоплено. */
@@ -594,6 +602,7 @@ fun PlayerControlsOverlay(
                         icon = painterResource(R.drawable.ic_player_audio),
                         contentDescription = if (isRuLocale()) "Аудиодорожка" else "Audio track",
                         tint = Color.White,
+                        iconSize = TOP_DOCK_ICON,
                         onClick = {
                             if (audioTracks.isNotEmpty()) { menuKind = PlayerMenu.AUDIO; menuState.targetState = true }
                         },
@@ -602,6 +611,7 @@ fun PlayerControlsOverlay(
                         icon = painterResource(R.drawable.ic_player_speed),
                         contentDescription = if (isRuLocale()) "Скорость" else "Speed",
                         tint = Color.White,
+                        iconSize = TOP_DOCK_ICON,
                         onClick = { menuKind = PlayerMenu.SPEED; menuState.targetState = true },
                     )
                 }
@@ -1372,6 +1382,7 @@ private fun DockIconButton(
     modifier: Modifier = Modifier,
     tint: Color = Color.White,
     contentDescription: String? = null,
+    iconSize: Dp = 22.dp,
 ) {
     Box(
         modifier = modifier
@@ -1383,7 +1394,7 @@ private fun DockIconButton(
             ),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = contentDescription, tint = tint, modifier = Modifier.size(22.dp))
+        Icon(icon, contentDescription = contentDescription, tint = tint, modifier = Modifier.size(iconSize))
     }
 }
 

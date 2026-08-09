@@ -54,7 +54,8 @@ import com.kyant.backdrop.effects.vibrancy
 fun GlassMenuHeader(
     backdrop: Backdrop,
     title: String,
-    onBack: () -> Unit,
+    /** null — пузырька «назад» нет: экран показан страницей, уходить некуда. */
+    onBack: (() -> Unit)?,
     modifier: Modifier = Modifier,
     isDark: Boolean = isAppInDarkTheme(),
     contentColor: Color = MaterialTheme.colorScheme.onBackground,
@@ -74,6 +75,7 @@ fun GlassMenuHeader(
             .padding(top = 16.dp, start = 16.dp, end = 16.dp),
     ) {
         // — Пузырёк «назад» —
+        if (onBack != null) {
         Box(
             modifier = Modifier
                 .align(Alignment.CenterStart)
@@ -103,6 +105,7 @@ fun GlassMenuHeader(
                 tint = contentColor,
                 modifier = iconModifier.size(24.dp),
             )
+        }
         }
 
         // — Капсула с названием —

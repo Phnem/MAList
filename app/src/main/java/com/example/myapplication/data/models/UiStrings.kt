@@ -293,17 +293,12 @@ data class NotificationStrings(
     /** Системные уведомления о новых сериях. */
     val notifChannelName: String,
     val notifChannelDesc: String,
-    /** "Новые серии: %s" */
+    /** "Новая серия: %s" */
     val notifUpdateTitleFormat: String,
-    /** "Доступно: %1$d → %2$d эп." */
+    /** "Отмечено: %1$d → %2$d эп." (серии проставляются автоматически) */
     val notifUpdateBodyFormat: String,
-    val notifAccept: String,
-    val notifDecline: String,
     /** Сводка группы: "%d обновлений серий" */
     val notifGroupSummaryFormat: String,
-    /** Карточки обновлений в шторке уведомлений. */
-    val updateCardAcceptCd: String,
-    val updateCardDeclineCd: String,
     /** Метрика последнего sync: успешные операции / ошибки / всего (AssistChip). */
     val nottifSyncChipSynced: String,
     val nottifSyncChipErrors: String,
@@ -315,3 +310,7 @@ val UiStrings.typeManga: String
 
 val UiStrings.typeSeries: String
     get() = if (this.languageName == "RU") "ТВ-Сериал" else "TV Series"
+
+/** MediaType.MOVIE — раньше схлопывался с сериалами в один TV_SERIES-тип. */
+val UiStrings.typeMovie: String
+    get() = if (this.languageName == "RU") "Фильм" else "Movie"

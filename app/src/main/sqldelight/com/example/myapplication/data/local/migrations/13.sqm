@@ -1,0 +1,23 @@
+-- Разделение MediaType.TV_SERIES → MOVIE/SERIES + внешние id TMDB/Kinopoisk.
+--
+-- До этой миграции фильмы и сериалы делили один тип записи (TV_SERIES) — после добавления их
+-- было не отличить. `categoryType` уже нёс строку раздела поиска ('MOVIE'/'SERIES') с самого
+-- добавления (см. AppContentType.categoryTypeName()), поэтому он — надёжный признак для сплита.
+-- Записи с неоднозначным categoryType (пусто/жанровая строка из AddEdit) дефолтим на SERIES —
+-- то же осторожное решение, что миграция 12.sqm применила к манге: не гадать там, где признак
+-- ненадёжен, но и не оставлять запись без определённого типа.
+UPDATE anime
+SET mediaType = UPPER(TRIM(categoryType))
+WHERE mediaType = 'TV_SERIES'
+  AND UPPER(TRIM(categoryType)) IN ('MOVIE', 'SERIES');
+
+UPDATE anime
+SET mediaType = 'SERIES'
+WHERE mediaType = 'TV_SERIES';
+
+-- TMDB id — канонический внешний id для MOVIE/SERIES (аналог anilist_id для аниме).
+ALTER TABLE anime ADD COLUMN tmdb_id INTEGER;
+ALTER TABLE anime ADD COLUMN tmdb_not_found_at INTEGER;
+-- Kinopoisk id — вспомогательный RU-источник (аналог shikimori_id по роли, не по надёжности).
+ALTER TABLE anime ADD COLUMN kinopoisk_id INTEGER;
+ALTER TABLE anime ADD COLUMN kinopoisk_not_found_at INTEGER;

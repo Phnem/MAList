@@ -9,6 +9,7 @@ import com.example.myapplication.data.models.Anime
 import com.example.myapplication.domain.seasons.SeasonInfo
 import com.example.myapplication.localplayer.model.LocalEpisode
 import com.example.myapplication.media.MediaGateway
+import com.example.myapplication.media.download.DownloadedSkipStore
 import com.example.myapplication.media.download.MediaFileValidator
 import com.example.myapplication.media.download.MediaJobBus
 import com.example.myapplication.media.metadata.EpisodeArtworkRepository
@@ -561,6 +562,7 @@ class EpisodeMenuViewModel(
             }
             return
         }
+        if (isOwned) DownloadedSkipStore.delete(file)
         setAction(key, EpisodeActionState.Available)
     }
 

@@ -51,7 +51,11 @@ class SaveAnimeUseCase(
             shikimoriId = params.shikimoriId,
             anilistNotFoundAt = params.anilistNotFoundAt,
             malNotFoundAt = params.malNotFoundAt,
-            shikimoriNotFoundAt = params.shikimoriNotFoundAt
+            shikimoriNotFoundAt = params.shikimoriNotFoundAt,
+            tmdbId = params.tmdbId,
+            kinopoiskId = params.kinopoiskId,
+            tmdbNotFoundAt = params.tmdbNotFoundAt,
+            kinopoiskNotFoundAt = params.kinopoiskNotFoundAt
         )
 
         if (isNew) {

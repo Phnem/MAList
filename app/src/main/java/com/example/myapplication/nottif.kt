@@ -173,8 +173,6 @@ fun NotificationSyncOverlay(
     onDismiss: () -> Unit,
     onLogout: () -> Unit,
     onCheckUpdates: () -> Unit,
-    onAcceptUpdate: (AnimeUpdate) -> Unit = {},
-    onDismissUpdate: (AnimeUpdate) -> Unit = {},
     onBlockingChildDialogChange: (Boolean) -> Unit = {}
 ) {
     val isSyncing by syncCoordinator.isSyncing.collectAsStateWithLifecycle()

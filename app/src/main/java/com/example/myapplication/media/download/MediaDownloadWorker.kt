@@ -23,6 +23,7 @@ import org.koin.core.component.inject
 import java.io.File
 import java.io.IOException
 import java.net.URI
+import java.util.concurrent.TimeUnit
 
 /**
  * Downloads a ranked list of resolved media candidates.
@@ -38,6 +39,20 @@ class MediaDownloadWorker(
 
     private val okHttpClient: OkHttpClient by inject()
     private val json = Json { ignoreUnknownKeys = true }
+
+    /**
+     * The shared client is tuned for short API calls; an episode is a multi-minute transfer over
+     * hundreds of requests. Same connection pool, download-shaped timeouts.
+     */
+    private val downloadClient: OkHttpClient by lazy {
+        okHttpClient.newBuilder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
+            .callTimeout(0, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .build()
+    }
 
     override suspend fun getForegroundInfo(): ForegroundInfo {
         ensureNotificationChannel()
@@ -96,6 +111,7 @@ class MediaDownloadWorker(
         val outFile = File(outputDirectory, "E${episode.toString().padStart(3, '0')}.mp4")
         if (outFile.exists() && !MediaFileValidator.isPlayableMp4(outFile)) {
             runCatching { outFile.delete() }
+            DownloadedSkipStore.delete(outFile)
         }
         MediaJobBus.update(MediaJobProgress(jobId, "downloading", 0))
 
@@ -135,6 +151,7 @@ class MediaDownloadWorker(
                     }
                     installCandidate(candidateFile, outFile)
                     downloaded = true
+                    persistSkipTimings(outFile, video, candidates)
                     Log.i(TAG, "Download completed with host=${safeHost(video.url)}")
                 } catch (cancelled: DownloadCancelledException) {
                     cleanupCandidate(candidateFile)
@@ -169,27 +186,10 @@ class MediaDownloadWorker(
             cleanupCandidate(candidateFile(outFile))
             if (!MediaFileValidator.isPlayableMp4(outFile)) {
                 runCatching { outFile.delete() }
+                DownloadedSkipStore.delete(outFile)
             }
             fail(jobId, error.message ?: "Ошибка загрузки")
         }
-    }
-
-    private fun downloadHls(
-        video: VetroVideo,
-        destination: File,
-        onProgress: (Int) -> Unit,
-    ) {
-        HlsSegmentDownloader(okHttpClient).download(
-            video = video,
-            destination = destination,
-            onProgress = onProgress,
-            isCancelled = {
-                val cancelRequested =
-                    MediaJobBus.isCancelRequested(inputData.getString(KEY_JOB_ID).orEmpty()) || isStopped
-                if (cancelRequested) throw DownloadCancelledException()
-                false
-            },
-        )
     }
 
     private fun downloadSeekableHls(
@@ -209,7 +209,7 @@ class MediaDownloadWorker(
             false
         }
         try {
-            HlsSegmentDownloader(okHttpClient).download(
+            HlsSegmentDownloader(downloadClient).download(
                 video = video,
                 destination = transport,
                 onProgress = { onProgress((it * 9) / 10) },
@@ -227,63 +227,44 @@ class MediaDownloadWorker(
         }
     }
 
+    /**
+     * A dropped connection resumes with `Range` instead of restarting the episode. Servers that
+     * ignore the header answer 200 and the partial file is discarded, so a resume can never splice
+     * two different byte offsets together.
+     */
     private fun downloadProgressive(
         video: VetroVideo,
         destination: File,
         jobId: String,
     ) {
-        val request = Request.Builder().url(video.url).apply {
-            SanitizeHeaders.sanitize(video.headers).forEach { (name, value) ->
-                header(name, value)
-            }
-            if (safeHost(video.url).endsWith("jut.su")) {
-                header("Range", "bytes=0-")
-            }
-        }.build()
         val tmp = File(destination.parentFile, destination.nameWithoutExtension + ".part.mp4")
         runCatching { tmp.delete() }
 
         try {
-            okHttpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    throw IOException("HTTP ${response.code} при загрузке")
+            var completed = 0L
+            var lastError: IOException? = null
+            var succeeded = false
+            repeat(PROGRESSIVE_ATTEMPTS) { attempt ->
+                if (succeeded) return@repeat
+                checkCancelled(jobId)
+                try {
+                    completed = fetchProgressive(video, tmp, jobId, resumeFrom = completed)
+                    succeeded = true
+                } catch (cancelled: DownloadCancelledException) {
+                    throw cancelled
+                } catch (error: IOException) {
+                    lastError = error
+                    completed = tmp.length()
+                    Log.w(
+                        TAG,
+                        "progressive attempt ${attempt + 1}/$PROGRESSIVE_ATTEMPTS failed at " +
+                            "$completed bytes: ${error.message ?: error.javaClass.simpleName}",
+                    )
+                    if (attempt < PROGRESSIVE_ATTEMPTS - 1) Thread.sleep(RETRY_BACKOFF_MS)
                 }
-                val body = response.body ?: throw IOException("Пустой ответ сервера")
-                val contentType = response.header("Content-Type")
-                    ?.substringBefore(';')
-                    ?.trim()
-                    ?.lowercase()
-                    .orEmpty()
-                if (
-                    contentType.startsWith("image/") ||
-                    contentType.startsWith("text/") ||
-                    contentType.contains("json")
-                ) {
-                    throw IOException("Сервер вернул $contentType вместо видео")
-                }
-                val total = body.contentLength().takeIf { it > 0L }
-                if (total != null && total < MIN_PLAUSIBLE_VIDEO_BYTES) {
-                    throw IOException("Ответ слишком мал для видео: $total байт")
-                }
-                body.byteStream().use { input ->
-                    tmp.outputStream().buffered().use { output ->
-                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                        var copied = 0L
-                        while (true) {
-                            checkCancelled(jobId)
-                            val count = input.read(buffer)
-                            if (count < 0) break
-                            output.write(buffer, 0, count)
-                            copied += count
-                            total?.let {
-                                val percent = ((copied * 100L) / it).toInt().coerceIn(0, 99)
-                                MediaJobBus.update(
-                                    MediaJobProgress(jobId, "downloading", percent)
-                                )
-                            }
-                        }
-                    }
-                }
+            }
+            if (!succeeded) {
+                throw lastError ?: IOException("Загрузка не удалась")
             }
             if (!MediaFileValidator.isPlayableMp4(tmp)) {
                 throw IOException("Загруженный ответ не является MP4 (${tmp.length()} байт)")
@@ -296,6 +277,106 @@ class MediaDownloadWorker(
             runCatching { tmp.delete() }
             throw error
         }
+    }
+
+    /** Streams the body into [tmp] and returns how many bytes the file holds afterwards. */
+    private fun fetchProgressive(
+        video: VetroVideo,
+        tmp: File,
+        jobId: String,
+        resumeFrom: Long,
+    ): Long {
+        val request = Request.Builder().url(video.url).apply {
+            SanitizeHeaders.sanitize(video.headers).forEach { (name, value) ->
+                header(name, value)
+            }
+            if (resumeFrom > 0L) {
+                header("Range", "bytes=$resumeFrom-")
+            } else if (safeHost(video.url).endsWith("jut.su")) {
+                header("Range", "bytes=0-")
+            }
+        }.build()
+
+        downloadClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                throw IOException("HTTP ${response.code} при загрузке")
+            }
+            val body = response.body ?: throw IOException("Пустой ответ сервера")
+            val contentType = response.header("Content-Type")
+                ?.substringBefore(';')
+                ?.trim()
+                ?.lowercase()
+                .orEmpty()
+            if (
+                contentType.startsWith("image/") ||
+                contentType.startsWith("text/") ||
+                contentType.contains("json")
+            ) {
+                throw IOException("Сервер вернул $contentType вместо видео")
+            }
+            val resuming = resumeFrom > 0L && response.code == 206
+            if (!resuming && tmp.exists() && !tmp.delete()) {
+                throw IOException("Не удалось очистить частичную загрузку")
+            }
+            val alreadyOnDisk = if (resuming) resumeFrom else 0L
+            val remaining = body.contentLength().takeIf { it > 0L }
+            val total = remaining?.plus(alreadyOnDisk)
+            if (total != null && total < MIN_PLAUSIBLE_VIDEO_BYTES) {
+                throw IOException("Ответ слишком мал для видео: $total байт")
+            }
+            var copied = alreadyOnDisk
+            body.byteStream().use { input ->
+                java.io.FileOutputStream(tmp, resuming).buffered().use { output ->
+                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                    while (true) {
+                        checkCancelled(jobId)
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        output.write(buffer, 0, count)
+                        copied += count
+                        total?.let {
+                            val percent = ((copied * 100L) / it).toInt().coerceIn(0, 99)
+                            MediaJobBus.update(
+                                MediaJobProgress(jobId, "downloading", percent)
+                            )
+                        }
+                    }
+                }
+            }
+            if (total != null && copied < total) {
+                throw IOException("Загрузка оборвана: $copied из $total байт")
+            }
+            return copied
+        }
+    }
+
+    /**
+     * Opening/ending timings travel with the candidates the resolver produced — AniLiberty measures
+     * them per episode, jut.su contributes a reference for every other studio (see
+     * `withPropagatedSkipReference`). Storing them beside the file is what lets autoskip work on a
+     * downloaded episode without network.
+     *
+     * The downloaded candidate speaks first; a sibling rendition of the same episode is an equally
+     * valid source when the winner carries nothing.
+     */
+    private fun persistSkipTimings(
+        outFile: File,
+        downloaded: VetroVideo,
+        candidates: List<VetroVideo>,
+    ) {
+        val ordered = listOf(downloaded) + candidates
+        val measured = ordered.firstOrNull { it.timestamps.isNotEmpty() }
+        val skip = DownloadedEpisodeSkip(
+            timestamps = measured?.timestamps.orEmpty(),
+            origin = measured?.sourceName,
+            reference = ordered.firstNotNullOfOrNull { it.skipReference },
+        )
+        DownloadedSkipStore.save(outFile, skip)
+        Log.i(
+            TAG,
+            "Skip timings for ${outFile.name}: exact=${skip.timestamps.size} " +
+                "origin=${skip.origin ?: "none"} reference=${skip.reference?.origin ?: "none"}",
+        )
     }
 
     private fun installCandidate(candidate: File, outFile: File) {
@@ -380,6 +461,8 @@ class MediaDownloadWorker(
         private const val TAG = "MediaDownloadWorker"
         private const val CHANNEL_ID = "vetro_media_download"
         private const val MIN_PLAUSIBLE_VIDEO_BYTES = 128 * 1024L
+        private const val PROGRESSIVE_ATTEMPTS = 4
+        private const val RETRY_BACKOFF_MS = 1_000L
 
         const val KEY_JOB_ID = "job_id"
         const val KEY_URL = "url"
