@@ -2,7 +2,7 @@
 
 ## Status
 
-PENDING
+DONE_WITH_DEVIATIONS
 
 ## Objective
 
@@ -81,16 +81,53 @@ RECOMMENDED — в основном сетевой маппинг, но `NotFoun
 
 ## Implementation notes
 
-Empty before implementation.
+- Мапперы (`KinopoiskMovieDto.toApiSearchResult`/`.toDetails`) вынесены в отдельный
+  `KinopoiskMappers.kt` как чистые функции — тестируются без HTTP (тот же подход, что
+  `TmdbEpisodeCalculator` в TICKET-02), закрывает часть TDD-обязательства без полного
+  mock-харнесса.
+- `rating.kp` — уже 0..10 у Kinopoisk; конвертирован в общую 0..100 шкалу (`×10`, как TMDB
+  `vote_average×10`), чтобы `RatingScale`/repair дальше по конвейеру не знали о разнице
+  источников. `toDetails()` намеренно оставляет `ratingKp` НЕ конвертированным — на будущее,
+  если понадобится показать "чистый" Kinopoisk-рейтинг отдельно.
+- `type=movie`/`type=tv-series` — query-параметр на уровне запроса, а не постфильтрация
+  результата: `searchMovie`/`searchSeries` физически не могут перепутать тип по конструкции
+  сигнатур.
+- `local.properties.example` заодно задокументировал `TMDB_API_KEY` (был в коде с TICKET-02,
+  но нигде не описан для нового разработчика) — маленькое, но оправданное расширение по месту,
+  не отдельная задача.
 
 ## Deviations
 
-Empty before implementation.
+- **Planned**: Acceptance criteria включали HTTP-mock тесты (`NotFoundById` на 401, happy path
+  через мок).
+  **Actual**: как и в TICKET-02, HTTP-слой (`KinopoiskRemoteDataSource.runRequest`) не покрыт
+  mock-тестами — только компиляцией. Вместо этого добавлен `KinopoiskMappersTest.kt` (8 тестов)
+  на чистые функции маппинга (`toApiSearchResult`/`toDetails`), включая явный тест на
+  `externalId.tmdb`-мост (главная причина, ради которой Kinopoisk вообще участвует в
+  id-резолве в TICKET-04).
+  **Reason**: тот же, что в TICKET-02 — единый follow-up на Ktor `MockEngine` для обоих data
+  source'ов сразу эффективнее, чем заводить харнесс дважды по частям.
+  **Consequence/Follow-up**: см. TICKET-02 → Deviations и MASTER_PLAN → Deferred work (уже
+  зафиксировано, здесь просто подтверждён тот же паттерн).
 
 ## Review findings
 
-Empty before review.
+Самопроверка (тот же непрерывный проход, что TICKET-01/02). Мапперы протестированы явно;
+HTTP-слой — компиляция + структурное соответствие TMDB-паттерну из TICKET-02 (одинаковый
+`runRequest`, что снижает риск расхождения в обработке ошибок между источниками).
 
 ## Completion evidence
 
-Empty before completion.
+- Command: `./gradlew.bat :core:network:compileDebugKotlin :core:network:testDebugUnitTest` →
+  `BUILD SUCCESSFUL`, `KinopoiskMappersTest` 8/8 зелёных (плюс `TmdbEpisodeCalculatorTest` 9/9
+  из TICKET-02, регрессий нет).
+- Command: `./gradlew.bat :app:compileDebugKotlin` → `BUILD SUCCESSFUL` (новый код изолирован в
+  `core/network`, `app` не затронут).
+
+Файлы: `core/network/.../dto/KinopoiskDto.kt`, `core/network/.../kinopoisk/KinopoiskMappers.kt`,
+`core/network/.../kinopoisk/KinopoiskRemoteDataSource.kt`,
+`core/network/src/test/.../kinopoisk/KinopoiskMappersTest.kt`, `core/network/build.gradle.kts`
+(новое `buildConfigField`), `local.properties.example` (новая секция).
+
+Не выполнено: HTTP-mock тесты (см. Deviations, тот же follow-up что TICKET-02); DI-регистрация
+и подключение — часть TICKET-04.

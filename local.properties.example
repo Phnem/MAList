@@ -19,6 +19,15 @@ MAL_CLIENT_SECRET=
 ANILIST_CLIENT_ID=
 ANILIST_CLIENT_SECRET=
 
+# --- Фильмы/сериалы: TMDB (канонический источник) + Kinopoisk (RU-обогащение) ---
+# TMDB: https://www.themoviedb.org/settings/api (v3 auth — обычный api_key, не Bearer-токен)
+# Kinopoisk: неофициальный api.kinopoisk.dev, ключ выдаётся в их Telegram-боте.
+#   ВНИМАНИЕ: ключ попадает в APK как обычная BuildConfig-строка и извлекаем декомпиляцией —
+#   для бесплатного TMDB это принятый риск, для потенциально платного Kinopoisk-ключа риск
+#   выше (см. .scratch/movie-series-infra/spec.md → Non-functional requirements).
+TMDB_API_KEY=
+KINOPOISK_API_KEY=
+
 # --- Vetro Collection Sync (Supabase + Google / GitHub) ---
 # Callback в приложение (НЕ путать с GitHub OAuth App callback):
 #   vetrocollection://auth-callback

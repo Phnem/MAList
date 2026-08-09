@@ -217,3 +217,36 @@ TICKET-03) — см. MASTER_PLAN.md → Deferred work.
 ### Next eligible ticket
 
 TICKET-03 (независим от TICKET-02, разблокирован TICKET-01).
+
+## 2026-08-09 — TICKET-03 завершён
+
+### Outcome
+
+DONE_WITH_DEVIATIONS
+
+### Work completed
+
+`KinopoiskDto.kt`, `KinopoiskMappers.kt` (чистые мапперы + `KinopoiskDetails`, 8 TDD-тестов —
+включая явную проверку `externalId.tmdb`-моста), `KinopoiskRemoteDataSource`
+(`searchMovie`/`searchSeries` типизированы по контенту на уровне сигнатуры, `details`),
+`KINOPOISK_API_KEY` в `core/network/build.gradle.kts` + документирован в
+`local.properties.example` (заодно — `TMDB_API_KEY`, который был не задокументирован с
+TICKET-02).
+
+### Decisions made
+
+Тот же TDD-компромисс, что TICKET-02: чистые функции покрыты тестами, HTTP I/O — нет (единый
+follow-up на оба источника сразу).
+
+### Verification
+
+`compileDebugKotlin`/`testDebugUnitTest` (`core:network`) зелёные, `app:compileDebugKotlin`
+зелёный (не затронут).
+
+### Follow-up work
+
+См. TICKET-02 (Ktor MockEngine) — общий для обоих источников.
+
+### Next eligible ticket
+
+TICKET-04 (MovieSeriesRepository) — теперь разблокирован полностью (01, 02, 03 готовы).

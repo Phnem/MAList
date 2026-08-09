@@ -4,8 +4,8 @@
 
 Current workflow state: READY_FOR_IMPLEMENTATION
 Current ticket: None
-Last completed ticket: TICKET-02
-Next eligible ticket: TICKET-03 (независим), TICKET-04 (ждёт ещё и TICKET-03)
+Last completed ticket: TICKET-03
+Next eligible ticket: TICKET-04
 Last updated: 2026-08-09
 
 **Коммит**: `e73c65a` — по решению пользователя один общий коммит, включающий TICKET-01 и
@@ -97,7 +97,7 @@ Out of scope.
 |---|---|---|---|---|---|
 | TICKET-01 | MediaType split + схема БД + ExternalIds/LookupResult контракты | DONE | — | не коммичен | code-review (Standards+Spec), без блокеров после фикса |
 | TICKET-02 | TmdbRemoteDataSource — типизированный DTO-слой TMDB | DONE_WITH_DEVIATIONS | 01 | не коммичен | самопроверка, HTTP-слой без mock-тестов (см. тикет) |
-| TICKET-03 | KinopoiskRemoteDataSource — RU-источник | PENDING | 01 | — | — |
+| TICKET-03 | KinopoiskRemoteDataSource — RU-источник | DONE_WITH_DEVIATIONS | 01 | не коммичен | самопроверка, HTTP-слой без mock-тестов (тот же follow-up, что TICKET-02) |
 | TICKET-04 | MovieSeriesRepository + переключение VetroApiService | PENDING | 01,02,03 | — | — |
 | TICKET-05 | Details-экран для MOVIE/SERIES | PENDING | 04 | — | — |
 | TICKET-06 | AddFromApiUseCase — ExternalIds вместо source-веток | PENDING | 04 | — | — |
@@ -134,9 +134,12 @@ released/known-калькуляторе (самая рискованная ло�
 
 ### TICKET-03 — KinopoiskRemoteDataSource
 
-Status: PENDING
+Status: DONE_WITH_DEVIATIONS
 Tracker reference: [`issues/03-kinopoisk-remote-data-source.md`](./issues/03-kinopoisk-remote-data-source.md)
 Dependencies: 01
+Verification evidence: `compileDebugKotlin`/`testDebugUnitTest` зелёные, `KinopoiskMappersTest`
+8/8.
+Deviations: тот же HTTP-mock follow-up, что TICKET-02.
 
 ### TICKET-04 — MovieSeriesRepository
 
