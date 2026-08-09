@@ -135,4 +135,4 @@ review п.6). `VetroApiService` сокращается (удаление ~140 с
 - `grep`/`rg`: в `network/movie` нет импортов `Anime`/`AnimeLocalDataSource`; в
   `VetroApiService` нет inline-TMDB методов/URL.
 - `git diff --check` → без ошибок.
-- Commit: `TICKET-04_COMMIT`.
+- Commit: `3b88d85`.

@@ -98,7 +98,7 @@ Out of scope.
 | TICKET-01 | MediaType split + схема БД + ExternalIds/LookupResult контракты | DONE | — | `e73c65a` | code-review (Standards+Spec), без блокеров после фикса |
 | TICKET-02 | TmdbRemoteDataSource — типизированный DTO-слой TMDB | DONE_WITH_DEVIATIONS | 01 | `b1ea00d` | самопроверка, HTTP-слой без mock-тестов (см. тикет) |
 | TICKET-03 | KinopoiskRemoteDataSource — RU-источник | DONE_WITH_DEVIATIONS | 01 | `140d048` | самопроверка, HTTP-слой без mock-тестов (тот же follow-up, что TICKET-02) |
-| TICKET-04 | MovieSeriesRepository + переключение VetroApiService | DONE | 01,02,03 | `TICKET-04_COMMIT` | code-review (Standards+Spec), все находки resolved |
+| TICKET-04 | MovieSeriesRepository + переключение VetroApiService | DONE | 01,02,03 | `3b88d85` | code-review (Standards+Spec), все находки resolved |
 | TICKET-05 | Details-экран для MOVIE/SERIES | PENDING | 04 | — | — |
 | TICKET-06 | AddFromApiUseCase — ExternalIds вместо source-веток | PENDING | 04 | — | — |
 | TICKET-07 | Детектор пробелов + починка для MOVIE/SERIES | PENDING | 04,06 | — | — |
@@ -148,7 +148,7 @@ Tracker reference: [`issues/04-movie-series-repository.md`](./issues/04-movie-se
 Dependencies: 01, 02, 03
 Verification evidence: полные unit-тесты `core:network` + `app` зелёные (383/383), компиляция
 обоих модулей зелёная; boundary/inline-TMDB grep и `git diff --check` зелёные.
-Commit: `TICKET-04_COMMIT`
+Commit: `3b88d85`
 
 ### TICKET-05 — Details-экран
 

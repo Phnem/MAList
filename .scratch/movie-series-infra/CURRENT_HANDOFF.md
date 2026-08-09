@@ -18,7 +18,7 @@ READY_FOR_IMPLEMENTATION
 ## Completed tickets
 
 TICKET-01 (`e73c65a`), TICKET-02 (`b1ea00d`), TICKET-03 (`140d048`), TICKET-04
-(`TICKET-04_COMMIT`).
+(`3b88d85`).
 
 ## Active ticket
 
@@ -46,7 +46,7 @@ TICKET-04 завершён и должен быть чистым после ко
 
 ## Relevant commits
 
-`e73c65a`, `b1ea00d`, `140d048`, `TICKET-04_COMMIT`.
+`e73c65a`, `b1ea00d`, `140d048`, `3b88d85`.
 
 ## Verification already performed
 
