@@ -165,3 +165,55 @@ Cloud sync для tmdb_id/kinopoisk_id (см. MASTER_PLAN.md → Deferred work) 
 ### Next eligible ticket
 
 TICKET-02 и TICKET-03 (оба разблокированы TICKET-01, независимы друг от друга).
+
+## 2026-08-09 — TICKET-02 завершён
+
+### Outcome
+
+DONE_WITH_DEVIATIONS
+
+### Work completed
+
+`TmdbDto.kt` (типизированные DTO поиска/деталей/сезонов), `TmdbModels.kt`
+(`TmdbSeasonSummary`/`TmdbEpisodeAirDate`/`SeriesStatus`/`SeriesEpisodeState`),
+`TmdbEpisodeCalculator` (чистая released/known-логика + маппер статуса, 9 TDD-тестов),
+`TmdbRemoteDataSource` (search/details/season/episodeState, HTTP→`LookupResult` через единый
+`runRequest`). MOVIE использует `/search/movie`/`/movie/{id}` с первого дня — старый баг
+`/search/tv`-для-MOVIE не воспроизведён в новом коде.
+
+### Decisions made
+
+TDD-бюджет направлен на `TmdbEpisodeCalculator` (чистая логика, самый рискованный участок по
+итогам архитектурного ревью плана), а не на HTTP-слой — у `core/network` не было тестовой
+инфраструктуры вообще, и полноценный Ktor `MockEngine`-харнесс — отдельный по объёму кусок
+работы. Осознанное сужение TDD-обязательства тикета, зафиксировано как Deviation.
+
+### Root causes discovered
+
+Нет (в отличие от TICKET-01, здесь не было skeletons-в-коде сюрпризов — только заранее
+известный компромисс по объёму тестового покрытия).
+
+### Verification
+
+`compileDebugKotlin` (оба модуля) + `testDebugUnitTest` (оба модуля) — зелёные.
+`TmdbEpisodeCalculatorTest` 9/9.
+
+### Review result
+
+Самопроверка (без отдельного `/code-review` прогона — эффективно продолжение сессии TICKET-01).
+
+### New risks
+
+HTTP-слой `TmdbRemoteDataSource` не верифицирован живым/замоканным TMDB-ответом — реальная
+форма JSON может разойтись с DTO-предположениями (например, отсутствующие поля, неожиданные
+`null`). Проявится либо на ручной smoke-проверке в TICKET-04, либо на follow-up
+mock-тестировании.
+
+### Follow-up work
+
+Ktor `MockEngine` тесты для `TmdbRemoteDataSource` (и будущего `KinopoiskRemoteDataSource`,
+TICKET-03) — см. MASTER_PLAN.md → Deferred work.
+
+### Next eligible ticket
+
+TICKET-03 (независим от TICKET-02, разблокирован TICKET-01).

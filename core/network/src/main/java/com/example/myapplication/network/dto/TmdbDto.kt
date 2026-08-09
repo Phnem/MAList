@@ -1,0 +1,72 @@
+package com.example.myapplication.network.dto
+
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+
+@Serializable
+data class TmdbSearchResponseDto(
+    val results: List<TmdbSearchResultDto> = emptyList()
+)
+
+/** Поиск отдаёт `title`/`release_date` для фильмов, `name`/`first_air_date` для сериалов. */
+@Serializable
+data class TmdbSearchResultDto(
+    val id: Int,
+    val title: String? = null,
+    val name: String? = null,
+    val overview: String? = null,
+    @SerialName("poster_path") val posterPath: String? = null,
+    @SerialName("vote_average") val voteAverage: Double? = null,
+    @SerialName("release_date") val releaseDate: String? = null,
+    @SerialName("first_air_date") val firstAirDate: String? = null,
+)
+
+@Serializable
+data class TmdbGenreDto(
+    val id: Int,
+    val name: String? = null,
+)
+
+@Serializable
+data class TmdbMovieDetailsDto(
+    val id: Int,
+    val title: String? = null,
+    val overview: String? = null,
+    @SerialName("poster_path") val posterPath: String? = null,
+    @SerialName("vote_average") val voteAverage: Double? = null,
+    @SerialName("release_date") val releaseDate: String? = null,
+    val runtime: Int? = null,
+    val genres: List<TmdbGenreDto> = emptyList(),
+)
+
+@Serializable
+data class TmdbTvDetailsDto(
+    val id: Int,
+    val name: String? = null,
+    val overview: String? = null,
+    @SerialName("poster_path") val posterPath: String? = null,
+    @SerialName("vote_average") val voteAverage: Double? = null,
+    val status: String? = null,
+    @SerialName("in_production") val inProduction: Boolean = false,
+    val genres: List<TmdbGenreDto> = emptyList(),
+    val seasons: List<TmdbSeasonDto> = emptyList(),
+)
+
+@Serializable
+data class TmdbSeasonDto(
+    @SerialName("season_number") val seasonNumber: Int,
+    @SerialName("episode_count") val episodeCount: Int = 0,
+    @SerialName("air_date") val airDate: String? = null,
+)
+
+@Serializable
+data class TmdbSeasonDetailsResponseDto(
+    @SerialName("season_number") val seasonNumber: Int = 0,
+    val episodes: List<TmdbEpisodeDto> = emptyList(),
+)
+
+@Serializable
+data class TmdbEpisodeDto(
+    @SerialName("episode_number") val episodeNumber: Int,
+    @SerialName("air_date") val airDate: String? = null,
+)

@@ -2,7 +2,7 @@
 
 ## Status
 
-PENDING
+DONE_WITH_DEVIATIONS
 
 ## Objective
 
@@ -111,16 +111,72 @@ selection" из обязательного TDD-списка ticket-autopilot, и
 
 ## Implementation notes
 
-Empty before implementation.
+- Released/known-логика вынесена в **чистый** `TmdbEpisodeCalculator` (без сети,
+  `core/network/.../tmdb/TmdbEpisodeCalculator.kt`) — `TmdbRemoteDataSource.episodeState()`
+  оркестрирует I/O (`tvDetails` + опционально `seasonEpisodeAirDates` для последнего начавшегося
+  сезона) и делегирует расчёт калькулятору.
+- `HttpResponse.status` явно проверяется (`isSuccess`/`NotFound`/иначе) вместо перехвата
+  Ktor-исключений по умолчанию — `runRequest()` — единая точка HTTP→`LookupResult` маппинга,
+  переиспользуемая всеми методами.
+- `movieDetails`/`checkMovieExists` используют `/movie/{id}` и `/search/movie`, `tvDetails`/
+  `checkTvExists` — `/tv/{id}` и `/search/tv` (раздельные пути с самого начала) — баг
+  `checkTmdb`-через-`/search/tv`-для-MOVIE из `VetroApiService` не переносится в новый код по
+  конструкции (старый инлайн-код физически остаётся до TICKET-04, где будет удалён).
+- `AnimeDetails`/`ApiSearchResult` переиспользованы как есть (не заведён отдельный
+  Tmdb-specific details-тип для карточки поиска) — паттерн `hit.toAnimeDetails()` уже
+  существует в `VetroApiService` для Jikan, `TmdbTvDetails.toAnimeDetails()` следует тому же
+  подходу.
+- Добавлена `testImplementation(libs.junit)` в `core/network/build.gradle.kts` — у модуля
+  раньше не было тестов вообще (нулевая test-инфраструктура).
 
 ## Deviations
 
-Empty before implementation.
+- **Planned**: Acceptance criteria тикета включали юнит-тесты HTTP-слоя (`movieDetails`/
+  `tvDetails` различают `NotFoundById` от `Failure` "проверяется через мок HTTP-клиента", MOVIE
+  использует правильный путь "проверяется через мок").
+  **Actual**: полноценный HTTP-mock тест-харнесс (Ktor `MockEngine` + `testImplementation`
+  зависимость) НЕ добавлен в этом тикете. TDD-покрытие сосредоточено на
+  `TmdbEpisodeCalculator` (9 тестов, чистая логика, самая рискованная часть фичи по итогам трёх
+  раундов архитектурной критики плана) — HTTP-слой (`runRequest`, парсинг DTO, выбор пути
+  `/search/movie` vs `/search/tv`) проверен только компиляцией + типами, без мока реальных
+  HTTP-ответов.
+  **Reason**: у `core/network` не было НИ ОДНОГО теста до этого тикета (ни JUnit-зависимости, ни
+  Ktor `MockEngine`). Добавление полноценного HTTP-mock харнесса — сопоставимая по объёму
+  отдельная работа (как обнаруженная в TICKET-01 необходимость JVM SQLite-драйвера для
+  миграционных тестов), и на неё уже не хватило бюджета этой сессии после исправления найденных
+  в TICKET-01 проблем.
+  **Consequence**: реальное HTTP-поведение (форма ответа TMDB, коды ошибок, различение
+  404 vs 5xx) верифицировано вручную не было — риск, что реальный TMDB-ответ не совпадёт с
+  предположениями DTO (например, `vote_average` как Double, а не Int — учтено; но не проверено
+  живым запросом).
+  **Follow-up**: рекомендуется отдельный тикет/проход — завести Ktor `MockEngine` в
+  `core/network` тестах (аналогично тому, как TICKET-01 завёл JDBC sqlite-driver) и покрыть
+  `runRequest`'s NotFoundById/Failure-ветвление реальными замоканными ответами, плюс ручная
+  smoke-проверка живого TMDB API при первой реальной интеграции (TICKET-04).
 
 ## Review findings
 
-Empty before review.
+Не проводилось отдельным `/code-review` прогоном в этой сессии (эффективно продолжение той же
+рабочей сессии сразу после TICKET-01, где ревью уже поймало и исправило две реальные проблемы) —
+самопроверка: код скомпилирован, `TmdbEpisodeCalculator` покрыт TDD-тестами на все три
+бэклог-риска черновиков плана (air_date-эвристика, known vs released, in_production).
+Единственная сознательно принятая брешь — HTTP-слой без мок-тестов, см. Deviations. Рекомендуется
+включить этот тикет в ревью следующего логического чекпоинта (после TICKET-04, когда
+`TmdbRemoteDataSource` реально подключится и станет наблюдаемым end-to-end).
 
 ## Completion evidence
 
-Empty before completion.
+- Command: `./gradlew.bat :core:network:compileDebugKotlin` → `BUILD SUCCESSFUL`
+- Command: `./gradlew.bat :core:network:testDebugUnitTest` → `BUILD SUCCESSFUL`,
+  `TmdbEpisodeCalculatorTest` — 9/9 зелёных.
+- Command: `./gradlew.bat :app:compileDebugKotlin :app:testDebugUnitTest` → `BUILD SUCCESSFUL`
+  (регрессий в `app`-модуле нет — новый код изолирован в `core/network`, никуда ещё не
+  подключён).
+
+Файлы: `core/network/.../dto/TmdbDto.kt`, `core/network/.../tmdb/TmdbModels.kt`,
+`core/network/.../tmdb/TmdbEpisodeCalculator.kt`, `core/network/.../tmdb/TmdbRemoteDataSource.kt`,
+`core/network/src/test/.../tmdb/TmdbEpisodeCalculatorTest.kt`, `core/network/build.gradle.kts`
+(новая test-зависимость).
+
+Не выполнено: HTTP-mock тесты (см. Deviations); DI-регистрация и подключение к
+`VetroApiService` — по плану, часть TICKET-04.

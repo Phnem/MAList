@@ -2,20 +2,17 @@
 
 ## Workflow
 
-Current workflow state: WAITING_FOR_USER_DECISION
+Current workflow state: READY_FOR_IMPLEMENTATION
 Current ticket: None
-Last completed ticket: TICKET-01 (implemented + verified, NOT committed — see decision below)
-Next eligible ticket: TICKET-02, TICKET-03 (оба разблокированы, независимы друг от друга)
+Last completed ticket: TICKET-02
+Next eligible ticket: TICKET-03 (независим), TICKET-04 (ждёт ещё и TICKET-03)
 Last updated: 2026-08-09
 
-**Ожидает решения пользователя**: рабочее дерево содержит существенный объём несвязанных
-незакоммиченных правок (dock navigation, PiP, card menu, workspace UI), включая ДВА файла,
-которые TICKET-01 тоже правит: `HomeScreen.kt` (285 изменённых строк всего, из них TICKET-01 —
-только 3 точечных hunk'а) и `UiStrings.kt` (TICKET-01 — только добавление `typeMovie`, удаление
-`notifAccept`/`notifDecline`-полей — не моё). Коммит по правилам ticket-autopilot ("один
-фокусный коммит на тикет") для этих двух файлов неизбежно захватит и несвязанные правки —
-безопасно разделить средствами, доступными в этой сессии, нельзя (нет `git add -p`). Спросить
-пользователя, как поступить, прежде чем коммитить и продолжать TICKET-02.
+**Коммит**: `e73c65a` — по решению пользователя один общий коммит, включающий TICKET-01 и
+предсуществующие несвязанные незакоммиченные правки (dock navigation/PiP/card menu/workspace UI
+— отдельная фича `.scratch/select-dock-navigation/`, тоже через ticket-autopilot, из более
+ранней сессии). Дальнейшие тикеты этой фичи коммитить обычным порядком (рабочее дерево теперь
+чистое relative к этой фиче).
 
 ## Goal
 
@@ -99,7 +96,7 @@ Out of scope.
 | ID | Title | Status | Blocked by | Commit | Review |
 |---|---|---|---|---|---|
 | TICKET-01 | MediaType split + схема БД + ExternalIds/LookupResult контракты | DONE | — | не коммичен | code-review (Standards+Spec), без блокеров после фикса |
-| TICKET-02 | TmdbRemoteDataSource — типизированный DTO-слой TMDB | PENDING | 01 | — | — |
+| TICKET-02 | TmdbRemoteDataSource — типизированный DTO-слой TMDB | DONE_WITH_DEVIATIONS | 01 | не коммичен | самопроверка, HTTP-слой без mock-тестов (см. тикет) |
 | TICKET-03 | KinopoiskRemoteDataSource — RU-источник | PENDING | 01 | — | — |
 | TICKET-04 | MovieSeriesRepository + переключение VetroApiService | PENDING | 01,02,03 | — | — |
 | TICKET-05 | Details-экран для MOVIE/SERIES | PENDING | 04 | — | — |
@@ -126,9 +123,14 @@ test-зависимость `sqldelight-sqlite-driver` (TDD-требование
 
 ### TICKET-02 — TmdbRemoteDataSource
 
-Status: PENDING
+Status: DONE_WITH_DEVIATIONS
 Tracker reference: [`issues/02-tmdb-remote-data-source.md`](./issues/02-tmdb-remote-data-source.md)
 Dependencies: 01
+Verification evidence: `compileDebugKotlin`/`testDebugUnitTest` зелёные (оба модуля),
+`TmdbEpisodeCalculatorTest` 9/9.
+Deviations: HTTP-слой (`TmdbRemoteDataSource`) без mock-тестов — TDD сосредоточен на
+released/known-калькуляторе (самая рискованная логика). Follow-up: завести Ktor `MockEngine` в
+`core/network`, покрыть HTTP-маппинг отдельно.
 
 ### TICKET-03 — KinopoiskRemoteDataSource
 
@@ -192,6 +194,10 @@ Dependencies: 01, 02, 04
 
 См. `spec.md` → Out of scope. Не создаются тикеты в этой итерации; при возврате к фиче —
 отдельный проход `/ticket-autopilot`, отдельная спека.
+
+- **Ktor `MockEngine` тесты для `TmdbRemoteDataSource`** (обнаружено в TICKET-02): HTTP-слой
+  сейчас проверен только компиляцией, не мок-ответами. Добавить вместе с/после TICKET-03
+  (Kinopoisk data source в той же ситуации — тоже без HTTP-тестов).
 
 - **Cloud sync для tmdb_id/kinopoisk_id** (обнаружено при реализации TICKET-01, не было в
   исходной спеке явным пунктом, но логически то же семейство "сначала SQL-миграция на живом
