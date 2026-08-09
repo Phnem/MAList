@@ -11,6 +11,7 @@ data class KinopoiskSearchResponseDto(
 data class KinopoiskMovieDto(
     val id: Int,
     val name: String? = null,
+    val enName: String? = null,
     val alternativeName: String? = null,
     val description: String? = null,
     /** `movie`/`tv-series`/`cartoon`/`anime`/`animated-series` — поиск фильтрует по нему запросом. */

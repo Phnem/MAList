@@ -72,6 +72,26 @@ class KinopoiskMappersTest {
     }
 
     @Test
+    fun `english locale uses enName only while alternative stays original title`() {
+        val withoutEnglish = KinopoiskMovieDto(
+            id = 1,
+            name = "1+1",
+            enName = null,
+            alternativeName = "Intouchables",
+        ).toApiSearchResult("MOVIE")
+        assertNull(withoutEnglish.titleEn)
+        assertEquals("Intouchables", withoutEnglish.originalTitle)
+
+        val withEnglish = KinopoiskMovieDto(
+            id = 2,
+            name = "1+1",
+            enName = "The Intouchables",
+            alternativeName = "Intouchables",
+        ).toApiSearchResult("MOVIE")
+        assertEquals("The Intouchables", withEnglish.titleEn)
+    }
+
+    @Test
     fun `toDetails preserves kp rating unscaled for repair-level consumers`() {
         val dto = KinopoiskMovieDto(id = 1, name = "X", rating = KinopoiskRatingDto(kp = 7.5))
         assertEquals(7.5, dto.toDetails().ratingKp!!, 0.0001)

@@ -4,8 +4,8 @@
 
 Current workflow state: READY_FOR_IMPLEMENTATION
 Current ticket: None
-Last completed ticket: TICKET-05
-Next eligible ticket: TICKET-06
+Last completed ticket: TICKET-06
+Next eligible ticket: TICKET-07
 Last updated: 2026-08-09
 
 **Коммит**: `e73c65a` — по решению пользователя один общий коммит, включающий TICKET-01 и
@@ -100,7 +100,7 @@ Out of scope.
 | TICKET-03 | KinopoiskRemoteDataSource — RU-источник | DONE_WITH_DEVIATIONS | 01 | `140d048` | самопроверка, HTTP-слой без mock-тестов (тот же follow-up, что TICKET-02) |
 | TICKET-04 | MovieSeriesRepository + переключение VetroApiService | DONE | 01,02,03 | `3b88d85` | code-review (Standards+Spec), все находки resolved |
 | TICKET-05 | Details-экран для MOVIE/SERIES | DONE | 04 | `e81c5bb` | code-review (Standards+Spec), все обязательные находки resolved |
-| TICKET-06 | AddFromApiUseCase — ExternalIds вместо source-веток | PENDING | 04 | — | — |
+| TICKET-06 | AddFromApiUseCase — ExternalIds вместо source-веток | DONE | 04 | `TICKET-06_COMMIT` | code-review (Standards+Spec), все находки resolved |
 | TICKET-07 | Детектор пробелов + починка для MOVIE/SERIES | PENDING | 04,06 | — | — |
 | TICKET-08 | SeriesEpisodeCheckUseCase — отслеживание вышедших серий | PENDING | 01,02,04 | — | — |
 
@@ -161,9 +161,12 @@ Commit: `e81c5bb`
 
 ### TICKET-06 — AddFromApiUseCase
 
-Status: PENDING
+Status: DONE
 Tracker reference: [`issues/06-add-and-dedup.md`](./issues/06-add-and-dedup.md)
 Dependencies: 04
+Verification evidence: full unit tests `core:network` + `app` 412/412, compilation обоих
+модулей, `git diff --check`.
+Commit: `TICKET-06_COMMIT`
 
 ### TICKET-07 — Gap detector + repair
 

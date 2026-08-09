@@ -70,5 +70,7 @@ object MovieResultDeduper {
         ),
         seasonYear = kept.seasonYear ?: other.seasonYear,
         originalTitle = kept.originalTitle ?: other.originalTitle,
+        titleEn = kept.titleEn ?: other.titleEn,
+        titleRu = kept.titleRu ?: other.titleRu,
     )
 }

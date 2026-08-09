@@ -25,6 +25,8 @@ class DuplicateTitleRuleTest {
         anilistId: Int? = null,
         malId: Int? = null,
         shikimoriId: Int? = null,
+        tmdbId: Int? = null,
+        kinopoiskId: Int? = null,
         rating: Float = 0f,
         isFavorite: Boolean = false,
         comment: String = "",
@@ -48,6 +50,8 @@ class DuplicateTitleRuleTest {
         anilistId = anilistId,
         malId = malId,
         shikimoriId = shikimoriId,
+        tmdbId = tmdbId,
+        kinopoiskId = kinopoiskId,
         mediaType = mediaType,
     )
 
@@ -102,6 +106,29 @@ class DuplicateTitleRuleTest {
         assertFalse(isDuplicate(anime("1", "Bleach", malId = 1), anime("2", "Gintama", malId = 2)))
     }
 
+    @Test
+    fun movie_ids_are_used_for_duplicate_detection() {
+        assertTrue(
+            isDuplicate(
+                anime("1", "Дюна", mediaType = MediaType.MOVIE, tmdbId = 438631),
+                anime("2", "Dune", mediaType = MediaType.MOVIE, tmdbId = 438631),
+            )
+        )
+        assertTrue(
+            isDuplicate(
+                anime("1", "Шоу", mediaType = MediaType.SERIES, kinopoiskId = 10),
+                anime("2", "Show", mediaType = MediaType.SERIES, kinopoiskId = 10),
+            )
+        )
+    }
+
+    @Test
+    fun `conflicting canonical tmdb ids protect same title remakes`() {
+        val original = anime("1", "The Office", mediaType = MediaType.SERIES, tmdbId = 2996)
+        val remake = anime("2", "The Office", mediaType = MediaType.SERIES, tmdbId = 2316)
+        assertFalse(isDuplicate(original, remake))
+    }
+
     // ---- Схлопывание ----
 
     @Test
@@ -150,6 +177,15 @@ class DuplicateTitleRuleTest {
         assertEquals(3, survivor.malId)
         assertEquals(4, survivor.shikimoriId)
         assertEquals("Наруто", survivor.titleRu)
+    }
+
+    @Test
+    fun `movie survivor absorbs missing catalog ids`() {
+        val rich = anime("1", "Dune", mediaType = MediaType.MOVIE, rating = 9f, tmdbId = 438631)
+        val poor = anime("2", "Dune", mediaType = MediaType.MOVIE, kinopoiskId = 409118)
+        val survivor = collapseDuplicates(listOf(rich, poor)).single()
+        assertEquals(438631, survivor.tmdbId)
+        assertEquals(409118, survivor.kinopoiskId)
     }
 
     @Test

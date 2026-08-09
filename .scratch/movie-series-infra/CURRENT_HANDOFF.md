@@ -18,7 +18,7 @@ READY_FOR_IMPLEMENTATION
 ## Completed tickets
 
 TICKET-01 (`e73c65a`), TICKET-02 (`b1ea00d`), TICKET-03 (`140d048`), TICKET-04
-(`3b88d85`), TICKET-05 (`e81c5bb`).
+(`3b88d85`), TICKET-05 (`e81c5bb`), TICKET-06 (`TICKET-06_COMMIT`).
 
 ## Active ticket
 
@@ -26,7 +26,7 @@ None.
 
 ## Next eligible ticket
 
-TICKET-06 — AddFromApiUseCase и дедуп по ExternalIds.
+TICKET-07 — gap detector + repair MOVIE/SERIES.
 
 ## Decisions that must be preserved
 
@@ -42,15 +42,15 @@ Supabase migration. `ApiSearchResult.originalTitle` добавлен для ко
 
 ## Current repository state
 
-TICKET-05 завершён и должен быть чистым после коммита.
+TICKET-06 завершён и должен быть чистым после коммита.
 
 ## Relevant commits
 
-`e73c65a`, `b1ea00d`, `140d048`, `3b88d85`, `e81c5bb`.
+`e73c65a`, `b1ea00d`, `140d048`, `3b88d85`, `e81c5bb`, `TICKET-06_COMMIT`.
 
 ## Verification already performed
 
-Полные unit-тесты `core:network` + `app`: 401/401; компиляция обоих модулей; `git diff --check`.
+Полные unit-тесты `core:network` + `app`: 412/412; компиляция обоих модулей; `git diff --check`.
 
 ## Known failures or blockers
 
@@ -58,10 +58,10 @@ TICKET-05 завершён и должен быть чистым после ко
 
 ## Files most relevant to the next ticket
 
-`AddFromApiUseCase.kt`, `DuplicateTitleRule.kt`, `SaveAnimeParams.kt`, `SaveAnimeUseCase.kt`,
-`ApiSearchResult.kt`, `.scratch/movie-series-infra/issues/06-add-and-dedup.md`.
+`CollectionGapDetector.kt`, `EnrichmentModels.kt`, `RepairAnimeDbUseCase.kt`,
+`AnimeLocalDataSource.kt`, `.scratch/movie-series-infra/issues/07-gap-detector-and-repair.md`.
 
 ## Exact recommended next action
 
-Прочитать TICKET-06 и существующие source-based ветки добавления/поиска дублей; сначала
-добавить тесты на сохранение tmdb/kinopoisk id и разные годы ремейков.
+Прочитать TICKET-07 и существующие gap/repair тесты; сначала добавить тесты на critical TMDB,
+optional Kinopoisk TTL и Failure/NoMatch/NotFoundById semantics.

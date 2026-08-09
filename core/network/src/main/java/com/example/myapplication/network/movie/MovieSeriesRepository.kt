@@ -41,15 +41,20 @@ class MovieSeriesRepository internal constructor(
         if (language == AppLanguage.EN) return tmdbResult
 
         val kinopoiskResult = kinopoisk.search(normalizedQuery, contentType, year = null)
+        // RU-карточка TMDB не содержит надёжного EN-localized title: original_title может быть
+        // французским/корейским и т.п. Второй языковой запрос даёт явное titleEn и сливается по id.
+        val tmdbEnglishResult = tmdb.search(normalizedQuery, contentType, AppLanguage.EN, year = null)
         val candidates = buildList {
             if (kinopoiskResult is LookupResult.Found) addAll(kinopoiskResult.value)
             if (tmdbResult is LookupResult.Found) addAll(tmdbResult.value)
+            if (tmdbEnglishResult is LookupResult.Found) addAll(tmdbEnglishResult.value)
         }
         if (candidates.isNotEmpty()) return LookupResult.Found(MovieResultDeduper.merge(candidates))
 
         return when {
             kinopoiskResult is LookupResult.Failure -> kinopoiskResult
             tmdbResult is LookupResult.Failure -> tmdbResult
+            tmdbEnglishResult is LookupResult.Failure -> tmdbEnglishResult
             else -> LookupResult.NoMatch
         }
     }

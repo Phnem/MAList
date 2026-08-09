@@ -56,6 +56,10 @@ data class ApiSearchResult(
     val seasonYear: Int? = null,
     /** Оригинальное название источника для строгой title+year ступени дедупа MOVIE/SERIES. */
     val originalTitle: String? = null,
+    /** Явное английское локализованное название, если источник/языковой запрос его дал. */
+    val titleEn: String? = null,
+    /** Явное русское локализованное название, если источник/языковой запрос его дал. */
+    val titleRu: String? = null,
     /** TMDB/Kinopoisk id-пара для MOVIE/SERIES результатов. Пусто у аниме/манга-источников. */
     val externalIds: ExternalIds = ExternalIds(),
 )

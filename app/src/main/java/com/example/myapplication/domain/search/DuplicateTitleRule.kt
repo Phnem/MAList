@@ -26,6 +26,8 @@ private fun Anime.externalIds(): List<Pair<String, Int>> = buildList {
     anilistId?.let { add("anilist" to it) }
     malId?.let { add("mal" to it) }
     shikimoriId?.let { add("shikimori" to it) }
+    tmdbId?.let { add("tmdb" to it) }
+    kinopoiskId?.let { add("kinopoisk" to it) }
 }
 
 /**
@@ -38,6 +40,13 @@ private fun Anime.externalIds(): List<Pair<String, Int>> = buildList {
  */
 fun isDuplicate(a: Anime, b: Anime): Boolean {
     if (a.mediaType != b.mediaType) return false
+
+    if (a.mediaType == com.example.myapplication.data.models.MediaType.MOVIE ||
+        a.mediaType == com.example.myapplication.data.models.MediaType.SERIES
+    ) {
+        if (a.tmdbId != null && b.tmdbId != null) return a.tmdbId == b.tmdbId
+        if (a.kinopoiskId != null && a.kinopoiskId == b.kinopoiskId) return true
+    }
 
     val aIds = a.externalIds()
     if (aIds.isNotEmpty()) {
@@ -91,6 +100,8 @@ private fun absorb(survivor: Anime, discarded: Anime): Anime = survivor.copy(
     anilistId = survivor.anilistId ?: discarded.anilistId,
     malId = survivor.malId ?: discarded.malId,
     shikimoriId = survivor.shikimoriId ?: discarded.shikimoriId,
+    tmdbId = survivor.tmdbId ?: discarded.tmdbId,
+    kinopoiskId = survivor.kinopoiskId ?: discarded.kinopoiskId,
     episodes = if (survivor.episodes > 0) survivor.episodes else discarded.episodes,
 )
 

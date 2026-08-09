@@ -36,12 +36,12 @@ class TmdbRemoteDataSource(private val client: HttpClient) {
 
     suspend fun searchMovie(query: String, language: AppLanguage, year: Int? = null): LookupResult<List<ApiSearchResult>> =
         search("movie", query, language, year, yearParam = "primary_release_year") { dto ->
-            dto.toApiSearchResult(categoryType = "MOVIE")
+            dto.toApiSearchResult(categoryType = "MOVIE", language = language)
         }
 
     suspend fun searchTv(query: String, language: AppLanguage, year: Int? = null): LookupResult<List<ApiSearchResult>> =
         search("tv", query, language, year, yearParam = "first_air_date_year") { dto ->
-            dto.toApiSearchResult(categoryType = "SERIES")
+            dto.toApiSearchResult(categoryType = "SERIES", language = language)
         }
 
     private suspend fun search(
@@ -192,7 +192,10 @@ private fun String.toLocalDateOrNull(): LocalDate? = try {
     null
 }
 
-internal fun TmdbSearchResultDto.toApiSearchResult(categoryType: String): ApiSearchResult {
+internal fun TmdbSearchResultDto.toApiSearchResult(
+    categoryType: String,
+    language: AppLanguage,
+): ApiSearchResult {
     val displayTitle = title ?: name.orEmpty()
     val posterUrl = posterPath?.let { "https://image.tmdb.org/t/p/w500$it" }
     val year = (releaseDate ?: firstAirDate)?.take(4)?.toIntOrNull()
@@ -209,6 +212,8 @@ internal fun TmdbSearchResultDto.toApiSearchResult(categoryType: String): ApiSea
         categoryType = categoryType,
         seasonYear = year,
         originalTitle = (originalTitle ?: originalName)?.takeIf { it.isNotBlank() },
+        titleEn = displayTitle.takeIf { language == AppLanguage.EN },
+        titleRu = displayTitle.takeIf { language == AppLanguage.RU },
         externalId = id.toString(),
         externalIds = ExternalIds(tmdb = id),
     )

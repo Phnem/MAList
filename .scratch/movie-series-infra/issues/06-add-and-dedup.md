@@ -1,8 +1,10 @@
 # TICKET-06: AddFromApiUseCase — ExternalIds вместо source-веток
 
+Status: DONE
+
 ## Status
 
-PENDING
+DONE
 
 ## Objective
 
@@ -73,16 +75,32 @@ REQUIRED — id-извлечение и duplicate-detection это "fallback sel
 
 ## Implementation notes
 
-Empty before implementation.
+- `ApiSearchResult` получил явные `titleEn`/`titleRu`; TMDB заполняет поле по языку запроса,
+  Kinopoisk — из `enName`/`name`. RU repository search объединяет Kinopoisk + TMDB RU + TMDB EN
+  по canonical id, поэтому нейтральные названия вроде `1+1` не классифицируются по алфавиту.
+- `SearchIdentityProjection` — единая проекция результата для save и duplicate probe. Ветки
+  ANIME/MANGA по `source` сохранены, MOVIE/SERIES читают только `ExternalIds`.
+- MOVIE/SERIES сохраняют `episodes=1`, `tmdbId`/`kinopoiskId` и доступные локализованные title.
+- `DuplicateTitleRule` учитывает новые id, не склеивает конфликтующие canonical TMDB id и
+  переносит отсутствующие каталожные id в survivor.
 
 ## Deviations
 
-Empty before implementation.
+- Для надёжного EN title RU-поиск делает дополнительный TMDB EN запрос. `originalTitle` не
+  используется как английский alias: это оригинальный язык произведения, не обязательно EN.
 
 ## Review findings
 
-Empty before review.
+- Первое ревью нашло BLOCKING alphabet-based locale inference и дублированную identity projection;
+  оба устранены явными locale-полями и `SearchIdentityProjection`.
+- Повторное ревью уточнило, что `alternativeName` Kinopoisk нельзя считать EN; исправлено на
+  `enName` only, добавлен `1+1`/`The Intouchables` regression.
+- Финальное повторное ревью: все находки RESOLVED, новых блокеров нет.
 
 ## Completion evidence
 
-Empty before completion.
+- `./gradlew.bat :core:network:testDebugUnitTest :app:testDebugUnitTest
+  :core:network:compileDebugKotlin :app:compileDebugKotlin` → BUILD SUCCESSFUL;
+  412 тестов, failures=0, errors=0.
+- `git diff --check` → без ошибок.
+- Commit: `TICKET-06_COMMIT`.

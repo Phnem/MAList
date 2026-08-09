@@ -258,12 +258,49 @@ class MovieSeriesRepositoryTest {
         assertEquals(1, tmdb.searchCalls)
     }
 
+    @Test
+    fun `ru search fills missing kinopoisk english title from tmdb en result`() = runBlocking {
+        val kinopoisk = FakeKinopoiskGateway(
+            searchResult = LookupResult.Found(
+                listOf(
+                    result(
+                        "1+1",
+                        2011,
+                        tmdb = 77338,
+                        kinopoisk = 535341,
+                        source = "Kinopoisk",
+                        titleRu = "1+1",
+                    )
+                )
+            )
+        )
+        val tmdb = FakeTmdbGateway(
+            searchResultsByLanguage = mapOf(
+                AppLanguage.RU to LookupResult.Found(
+                    listOf(result("1+1", 2011, tmdb = 77338, titleRu = "1+1"))
+                ),
+                AppLanguage.EN to LookupResult.Found(
+                    listOf(result("The Intouchables", 2011, tmdb = 77338, titleEn = "The Intouchables"))
+                ),
+            )
+        )
+        val repository = MovieSeriesRepository(tmdb, kinopoisk)
+
+        val found = repository.search("1+1", AppContentType.MOVIE, AppLanguage.RU)
+            as LookupResult.Found<List<ApiSearchResult>>
+
+        assertEquals("1+1", found.value.single().titleRu)
+        assertEquals("The Intouchables", found.value.single().titleEn)
+    }
+
     private fun result(
         title: String,
         year: Int?,
         tmdb: Int? = null,
         kinopoisk: Int? = null,
         source: String = "TMDB",
+        titleEn: String? = null,
+        titleRu: String? = null,
     ) = ApiSearchResult(
         title = title,
         altTitle = null,
@@ -278,6 +315,8 @@ class MovieSeriesRepositoryTest {
         externalId = (tmdb ?: kinopoisk)?.toString(),
         seasonYear = year,
         externalIds = ExternalIds(tmdb = tmdb, kinopoisk = kinopoisk),
+        titleEn = titleEn,
+        titleRu = titleRu,
     )
 
     private fun kinopoiskDetails(tmdbId: Int?) = KinopoiskDetails(
@@ -317,6 +356,7 @@ private class FakeTmdbGateway(
     var checkResult: LookupResult<Unit> = LookupResult.NoMatch,
     var detailsResult: LookupResult<AnimeDetails> = LookupResult.NoMatch,
     var episodeResult: LookupResult<SeriesEpisodeState> = LookupResult.NoMatch,
+    var searchResultsByLanguage: Map<AppLanguage, LookupResult<List<ApiSearchResult>>> = emptyMap(),
 ) : TmdbMovieGateway {
     var searchCalls = 0
     var lastSearchContentType: AppContentType? = null
@@ -331,7 +371,7 @@ private class FakeTmdbGateway(
         searchCalls++
         lastSearchContentType = contentType
         lastSearchYear = year
-        return searchResult
+        return searchResultsByLanguage[language] ?: searchResult
     }
 
     override suspend fun checkExists(id: Int, contentType: AppContentType): LookupResult<Unit> = checkResult

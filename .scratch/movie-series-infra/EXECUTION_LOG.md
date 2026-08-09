@@ -337,3 +337,39 @@ Legacy RU запись без `titleEn` показывает RU fallback-заг�
 ### Next eligible ticket
 
 TICKET-06 — AddFromApiUseCase и дедуп по ExternalIds.
+
+## 2026-08-09 — TICKET-06 завершён
+
+### Outcome
+
+DONE
+
+### Work completed
+
+Добавление MOVIE/SERIES сохраняет оба catalog id, обе доступные локали и строго `episodes=1`.
+Save/duplicate probe используют одну identity projection. Локальный duplicate rule учитывает
+TMDB/Kinopoisk, canonical conflicts и absorb новых id.
+
+### Decisions made
+
+Локаль больше не угадывается по алфавиту. TMDB mapper отмечает язык запроса, Kinopoisk
+использует `name`/`enName`, а RU search делает дополнительный TMDB EN lookup и fill-gap merge.
+
+### Deviations
+
+RU search получил второй TMDB запрос ради корректного titleEn; это увеличивает один поиск, но
+устраняет систематически неверные locale aliases и соответствует требованию заполнить обе
+доступные локали.
+
+### Verification
+
+Полные unit tests `core:network` + `app`: 412/412; compilation обоих модулей; diff check.
+
+### Review result
+
+Двухосевое ревью: BLOCKING locale inference и IMPORTANT duplication исправлены; финальное
+повторное ревью подтвердило отсутствие блокеров.
+
+### Next eligible ticket
+
+TICKET-07 — gap detector + repair MOVIE/SERIES.
