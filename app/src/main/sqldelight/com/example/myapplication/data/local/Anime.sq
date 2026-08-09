@@ -173,6 +173,8 @@ SET title = ?,
     encryptionIv = ?,
     deletedAt = ?,
     mediaType = ?,
+    title_en = ?,
+    title_ru = ?,
     tmdb_id = ?,
     kinopoisk_id = ?,
     tmdb_not_found_at = ?,
@@ -235,9 +237,19 @@ UPDATE anime
 SET tmdb_id = ?, tmdb_not_found_at = NULL, updatedAt = ?, sync_status = 'PENDING_UPDATE'
 WHERE id = ?;
 
+clearTmdbId:
+UPDATE anime
+SET tmdb_id = NULL, tmdb_not_found_at = NULL, updatedAt = ?, sync_status = 'PENDING_UPDATE'
+WHERE id = ?;
+
 setKinopoiskId:
 UPDATE anime
 SET kinopoisk_id = ?, kinopoisk_not_found_at = NULL, updatedAt = ?, sync_status = 'PENDING_UPDATE'
+WHERE id = ?;
+
+clearKinopoiskId:
+UPDATE anime
+SET kinopoisk_id = NULL, kinopoisk_not_found_at = NULL, updatedAt = ?, sync_status = 'PENDING_UPDATE'
 WHERE id = ?;
 
 markTmdbNotFound:

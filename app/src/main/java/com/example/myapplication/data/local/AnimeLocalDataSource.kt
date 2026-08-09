@@ -296,6 +296,8 @@ class AnimeLocalDataSource(
                 encryptionIv = null,
                 deletedAt = null,
                 mediaType = anime.mediaType.name,
+                title_en = anime.titleEn,
+                title_ru = anime.titleRu,
                 tmdb_id = anime.tmdbId?.toLong(),
                 kinopoisk_id = anime.kinopoiskId?.toLong(),
                 tmdb_not_found_at = anime.tmdbNotFoundAt,
@@ -665,12 +667,22 @@ class AnimeLocalDataSource(
         mirrorCoordinator.requestExportIfEnabled()
     }
 
+    suspend fun clearTmdbId(animeId: String) {
+        db().animeQueries.clearTmdbId(updatedAt = System.currentTimeMillis(), id = animeId)
+        mirrorCoordinator.requestExportIfEnabled()
+    }
+
     suspend fun setKinopoiskId(animeId: String, kinopoiskId: Int) {
         db().animeQueries.setKinopoiskId(
             kinopoisk_id = kinopoiskId.toLong(),
             updatedAt = System.currentTimeMillis(),
             id = animeId
         )
+        mirrorCoordinator.requestExportIfEnabled()
+    }
+
+    suspend fun clearKinopoiskId(animeId: String) {
+        db().animeQueries.clearKinopoiskId(updatedAt = System.currentTimeMillis(), id = animeId)
         mirrorCoordinator.requestExportIfEnabled()
     }
 

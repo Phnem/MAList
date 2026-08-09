@@ -16,6 +16,78 @@ import java.time.Clock
 class MovieSeriesRepositoryTest {
 
     @Test
+    fun `repair lookup preserves provider outcomes and prefers kinopoisk candidates in ru`() = runBlocking {
+        val tmdbCandidate = result("The Intouchables", 2011, tmdb = 77338).copy(rating = 82)
+        val kinopoiskCandidate = result("1+1", 2011, kinopoisk = 535341).copy(rating = 76)
+        val repository = MovieSeriesRepository(
+            FakeTmdbGateway(searchResult = LookupResult.Found(listOf(tmdbCandidate))),
+            FakeKinopoiskGateway(searchResult = LookupResult.Found(listOf(kinopoiskCandidate))),
+        )
+
+        val lookup = repository.lookupForRepair("1+1", AppContentType.MOVIE, AppLanguage.RU)
+
+        assertEquals(535341, lookup.candidates.first().externalIds.kinopoisk)
+        assertEquals(76, lookup.candidates.first().rating)
+        assertEquals(true, lookup.tmdb is LookupResult.Found<*>)
+        assertEquals(true, lookup.kinopoisk is LookupResult.Found<*>)
+    }
+
+    @Test
+    fun `repair lookup does not collapse provider failure into no match`() = runBlocking {
+        val failure = LookupResult.Failure(IllegalStateException("offline"), retryable = true)
+        val repository = MovieSeriesRepository(
+            FakeTmdbGateway(searchResult = failure),
+            FakeKinopoiskGateway(searchResult = LookupResult.NoMatch),
+        )
+
+        val lookup = repository.lookupForRepair("Dune", AppContentType.MOVIE, AppLanguage.EN)
+
+        assertEquals(true, lookup.tmdb is LookupResult.Failure)
+        assertEquals(true, lookup.kinopoisk is LookupResult.NoMatch)
+        assertEquals(emptyList<ApiSearchResult>(), lookup.candidates)
+    }
+
+    @Test
+    fun `repair lookup marks saved tmdb id stale and resolves replacement by title`() = runBlocking {
+        val tmdb = FakeTmdbGateway(
+            checkResult = LookupResult.NotFoundById,
+            searchResult = LookupResult.Found(listOf(result("Dune", 2021, tmdb = 438631))),
+        )
+        val repository = MovieSeriesRepository(tmdb, FakeKinopoiskGateway())
+
+        val lookup = repository.lookupForRepair(
+            query = "Dune",
+            contentType = AppContentType.MOVIE,
+            language = AppLanguage.EN,
+            externalIds = ExternalIds(tmdb = 999),
+            includeKinopoisk = false,
+        )
+
+        assertEquals(true, lookup.staleTmdbId)
+        assertEquals(438631, lookup.candidates.first().externalIds.tmdb)
+    }
+
+    @Test
+    fun `repair lookup preserves saved tmdb id on validation failure`() = runBlocking {
+        val tmdb = FakeTmdbGateway(
+            checkResult = LookupResult.Failure(IllegalStateException("offline"), retryable = true),
+        )
+        val repository = MovieSeriesRepository(tmdb, FakeKinopoiskGateway())
+
+        val lookup = repository.lookupForRepair(
+            query = "Dune",
+            contentType = AppContentType.MOVIE,
+            language = AppLanguage.EN,
+            externalIds = ExternalIds(tmdb = 999),
+            includeKinopoisk = false,
+            searchForMetadata = false,
+        )
+
+        assertEquals(false, lookup.staleTmdbId)
+        assertEquals(true, lookup.tmdb is LookupResult.Failure)
+    }
+
+    @Test
     fun `details with saved tmdb id returns populated card`() = runBlocking {
         val details = details(title = "Dune", description = "Arrakis", posterUrl = "poster")
         val tmdb = FakeTmdbGateway(

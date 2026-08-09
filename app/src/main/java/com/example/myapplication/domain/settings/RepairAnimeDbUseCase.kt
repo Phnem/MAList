@@ -1,6 +1,7 @@
 package com.example.myapplication.domain.settings
 
 import com.example.myapplication.data.models.Anime
+import com.example.myapplication.data.models.MediaType
 import com.example.myapplication.data.repository.AnimeRepository
 import com.example.myapplication.data.repository.GenreRepository
 import com.example.myapplication.data.repository.ImageStorageRepository
@@ -12,6 +13,10 @@ import com.example.myapplication.network.AnimeDetails
 import com.example.myapplication.network.ApiSearchResult
 import com.example.myapplication.network.AppContentType
 import com.example.myapplication.network.AppLanguage
+import com.example.myapplication.network.ExternalIds
+import com.example.myapplication.network.LookupResult
+import com.example.myapplication.network.movie.MovieSeriesRepairLookup
+import com.example.myapplication.network.movie.MovieSeriesRepository
 import com.example.myapplication.sync.TitleMatcher
 import kotlinx.coroutines.delay
 
@@ -45,6 +50,7 @@ class RepairAnimeDbUseCase(
     private val imageStorage: ImageStorageRepository,
     private val genreRepository: GenreRepository,
     private val placeholderPurge: ShikimoriPlaceholderPurge,
+    private val movieSeriesRepository: MovieSeriesRepository,
 ) {
     suspend operator fun invoke(
         language: AppLanguage,
@@ -62,27 +68,30 @@ class RepairAnimeDbUseCase(
             .onFailure { e -> sessionLog.warn("Placeholder purge failed", e) }
 
         val all = repository.getAllAnimeSnapshot() // перечитываем: malId мог измениться после реконсиляции
-        val needing = all.filter { detectGaps(it).needsRepair }
+        val gapNeeding = all.filter { detectGaps(it).needsRepair }
+        val gapNeedingIds = gapNeeding.mapTo(HashSet()) { it.id }
+        val repairTargets = all.filter { it.id in gapNeedingIds || it.hasSavedMovieSeriesId() }
 
         sessionLog.info(
             "Start repair: ${all.size} entries, language=$language, " +
-                "contentType=$contentType, needRepair=${needing.size} " +
+                "contentType=$contentType, needRepair=${gapNeeding.size}, " +
+                "identityValidation=${repairTargets.size - gapNeeding.size} " +
                 "(hierarchy: AniList → Shikimori → MAL → Kitsu → AniLibria)",
         )
-        onProgress(0, needing.size)
+        onProgress(0, repairTargets.size)
 
-        for ((index, anime) in needing.withIndex()) {
+        for ((index, anime) in repairTargets.withIndex()) {
             repairOne(anime, language, contentType, sessionLog)
-            onProgress(index + 1, needing.size)
-            if (index < needing.lastIndex) delay(ITEM_DELAY_MS)
+            onProgress(index + 1, repairTargets.size)
+            if (index < repairTargets.lastIndex) delay(ITEM_DELAY_MS)
         }
 
         val finalNeeding = repository.getAllAnimeSnapshot().count { detectGaps(it).needsRepair }
         val result = RepairAnimeDbResult(
             scannedCount = all.size,
-            repairedCount = needing.size - finalNeeding,
+            repairedCount = (gapNeeding.size - finalNeeding).coerceAtLeast(0),
             failedCount = finalNeeding,
-            skippedCount = all.size - needing.size,
+            skippedCount = all.size - gapNeeding.size,
         )
         sessionLog.info(
             "Repair done: scanned=${result.scannedCount}, repaired=${result.repairedCount}, " +
@@ -135,31 +144,52 @@ class RepairAnimeDbUseCase(
         contentType: AppContentType,
         sessionLog: RepairDbSessionLog,
     ) {
-        val gaps = detectGaps(anime)
-        if (!gaps.needsRepair) return
+        val initialGaps = detectGaps(anime)
+        val isMovieSeries = anime.mediaType == MediaType.MOVIE || anime.mediaType == MediaType.SERIES
+        if (!initialGaps.needsRepair && !(isMovieSeries && anime.hasSavedMovieSeriesId())) return
 
         sessionLog.debug(
-            "Needs repair \"${anime.title}\": image=${gaps.missingImage}, " +
-                "tags=${gaps.missingTags}, rating=${gaps.missingRating}, id=${gaps.missingExternalId}, " +
-                "type=${gaps.missingCategoryType}, episodes=${gaps.missingEpisodes}",
+            "Needs repair \"${anime.title}\": image=${initialGaps.missingImage}, " +
+                "tags=${initialGaps.missingTags}, rating=${initialGaps.missingRating}, " +
+                "id=${initialGaps.missingAnimeExternalId}, type=${initialGaps.missingCategoryType}, " +
+                "episodes=${initialGaps.missingEpisodes}",
         )
 
-        val isAnimeEntry = anime.categoryType.isBlank() ||
-            anime.categoryType.equals("ANIME", ignoreCase = true)
-
-        val candidates: List<ApiSearchResult> = if (!isAnimeEntry) {
-            val ct = when {
-                anime.categoryType.equals("MOVIE", ignoreCase = true) -> AppContentType.MOVIE
-                anime.categoryType.equals("SERIES", ignoreCase = true) -> AppContentType.SERIES
-                else -> contentType
-            }
-            val results = repository.searchApi(anime.title, ct, language).getOrNull().orEmpty()
-            listOfNotNull(pickBestMatch(anime.title, results) ?: results.firstOrNull())
+        val movieLookup: MovieSeriesRepairLookup? = if (isMovieSeries) {
+            val lookup = movieSeriesRepository.lookupForRepair(
+                query = anime.title,
+                contentType = anime.mediaType.toAppContentType(),
+                language = language,
+                externalIds = ExternalIds(tmdb = anime.tmdbId, kinopoisk = anime.kinopoiskId),
+                includeKinopoisk = initialGaps.hasRetryableOptionalGaps() || anime.kinopoiskId != null,
+                searchForMetadata = initialGaps.hasMetadataGaps(),
+            )
+            lookup
+        } else {
+            null
+        }
+        val repairAnime = if (movieLookup != null) {
+            if (movieLookup.staleTmdbId) repository.clearTmdbId(anime.id)
+            if (movieLookup.staleKinopoiskId) repository.clearKinopoiskId(anime.id)
+            anime.copy(
+                tmdbId = anime.tmdbId.takeUnless { movieLookup.staleTmdbId },
+                kinopoiskId = anime.kinopoiskId.takeUnless { movieLookup.staleKinopoiskId },
+            )
+        } else {
+            anime
+        }
+        val gaps = if (repairAnime === anime) initialGaps else detectGaps(repairAnime)
+        if (!gaps.needsRepair) return
+        val candidates: List<ApiSearchResult> = if (movieLookup != null) {
+            listOfNotNull(
+                pickBestMatch(anime.title, movieLookup.candidates) ?: movieLookup.candidates.firstOrNull()
+            )
         } else {
             collectAnimeCandidates(anime, language, sessionLog)
         }
 
         if (candidates.isEmpty()) {
+            if (movieLookup != null) persistProviderNoMatches(repairAnime, gaps, movieLookup)
             sessionLog.warn("No API data for \"${anime.title}\"")
             return
         }
@@ -169,14 +199,39 @@ class RepairAnimeDbUseCase(
                 candidates.joinToString { "\"${it.title}\" via ${it.source}" },
         )
 
-        val changed = runCatching { applyRepair(anime, candidates, gaps, sessionLog) }
+        val changed = runCatching { applyRepair(repairAnime, candidates, gaps, sessionLog) }
             .onFailure { e -> sessionLog.warn("Repair error for \"${anime.title}\"", e) }
             .getOrDefault(false)
+        if (movieLookup != null) persistProviderNoMatches(repairAnime, gaps, movieLookup)
         if (changed) {
             sessionLog.info("Repaired \"${anime.title}\" via ${candidates.joinToString { it.source }}")
         } else {
             sessionLog.warn("Matched \"${anime.title}\" but gaps remain")
         }
+    }
+
+    private suspend fun persistProviderNoMatches(
+        anime: Anime,
+        gaps: FieldGaps,
+        lookup: MovieSeriesRepairLookup,
+        nowMillis: Long = System.currentTimeMillis(),
+    ) {
+        if (gaps.missingTmdb && lookup.candidates.none { it.externalIds.tmdb != null }) {
+            notFoundTimestampFor(lookup.tmdb, nowMillis)?.let {
+                repository.markTmdbNotFound(anime.id, it)
+            }
+        }
+        if (gaps.hasRetryableOptionalGaps() && lookup.candidates.none { it.externalIds.kinopoisk != null }) {
+            notFoundTimestampFor(lookup.kinopoisk, nowMillis)?.let {
+                repository.markKinopoiskNotFound(anime.id, it)
+            }
+        }
+    }
+
+    private fun MediaType.toAppContentType(): AppContentType = when (this) {
+        MediaType.MOVIE -> AppContentType.MOVIE
+        MediaType.SERIES -> AppContentType.SERIES
+        else -> error("Expected MOVIE/SERIES, got $this")
     }
 
     /**
@@ -223,9 +278,11 @@ class RepairAnimeDbUseCase(
             candidates.any { mapApiGenresToTagIds(it.genres, genreRepository).isNotEmpty() }
         val ratingOk = !gaps.missingRating || candidates.any { (it.rating ?: 0) > 0 }
         val episodesOk = !gaps.missingEpisodes || candidates.any { it.episodes > 0 }
-        val idOk = !gaps.missingExternalId || candidates.any { it.externalId != null }
+        val idOk = !gaps.missingAnimeExternalId || candidates.any { it.externalId != null }
+        val tmdbOk = !gaps.missingTmdb || candidates.any { it.externalIds.tmdb != null }
+        val kinopoiskOk = !gaps.missingKinopoisk || candidates.any { it.externalIds.kinopoisk != null }
         val typeOk = !gaps.missingCategoryType || candidates.any { it.categoryType.isNotBlank() }
-        return imageOk && tagsOk && ratingOk && episodesOk && idOk && typeOk
+        return imageOk && tagsOk && ratingOk && episodesOk && idOk && tmdbOk && kinopoiskOk && typeOk
     }
 
     /** internal: переиспользуется live-обогащением ([com.example.myapplication.domain.enrichment]). */
@@ -233,27 +290,34 @@ class RepairAnimeDbUseCase(
         val missingImage: Boolean,
         val missingTags: Boolean,
         val missingRating: Boolean,
-        val missingExternalId: Boolean,
+        val missingAnimeExternalId: Boolean,
+        val missingTmdb: Boolean,
+        val missingKinopoisk: Boolean,
+        val kinopoiskRetryable: Boolean,
         val missingCategoryType: Boolean,
         val missingEpisodes: Boolean,
     ) {
-        val needsRepair: Boolean =
-            missingImage || missingTags || missingRating || missingExternalId ||
+        fun hasCriticalGaps(): Boolean =
+            missingImage || missingTags || missingRating || missingAnimeExternalId || missingTmdb ||
                 missingCategoryType || missingEpisodes
+
+        fun hasRetryableOptionalGaps(): Boolean = missingKinopoisk && kinopoiskRetryable
+
+        fun hasMetadataGaps(): Boolean =
+            missingImage || missingTags || missingRating || missingCategoryType || missingEpisodes
+
+        val needsRepair: Boolean = hasCriticalGaps() || hasRetryableOptionalGaps()
     }
 
-    internal fun detectGaps(anime: Anime): FieldGaps {
+    internal fun detectGaps(anime: Anime, nowMillis: Long = System.currentTimeMillis()): FieldGaps {
         val hasImage = !anime.imageFileName.isNullOrBlank() &&
             imageStorage.hasLocalImage(anime.imageFileName)
-        return FieldGaps(
-            missingImage = !hasImage,
-            missingTags = anime.tags.isEmpty(),
-            missingRating = anime.rating <= 0,
-            missingExternalId = anime.anilistId == null && anime.malId == null && anime.shikimoriId == null,
-            missingCategoryType = anime.categoryType.isBlank(),
-            missingEpisodes = anime.episodes <= 0,
-        )
+        return classifyRepairGaps(anime, hasImage, nowMillis)
     }
+
+    private fun Anime.hasSavedMovieSeriesId(): Boolean =
+        (mediaType == MediaType.MOVIE || mediaType == MediaType.SERIES) &&
+            (tmdbId != null || kinopoiskId != null)
 
     private suspend fun fetchFromShikimori(
         anime: Anime,
@@ -458,12 +522,8 @@ class RepairAnimeDbUseCase(
             anime.rating
         }
 
-        val episodes = if (gaps.missingEpisodes) {
-            changed = true
-            candidates.firstNotNullOfOrNull { it.episodes.takeIf { e -> e > 0 } } ?: 1
-        } else {
-            anime.episodes
-        }
+        val episodes = repairedEpisodeCount(anime, candidates, gaps)
+        if (episodes != anime.episodes) changed = true
 
         val categoryType = if (gaps.missingCategoryType) {
             changed = true
@@ -472,24 +532,31 @@ class RepairAnimeDbUseCase(
             anime.categoryType
         }
 
-        var newAnilistId = anime.anilistId
-        var newMalId = anime.malId
-        var newShikimoriId = anime.shikimoriId
-        candidates.forEach { candidate ->
-            val (anilistId, malId, shikimoriId) = externalIdsFrom(candidate)
-            if (newAnilistId == null && anilistId != null) newAnilistId = anilistId
-            if (newMalId == null && malId != null) newMalId = malId
-            if (newShikimoriId == null && shikimoriId != null) newShikimoriId = shikimoriId
-        }
-        if (newAnilistId != anime.anilistId || newMalId != anime.malId || newShikimoriId != anime.shikimoriId) {
+        val ids = mergedRepairExternalIds(anime, candidates)
+        val newAnilistId = ids.anilist
+        val newMalId = ids.mal
+        val newShikimoriId = ids.shikimori
+        val newTmdbId = ids.tmdb
+        val newKinopoiskId = ids.kinopoisk
+        if (
+            newAnilistId != anime.anilistId || newMalId != anime.malId ||
+            newShikimoriId != anime.shikimoriId || newTmdbId != anime.tmdbId ||
+            newKinopoiskId != anime.kinopoiskId
+        ) {
             changed = true
         }
+
+        val titleEn = anime.titleEn ?: candidates.firstNotNullOfOrNull { it.titleEn }
+        val titleRu = anime.titleRu ?: candidates.firstNotNullOfOrNull { it.titleRu }
+        if (titleEn != anime.titleEn || titleRu != anime.titleRu) changed = true
 
         if (!changed) return false
 
         val params = SaveAnimeParams(
             animeId = anime.id,
             title = anime.title,
+            titleEn = titleEn,
+            titleRu = titleRu,
             episodes = episodes,
             rating = rating,
             imageUri = null,
@@ -509,22 +576,13 @@ class RepairAnimeDbUseCase(
             anilistNotFoundAt = anime.anilistNotFoundAt,
             malNotFoundAt = anime.malNotFoundAt,
             shikimoriNotFoundAt = anime.shikimoriNotFoundAt,
+            tmdbId = newTmdbId,
+            kinopoiskId = newKinopoiskId,
+            tmdbNotFoundAt = anime.tmdbNotFoundAt.takeIf { newTmdbId == null },
+            kinopoiskNotFoundAt = anime.kinopoiskNotFoundAt.takeIf { newKinopoiskId == null },
         )
         saveAnimeUseCase(params).getOrThrow()
         return true
-    }
-
-    private fun externalIdsFrom(result: ApiSearchResult): Triple<Int?, Int?, Int?> {
-        val extId = result.externalId?.toIntOrNull()
-        val (anilistId, malFromSource, shikimoriId) = when {
-            result.source.equals("Shikimori", ignoreCase = true) -> Triple(null, null, extId)
-            result.source.equals("AniList", ignoreCase = true) -> Triple(extId, null, null)
-            result.source.equals("MAL", ignoreCase = true) ||
-                result.source.equals("Jikan", ignoreCase = true) -> Triple(null, extId, null)
-            else -> Triple(null, null, null)
-        }
-        // Shikimori detail несёт ещё и MAL id (result.malId) — не теряем его: пишем оба id сразу.
-        return Triple(anilistId, malFromSource ?: result.malId, shikimoriId)
     }
 
     private fun pickBestMatch(localTitle: String, results: List<ApiSearchResult>): ApiSearchResult? {

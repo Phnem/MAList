@@ -59,7 +59,7 @@ val appModule = module {
     single { TitleDubbingCoordinator(androidContext()) }
     single { ImportAnimeDbUseCase(get()) }
     single { ShikimoriPlaceholderPurge(httpClient = get(), imageStorage = get()) }
-    single { RepairAnimeDbUseCase(get(), get(), get(), get(), get()) }
+    single { RepairAnimeDbUseCase(get(), get(), get(), get(), get(), get()) }
     single { RepairDbCoordinator(androidContext()) }
     single { EnrichmentGapJournal(androidContext()) }
     single { CollectionGapDetector(localDataSource = get(), repairUseCase = get(), journal = get()) }

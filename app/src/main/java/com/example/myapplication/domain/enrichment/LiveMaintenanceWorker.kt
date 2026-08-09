@@ -93,17 +93,20 @@ class LiveMaintenanceWorker(
         for (gap in withFieldGaps) {
             if (isStopped) return
             val anime = localDataSource.getAnimeById(gap.animeId) ?: continue
-            val before = repairUseCase.detectGaps(anime).fieldKinds()
+            val beforeGaps = repairUseCase.detectGaps(anime)
+            val before = beforeGaps.fieldKinds()
             if (before.isEmpty()) continue
 
             runCatching { repairUseCase.repairOne(anime, language, AppContentType.ANIME, sessionLog) }
                 .onFailure { Log.w(TAG, "repairOne failed for ${anime.title}", it) }
 
             val reloaded = localDataSource.getAnimeById(gap.animeId) ?: anime
-            val after = repairUseCase.detectGaps(reloaded).fieldKinds()
+            val afterGaps = repairUseCase.detectGaps(reloaded)
+            val after = afterGaps.fieldKinds()
             val resolved = before - after
             if (resolved.isNotEmpty()) journal.clear(gap.animeId, resolved)
-            if (after.isNotEmpty()) journal.mark(gap.animeId, after)
+            val journalable = afterGaps.journalFieldKinds()
+            if (journalable.isNotEmpty()) journal.mark(gap.animeId, journalable)
 
             delay(ITEM_DELAY_MS)
         }
@@ -192,15 +195,6 @@ class LiveMaintenanceWorker(
     private suspend fun readLanguage(): AppLanguage {
         val langStr = runCatching { settingsDataStore.data.first()[LANG_KEY] }.getOrNull() ?: "EN"
         return runCatching { AppLanguage.valueOf(langStr) }.getOrDefault(AppLanguage.EN)
-    }
-
-    private fun RepairAnimeDbUseCase.FieldGaps.fieldKinds(): Set<GapKind> = buildSet {
-        if (missingImage) add(GapKind.IMAGE)
-        if (missingTags) add(GapKind.TAGS)
-        if (missingRating) add(GapKind.RATING)
-        if (missingExternalId) add(GapKind.EXTERNAL_ID)
-        if (missingCategoryType) add(GapKind.CATEGORY_TYPE)
-        if (missingEpisodes) add(GapKind.EPISODES)
     }
 
     companion object {

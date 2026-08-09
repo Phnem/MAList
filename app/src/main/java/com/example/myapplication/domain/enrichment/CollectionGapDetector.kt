@@ -19,7 +19,7 @@ class CollectionGapDetector(
     private val journal: EnrichmentGapJournal,
 ) {
     suspend fun scan(now: Long = System.currentTimeMillis()): List<AnimeGap> {
-        val all = localDataSource.getAllAnimeList().filter { it.mediaType == MediaType.ANIME }
+        val all = localDataSource.getAllAnimeList().filter { it.mediaType.isSupportedByFieldRepair() }
         if (all.isEmpty()) return emptyList()
 
         val needTitleEn = localDataSource.getAnimeNeedingTitleEn(Int.MAX_VALUE).mapTo(HashSet()) { it.id }
@@ -27,10 +27,11 @@ class CollectionGapDetector(
 
         val result = ArrayList<AnimeGap>()
         for (anime in all) {
-            val fieldKinds = repairUseCase.detectGaps(anime).toGapKinds()
+            val gaps = repairUseCase.detectGaps(anime, now)
+            val fieldKinds = gaps.fieldKinds()
             val journaled = if (fieldKinds.isEmpty()) emptySet() else journal.activeFieldGaps(anime.id, now)
             val kinds = LinkedHashSet<GapKind>()
-            kinds += fieldKinds - journaled
+            kinds += fieldKinds - (journaled intersect gaps.journalFieldKinds())
             if (anime.id in needTitleEn) kinds += GapKind.TITLE_EN
             if (anime.id in needTitleRu) kinds += GapKind.TITLE_RU
             if (kinds.isNotEmpty()) result += AnimeGap(anime.id, kinds)
@@ -38,12 +39,24 @@ class CollectionGapDetector(
         return result
     }
 
-    private fun RepairAnimeDbUseCase.FieldGaps.toGapKinds(): Set<GapKind> = buildSet {
-        if (missingImage) add(GapKind.IMAGE)
-        if (missingTags) add(GapKind.TAGS)
-        if (missingRating) add(GapKind.RATING)
-        if (missingExternalId) add(GapKind.EXTERNAL_ID)
-        if (missingCategoryType) add(GapKind.CATEGORY_TYPE)
-        if (missingEpisodes) add(GapKind.EPISODES)
+}
+
+internal fun MediaType.isSupportedByFieldRepair(): Boolean =
+    this == MediaType.ANIME || this == MediaType.MOVIE || this == MediaType.SERIES
+
+internal fun RepairAnimeDbUseCase.FieldGaps.fieldKinds(): Set<GapKind> = buildSet {
+    addAll(journalFieldKinds())
+    if (missingTmdb || (missingKinopoisk && kinopoiskRetryable)) {
+        add(GapKind.EXTERNAL_ID)
     }
+}
+
+/** Provider ids use DB-backed LookupResult timestamps; only legacy field gaps enter the file journal. */
+internal fun RepairAnimeDbUseCase.FieldGaps.journalFieldKinds(): Set<GapKind> = buildSet {
+    if (missingImage) add(GapKind.IMAGE)
+    if (missingTags) add(GapKind.TAGS)
+    if (missingRating) add(GapKind.RATING)
+    if (missingAnimeExternalId) add(GapKind.EXTERNAL_ID)
+    if (missingCategoryType) add(GapKind.CATEGORY_TYPE)
+    if (missingEpisodes) add(GapKind.EPISODES)
 }

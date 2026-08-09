@@ -69,6 +69,10 @@ class AddEditViewModel(
                                 anilistNotFoundAt = anime.anilistNotFoundAt,
                                 malNotFoundAt = anime.malNotFoundAt,
                                 shikimoriNotFoundAt = anime.shikimoriNotFoundAt,
+                                tmdbId = anime.tmdbId,
+                                kinopoiskId = anime.kinopoiskId,
+                                tmdbNotFoundAt = anime.tmdbNotFoundAt,
+                                kinopoiskNotFoundAt = anime.kinopoiskNotFoundAt,
                                 episodes = anime.episodes.toString(),
                                 rating = anime.rating,
                                 selectedTags = anime.tags,
@@ -161,6 +165,10 @@ class AddEditViewModel(
                 anilistNotFoundAt = state.anilistNotFoundAt,
                 malNotFoundAt = state.malNotFoundAt,
                 shikimoriNotFoundAt = state.shikimoriNotFoundAt,
+                tmdbId = state.tmdbId,
+                kinopoiskId = state.kinopoiskId,
+                tmdbNotFoundAt = state.tmdbNotFoundAt,
+                kinopoiskNotFoundAt = state.kinopoiskNotFoundAt,
             )
             saveAnimeUseCase(params)
                 .onSuccess {

@@ -171,6 +171,22 @@ class AnimeRepository(
         localDataSource.setMalId(animeId, malId)
     }
 
+    suspend fun markTmdbNotFound(animeId: String, atMillis: Long) {
+        localDataSource.markTmdbNotFound(animeId, atMillis)
+    }
+
+    suspend fun clearTmdbId(animeId: String) {
+        localDataSource.clearTmdbId(animeId)
+    }
+
+    suspend fun markKinopoiskNotFound(animeId: String, atMillis: Long) {
+        localDataSource.markKinopoiskNotFound(animeId, atMillis)
+    }
+
+    suspend fun clearKinopoiskId(animeId: String) {
+        localDataSource.clearKinopoiskId(animeId)
+    }
+
     suspend fun searchAnimeMalOnly(
         query: String,
         language: AppLanguage,

@@ -13,6 +13,15 @@ import com.example.myapplication.network.tmdb.TmdbRemoteDataSource
 import com.example.myapplication.network.tmdb.toAnimeDetails
 import java.time.Clock
 
+/** Provider-aware lookup used by background repair without losing NoMatch/Failure semantics. */
+data class MovieSeriesRepairLookup(
+    val candidates: List<ApiSearchResult>,
+    val tmdb: LookupResult<List<ApiSearchResult>>,
+    val kinopoisk: LookupResult<List<ApiSearchResult>>,
+    val staleTmdbId: Boolean = false,
+    val staleKinopoiskId: Boolean = false,
+)
+
 /**
  * Глубокий модуль MOVIE/SERIES: вызывающий код знает только операции уровня продукта, а
  * языковой роутинг, fallback источников, дедуп и восстановление протухших id остаются здесь.
@@ -33,30 +42,107 @@ class MovieSeriesRepository internal constructor(
         contentType: AppContentType,
         language: AppLanguage,
     ): LookupResult<List<ApiSearchResult>> {
-        requireMovieOrSeries(contentType)
-        val normalizedQuery = query.trim()
-        if (normalizedQuery.isEmpty()) return LookupResult.Found(emptyList())
-
-        val tmdbResult = tmdb.search(normalizedQuery, contentType, language, year = null)
-        if (language == AppLanguage.EN) return tmdbResult
-
-        val kinopoiskResult = kinopoisk.search(normalizedQuery, contentType, year = null)
-        // RU-карточка TMDB не содержит надёжного EN-localized title: original_title может быть
-        // французским/корейским и т.п. Второй языковой запрос даёт явное titleEn и сливается по id.
-        val tmdbEnglishResult = tmdb.search(normalizedQuery, contentType, AppLanguage.EN, year = null)
-        val candidates = buildList {
-            if (kinopoiskResult is LookupResult.Found) addAll(kinopoiskResult.value)
-            if (tmdbResult is LookupResult.Found) addAll(tmdbResult.value)
-            if (tmdbEnglishResult is LookupResult.Found) addAll(tmdbEnglishResult.value)
-        }
-        if (candidates.isNotEmpty()) return LookupResult.Found(MovieResultDeduper.merge(candidates))
-
+        val lookup = lookupProviders(
+            query,
+            contentType,
+            language,
+            searchTmdb = true,
+            searchKinopoisk = language == AppLanguage.RU,
+        )
+        if (language == AppLanguage.EN) return lookup.tmdb
+        if (lookup.candidates.isNotEmpty()) return LookupResult.Found(lookup.candidates)
         return when {
-            kinopoiskResult is LookupResult.Failure -> kinopoiskResult
-            tmdbResult is LookupResult.Failure -> tmdbResult
-            tmdbEnglishResult is LookupResult.Failure -> tmdbEnglishResult
+            lookup.kinopoisk is LookupResult.Failure -> lookup.kinopoisk
+            lookup.tmdb is LookupResult.Failure -> lookup.tmdb
             else -> LookupResult.NoMatch
         }
+    }
+
+    /**
+     * Repair always probes both providers, including Kinopoisk on an EN UI, because persisted
+     * provider ids are language-independent. Candidate order encodes the rating merge policy:
+     * Kinopoisk first for RU, TMDB first for EN. Provider outcomes stay separate so callers only
+     * persist not-found timestamps for an explicit [LookupResult.NoMatch].
+     */
+    suspend fun lookupForRepair(
+        query: String,
+        contentType: AppContentType,
+        language: AppLanguage,
+        externalIds: ExternalIds = ExternalIds(),
+        includeKinopoisk: Boolean = true,
+        searchForMetadata: Boolean = true,
+    ): MovieSeriesRepairLookup {
+        requireMovieOrSeries(contentType)
+        val tmdbValidation = externalIds.tmdb?.let { tmdb.checkExists(it, contentType) }
+        val kinopoiskValidation = externalIds.kinopoisk?.let { kinopoisk.details(it) }
+        val staleTmdbId = tmdbValidation is LookupResult.NotFoundById
+        val staleKinopoiskId = kinopoiskValidation is LookupResult.NotFoundById
+        val searchTmdb = externalIds.tmdb == null || staleTmdbId || searchForMetadata
+        val searchKinopoisk = staleKinopoiskId || includeKinopoisk && (
+            externalIds.kinopoisk == null || searchForMetadata
+            )
+        val lookup = lookupProviders(query, contentType, language, searchTmdb, searchKinopoisk)
+        return lookup.copy(
+            tmdb = if (!searchTmdb && tmdbValidation is LookupResult.Failure) {
+                tmdbValidation
+            } else {
+                lookup.tmdb
+            },
+            kinopoisk = if (!searchKinopoisk && kinopoiskValidation is LookupResult.Failure) {
+                kinopoiskValidation
+            } else {
+                lookup.kinopoisk
+            },
+            staleTmdbId = staleTmdbId,
+            staleKinopoiskId = staleKinopoiskId,
+        )
+    }
+
+    private suspend fun lookupProviders(
+        query: String,
+        contentType: AppContentType,
+        language: AppLanguage,
+        searchTmdb: Boolean,
+        searchKinopoisk: Boolean,
+    ): MovieSeriesRepairLookup {
+        requireMovieOrSeries(contentType)
+        val normalizedQuery = query.trim()
+        if (normalizedQuery.isEmpty()) {
+            return MovieSeriesRepairLookup(emptyList(), LookupResult.NoMatch, LookupResult.NoMatch)
+        }
+
+        val localizedTmdb: LookupResult<List<ApiSearchResult>> = if (searchTmdb) {
+            tmdb.search(normalizedQuery, contentType, language, year = null)
+        } else {
+            LookupResult.Found(emptyList())
+        }
+        val tmdbResult = if (searchTmdb && language == AppLanguage.RU) {
+            combineTmdbLookups(
+                localizedTmdb,
+                tmdb.search(normalizedQuery, contentType, AppLanguage.EN, year = null),
+            )
+        } else {
+            localizedTmdb
+        }
+        val kinopoiskResult: LookupResult<List<ApiSearchResult>> = if (searchKinopoisk) {
+            kinopoisk.search(normalizedQuery, contentType, year = null)
+        } else {
+            LookupResult.NoMatch
+        }
+        val ordered = buildList {
+            if (language == AppLanguage.RU) {
+                if (kinopoiskResult is LookupResult.Found) addAll(kinopoiskResult.value)
+                if (tmdbResult is LookupResult.Found) addAll(tmdbResult.value)
+            } else {
+                if (tmdbResult is LookupResult.Found) addAll(tmdbResult.value)
+                if (kinopoiskResult is LookupResult.Found) addAll(kinopoiskResult.value)
+            }
+        }
+        return MovieSeriesRepairLookup(
+            candidates = MovieResultDeduper.merge(ordered),
+            tmdb = tmdbResult,
+            kinopoisk = kinopoiskResult,
+        )
     }
 
     /**
@@ -167,6 +253,23 @@ class MovieSeriesRepository internal constructor(
         val result = tmdb.search(title.trim(), contentType, AppLanguage.EN, year)
         val candidates = (result as? LookupResult.Found)?.value.orEmpty()
         return pickBestMatch(title, year, candidates)?.externalIds?.tmdb
+    }
+
+    private fun combineTmdbLookups(
+        localized: LookupResult<List<ApiSearchResult>>,
+        english: LookupResult<List<ApiSearchResult>>,
+    ): LookupResult<List<ApiSearchResult>> {
+        val candidates = buildList {
+            if (localized is LookupResult.Found) addAll(localized.value)
+            if (english is LookupResult.Found) addAll(english.value)
+        }
+        if (candidates.isNotEmpty()) return LookupResult.Found(MovieResultDeduper.merge(candidates))
+        return when {
+            localized is LookupResult.Failure -> localized
+            english is LookupResult.Failure -> english
+            localized is LookupResult.Found || english is LookupResult.Found -> LookupResult.NoMatch
+            else -> LookupResult.NoMatch
+        }
     }
 
     private suspend fun resolveKinopoiskDetails(

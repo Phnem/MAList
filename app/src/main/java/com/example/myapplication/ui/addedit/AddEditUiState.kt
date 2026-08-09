@@ -23,6 +23,10 @@ data class AddEditUiState(
     val anilistNotFoundAt: Long? = null,
     val malNotFoundAt: Long? = null,
     val shikimoriNotFoundAt: Long? = null,
+    val tmdbId: Int? = null,
+    val kinopoiskId: Int? = null,
+    val tmdbNotFoundAt: Long? = null,
+    val kinopoiskNotFoundAt: Long? = null,
     val episodes: String = "",
     /** 10-балльная шкала с шагом 0.1 (0 = не оценено). */
     val rating: Float = 0f,
