@@ -99,7 +99,7 @@ Out of scope.
 | TICKET-02 | TmdbRemoteDataSource — типизированный DTO-слой TMDB | DONE_WITH_DEVIATIONS | 01 | `b1ea00d` | самопроверка, HTTP-слой без mock-тестов (см. тикет) |
 | TICKET-03 | KinopoiskRemoteDataSource — RU-источник | DONE_WITH_DEVIATIONS | 01 | `140d048` | самопроверка, HTTP-слой без mock-тестов (тот же follow-up, что TICKET-02) |
 | TICKET-04 | MovieSeriesRepository + переключение VetroApiService | DONE | 01,02,03 | `3b88d85` | code-review (Standards+Spec), все находки resolved |
-| TICKET-05 | Details-экран для MOVIE/SERIES | DONE | 04 | `TICKET-05_COMMIT` | code-review (Standards+Spec), все обязательные находки resolved |
+| TICKET-05 | Details-экран для MOVIE/SERIES | DONE | 04 | `e81c5bb` | code-review (Standards+Spec), все обязательные находки resolved |
 | TICKET-06 | AddFromApiUseCase — ExternalIds вместо source-веток | PENDING | 04 | — | — |
 | TICKET-07 | Детектор пробелов + починка для MOVIE/SERIES | PENDING | 04,06 | — | — |
 | TICKET-08 | SeriesEpisodeCheckUseCase — отслеживание вышедших серий | PENDING | 01,02,04 | — | — |
@@ -157,7 +157,7 @@ Tracker reference: [`issues/05-details-screen-wiring.md`](./issues/05-details-sc
 Dependencies: 04
 Verification evidence: full unit tests `core:network` + `app` 401/401; компиляция обоих
 модулей; `git diff --check`.
-Commit: `TICKET-05_COMMIT`
+Commit: `e81c5bb`
 
 ### TICKET-06 — AddFromApiUseCase
 

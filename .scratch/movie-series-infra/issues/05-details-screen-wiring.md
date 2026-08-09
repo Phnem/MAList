@@ -117,4 +117,4 @@ RECOMMENDED — в основном wiring, но регресс-тест "episod
   :core:network:compileDebugKotlin :app:compileDebugKotlin` → BUILD SUCCESSFUL;
   401 тест, failures=0, errors=0.
 - `git diff --check` → без ошибок.
-- Commit: `TICKET-05_COMMIT`.
+- Commit: `e81c5bb`.
