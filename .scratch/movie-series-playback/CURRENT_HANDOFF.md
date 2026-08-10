@@ -20,13 +20,15 @@ BETWEEN_TICKETS
 TICKET-01 — switched the catalog adapter to `kinopoiskapiunofficial.tech`, with typed mappings,
 MockEngine regression tests and shared HTTP outcome semantics.
 
+TICKET-02 — capability-aware playback routing, explicit outcomes and typed player recovery.
+
 ## Active ticket
 
-None; TICKET-02 is ready.
+None; TICKET-03 is ready.
 
 ## Next eligible ticket
 
-TICKET-02 — capability-aware playback routing.
+TICKET-03 — lawful playback adapters.
 
 ## Decisions that must be preserved
 
@@ -41,7 +43,7 @@ None.
 
 ## Current repository state
 
-TICKET-01 changes are ready for their focused commit.
+TICKET-02 changes are ready for their focused commit.
 
 ## Relevant commits
 
@@ -59,9 +61,9 @@ No blocker. Playback-source research is complete.
 
 ## Files most relevant to the next ticket
 
-`SourceEngine.kt`, `MediaGateway.kt`, `MediaGatewayImpl.kt`, `StreamingSeasonDiscovery.kt` and
-`EpisodeMenuViewModel.kt`.
+`PlaybackResolution.kt`, `PlaybackProviderCascade.kt`, `SourceEngine.kt`, and the source research.
 
 ## Exact recommended next action
 
-Commit TICKET-01, activate TICKET-02, then add a failing pure routing-policy test.
+Commit TICKET-02, split TICKET-03 by adapter family, then start Direct HTTP/WebDAV with a failing
+contract test.

@@ -6,10 +6,6 @@ import com.example.myapplication.data.models.Anime
 import com.example.myapplication.domain.seasons.SeasonInfo
 import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.network.WebLinkSites
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.supervisorScope
-import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Bounded, native-first media resolution.
@@ -31,27 +27,57 @@ class SourceEngine(
         episodeNumber: Int,
         seasonInfo: SeasonInfo? = null,
         language: AppLanguage = AppLanguage.RU,
-    ): List<VetroHoster> {
-        if (episodeNumber <= 0) return emptyList()
-        val resolved = when (language) {
-            AppLanguage.RU -> resolveRu(anime, episodeNumber, seasonInfo)
-            AppLanguage.EN -> resolveEn(anime, episodeNumber, seasonInfo)
+    ): List<VetroHoster> = resolve(
+        PlaybackRequest(anime, episodeNumber, seasonInfo, language)
+    ).hostersOrEmpty
+
+    suspend fun resolve(request: PlaybackRequest): PlaybackResolution {
+        if (request.episodeNumber <= 0) return PlaybackResolution.NoMatch
+        val route = PlaybackRoutingPolicy.route(request.mediaType, request.language)
+        if (route == PlaybackRoute.None) return PlaybackResolution.NotConfigured(request.mediaType)
+        if (route == PlaybackRoute.DirectOnly) return resolveDirectOnly(request)
+
+        val batch = when (route) {
+            PlaybackRoute.AnimeRu -> resolveRu(request.anime, request.episodeNumber, request.seasonInfo)
+            PlaybackRoute.AnimeEn -> resolveEn(request.anime, request.episodeNumber, request.seasonInfo)
+            PlaybackRoute.DirectOnly, PlaybackRoute.None -> error("Route handled above")
         }
-        val normalized = resolved.withPropagatedSkipReference().playableHosters()
+        val normalized = batch.hosters.withPropagatedSkipReference().playableHosters()
         Log.i(
             TAG,
             "Resolved ${normalized.size} hosters / " +
                 "${normalized.sumOf { it.videos.orEmpty().size }} videos for " +
-                "${anime.title} S${seasonInfo?.seasonNumber ?: 1}E$episodeNumber [$language]",
+                "${request.anime.title} S${request.seasonNumber}E${request.episodeNumber} " +
+                "[${request.language}]",
         )
-        return normalized
+        return playbackResolution(normalized, batch.hadFailure)
+    }
+
+    private suspend fun resolveDirectOnly(request: PlaybackRequest): PlaybackResolution {
+        webLinksStore.ensureLoaded()
+        val stored = webLinksStore.flow.value[request.anime.id]
+        val urls = when (request.language) {
+            AppLanguage.RU -> stored?.ruLinks
+            AppLanguage.EN -> stored?.enLinks
+        }.orEmpty().map { it.url }
+        val direct = urls.firstOrNull(urlSource::canResolveDirect)
+            ?: return PlaybackResolution.NotConfigured(request.mediaType)
+        val attempt = runCalls(
+            listOf(
+                PlaybackProviderCall("direct URL", DIRECT_TIMEOUT_MS) {
+                    urlSource.resolveFromWebUrl(direct)
+                }
+            )
+        ).single()
+        val resolved = attempt.hosters.withPropagatedSkipReference().playableHosters()
+        return playbackResolution(resolved, attempt.failed)
     }
 
     private suspend fun resolveRu(
         anime: Anime,
         episodeNumber: Int,
         seasonInfo: SeasonInfo?,
-    ): List<VetroHoster> {
+    ): SourceBatch {
         webLinksStore.ensureLoaded()
         val links = webLinksStore.flow.value[anime.id]?.ruLinks.orEmpty()
         val seasonQuery = anime.seasonSourceQuery(seasonInfo)
@@ -65,121 +91,138 @@ class SourceEngine(
         val jutKnown = links.firstOrNull { it.siteKey == WebLinkSites.JUTSU }?.url
 
         // Exact stored links are the most reliable title disambiguation and avoid a search roundtrip.
-        val exact = supervisorScope {
-            buildList<suspend () -> List<VetroHoster>> {
+        val exact = runCalls(
+            buildList {
                 if (seasonSpecificAniUrl != null) {
-                    add {
-                        aniLibriaSource.resolveEpisode(
-                            seasonQuery.anime,
-                            episodeNumber,
-                            seasonSpecificAniUrl,
-                        )
-                    }
+                    add(
+                        PlaybackProviderCall("known source", EXACT_SOURCE_TIMEOUT_MS) {
+                            aniLibriaSource.resolveEpisode(
+                                seasonQuery.anime,
+                                episodeNumber,
+                                seasonSpecificAniUrl,
+                            )
+                        }
+                    )
                 }
-            }.map { block ->
-                async { safeResolve("known source", EXACT_SOURCE_TIMEOUT_MS, block) }
-            }.awaitAll().flatten()
-        }
+            }
+        )
         // Keep resolving: exact links are fast, but they must not hide other studios.
 
-        val native = supervisorScope {
-            buildList<Pair<String, suspend () -> List<VetroHoster>>> {
+        val native = runCalls(
+            buildList {
                 if (seasonSpecificAniUrl == null) {
-                    add("AniLiberty" to {
-                        aniLibriaSource.resolveEpisode(
-                            anime = anime,
-                            episodeNumber = episodeNumber,
-                            seasonInfo = seasonInfo,
-                        )
-                    })
+                    add(
+                        PlaybackProviderCall("AniLiberty", SOURCE_TIMEOUT_MS) {
+                            aniLibriaSource.resolveEpisode(
+                                anime = anime,
+                                episodeNumber = episodeNumber,
+                                seasonInfo = seasonInfo,
+                            )
+                        }
+                    )
                 }
                 // AnimeGo больше не выпадает из гонки на сезонах без собственного названия:
                 // он получает франшизные алиасы и ищет ими.
-                add("AnimeGo" to {
-                    animeGoSource.resolveEpisode(seasonQuery, episodeNumber)
-                })
-                add("Kodik" to { kodikSource.resolveEpisode(anime, episodeNumber, seasonInfo) })
+                add(
+                    PlaybackProviderCall("AnimeGo", SOURCE_TIMEOUT_MS) {
+                        animeGoSource.resolveEpisode(seasonQuery, episodeNumber)
+                    }
+                )
+                add(
+                    PlaybackProviderCall("Kodik", KODIK_SOURCE_TIMEOUT_MS) {
+                        kodikSource.resolveEpisode(anime, episodeNumber, seasonInfo)
+                    }
+                )
                 // jut.su — источник ТАЙМСКИПОВ, не видео: сайт перешёл на новый плеер и отдаёт
                 // в разметке заглушки вместо адресов (§ .scratch/season-source-resolution,
                 // TICKET-02). Конфиг с таймингами по-прежнему приезжает, поэтому ветку держим,
                 // но видео из неё отбрасываем — как это давно делает EN-путь.
-                add("jut.su reference" to {
-                    jutSuSource.resolveEpisode(anime, episodeNumber, seasonInfo, jutKnown)
-                        .map { it.copy(videos = emptyList()) }
-                })
-            }.map { (label, block) ->
-                async {
-                    val timeout = if (label == "Kodik") KODIK_SOURCE_TIMEOUT_MS else SOURCE_TIMEOUT_MS
-                    safeResolve(label, timeout, block)
-                }
-            }.awaitAll().flatten()
+                add(
+                    PlaybackProviderCall("jut.su reference", SOURCE_TIMEOUT_MS) {
+                        jutSuSource.resolveEpisode(anime, episodeNumber, seasonInfo, jutKnown)
+                            .map { it.copy(videos = emptyList()) }
+                    }
+                )
+            }
+        )
+        val attempts = exact + native
+        val resolved = attempts.flatMap { it.hosters }
+        if (resolved.hasPlayableVideo()) {
+            return SourceBatch(resolved, attempts.any { it.failed })
         }
-        val resolved = exact + native
-        if (resolved.hasPlayableVideo()) return resolved
 
-        return resolved + resolveDirectFallback(links.map { it.url })
+        val direct = resolveDirectFallback(links.map { it.url })
+        return SourceBatch(resolved + direct.hosters, attempts.any { it.failed } || direct.failed)
     }
 
     private suspend fun resolveEn(
         anime: Anime,
         episodeNumber: Int,
         seasonInfo: SeasonInfo?,
-    ): List<VetroHoster> {
-        val (native, jutReference) = supervisorScope {
-            // AnimeHeaven needs three sequential page loads (search → title → gate), hence its own budget.
-            val video = async {
-                safeResolve("AnimeHeaven", EN_SOURCE_TIMEOUT_MS) {
+    ): SourceBatch {
+        val attempts = runCalls(
+            listOf(
+                // AnimeHeaven needs three sequential page loads (search → title → gate).
+                PlaybackProviderCall("AnimeHeaven", EN_SOURCE_TIMEOUT_MS) {
                     animeHeavenSource.resolveEpisode(anime, episodeNumber, seasonInfo)
-                }
-            }
-            val reference = async {
-                safeResolve("jut.su reference", SOURCE_TIMEOUT_MS) {
+                },
+                PlaybackProviderCall("jut.su reference", SOURCE_TIMEOUT_MS) {
                     jutSuSource.resolveEpisode(anime, episodeNumber, seasonInfo)
                         .map { it.copy(videos = emptyList()) }
-                }
-            }
-            video.await() to reference.await()
+                },
+            )
+        )
+        val native = attempts[0]
+        val jutReference = attempts[1]
+        val nativeHosters = native.hosters
+        val referenceHosters = jutReference.hosters
+        if (nativeHosters.hasPlayableVideo()) {
+            return SourceBatch(
+                nativeHosters + referenceHosters,
+                native.failed || jutReference.failed,
+            )
         }
-        if (native.hasPlayableVideo()) return native + jutReference
 
         webLinksStore.ensureLoaded()
         val links = webLinksStore.flow.value[anime.id]?.enLinks.orEmpty()
-        return jutReference + resolveDirectFallback(links.map { it.url })
+        val direct = resolveDirectFallback(links.map { it.url })
+        return SourceBatch(
+            referenceHosters + direct.hosters,
+            native.failed || jutReference.failed || direct.failed,
+        )
     }
 
-    private suspend fun resolveDirectFallback(urls: List<String>): List<VetroHoster> {
-        val direct = urls.firstOrNull(urlSource::canResolveDirect) ?: return emptyList()
-        return safeResolve("direct URL", DIRECT_TIMEOUT_MS) {
-            urlSource.resolveFromWebUrl(direct)
-        }
+    private suspend fun resolveDirectFallback(urls: List<String>): SourceAttempt {
+        val direct = urls.firstOrNull(urlSource::canResolveDirect)
+            ?: return SourceAttempt(label = "direct URL", hosters = emptyList())
+        return runCalls(
+            listOf(
+                PlaybackProviderCall("direct URL", DIRECT_TIMEOUT_MS) {
+                    urlSource.resolveFromWebUrl(direct)
+                }
+            )
+        ).single()
     }
 
     /**
      * Исход КАЖДОЙ ветки попадает в лог, включая пустую. Раньше молчание источника было
      * неотличимо от того, что его вообще не запускали, и отказ разбирался по сырым строкам Ktor.
      */
-    private suspend fun safeResolve(
-        label: String,
-        timeoutMs: Long,
-        block: suspend () -> List<VetroHoster>,
-    ): List<VetroHoster> {
-        val startedAt = System.currentTimeMillis()
-        val resolved = withTimeoutOrNull(timeoutMs) {
-            runCatching { block() }
-                .onFailure { Log.w(TAG, "$label failed: ${it.message}") }
-                .getOrElse { emptyList() }
+    private suspend fun runCalls(calls: List<PlaybackProviderCall>): List<SourceAttempt> =
+        runPlaybackProviderCascade(calls).onEach { attempt ->
+            when {
+                attempt.timedOut -> Log.w(TAG, "${attempt.label} timed out")
+                attempt.failed -> Log.w(TAG, "${attempt.label} failed")
+            }
+            val playable = attempt.hosters.sumOf { hoster ->
+                hoster.videos.orEmpty().count { isPlayableVetroVideoUrl(it.url) }
+            }
+            Log.i(
+                TAG,
+                "${attempt.label} → ${attempt.hosters.size} hoster(s), " +
+                    "$playable playable video(s), ${attempt.elapsedMs}ms",
+            )
         }
-        val elapsedMs = System.currentTimeMillis() - startedAt
-        if (resolved == null) {
-            Log.w(TAG, "$label timed out after ${timeoutMs}ms")
-            return emptyList()
-        }
-        val playable = resolved.sumOf { hoster ->
-            hoster.videos.orEmpty().count { isPlayableVetroVideoUrl(it.url) }
-        }
-        Log.i(TAG, "$label → ${resolved.size} hoster(s), $playable playable video(s), ${elapsedMs}ms")
-        return resolved
-    }
 
     suspend fun resolveBestVideo(hosters: List<VetroHoster>): VetroVideo? {
         val flat = hosters.flatMap { it.videos.orEmpty() }
@@ -195,4 +238,9 @@ class SourceEngine(
         private const val EN_SOURCE_TIMEOUT_MS = 20_000L
         private const val DIRECT_TIMEOUT_MS = 5_000L
     }
+
+    private data class SourceBatch(
+        val hosters: List<VetroHoster>,
+        val hadFailure: Boolean,
+    )
 }

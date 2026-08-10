@@ -171,6 +171,7 @@ fun ModernDetailsEpisodesPage(
                             malId = event.malId,
                             anilistId = event.anilistId,
                             seasonInfo = event.seasonInfo,
+                            playbackIdentity = event.playbackIdentity,
                         )
                     )
                 }

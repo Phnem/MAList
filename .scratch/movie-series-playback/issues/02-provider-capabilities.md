@@ -1,6 +1,6 @@
 # TICKET-02: Capability-aware playback routing
 
-Status: PENDING
+Status: DONE
 
 ## Objective
 
@@ -29,10 +29,10 @@ Adding a new remote playback provider.
 
 ## Acceptance criteria
 
-- [ ] MOVIE/SERIES route contains no AniLibria/AnimeGo/AnimeHeaven/jut.su adapter.
-- [ ] Kodik remains anime-only unless a separately authorized lawful contract exists.
-- [ ] ANIME routing is unchanged.
-- [ ] UI distinguishes not configured, no match and provider failure.
+- [x] MOVIE/SERIES route contains no AniLibria/AnimeGo/AnimeHeaven/jut.su adapter.
+- [x] Kodik remains anime-only unless a separately authorized lawful contract exists.
+- [x] ANIME routing is unchanged.
+- [x] UI distinguishes not configured, no match and provider failure.
 
 ## Verification plan
 
@@ -52,16 +52,21 @@ Avoid a large rewrite of stable anime adapter implementations.
 
 ## Implementation notes
 
-Empty before implementation.
+Added `PlaybackRequest`, `PlaybackIdentity`, explicit resolution outcomes and a sealed route that
+drives `SourceEngine`. Player recovery now preserves media type and TMDB/Kinopoisk ids. Provider
+attempts run through a cancellation-safe supervised cascade.
 
 ## Deviations
 
-Empty before implementation.
+None.
 
 ## Review findings
 
-Empty before review.
+Initial reviews found stale player identity, a non-authoritative provider list and insufficient
+cascade coverage. All were resolved; final Spec review has no BLOCKING/IMPORTANT findings.
 
 ## Completion evidence
 
-Empty before completion.
+Full `:app:testDebugUnitTest` passes, including routing, mixed failure/success cascade, recovery
+identity and user-message regressions. `:app:compileDebugKotlin` passes. Final Spec and Standards
+reviews have no remaining BLOCKING/IMPORTANT findings.

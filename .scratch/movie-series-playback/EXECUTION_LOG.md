@@ -45,3 +45,13 @@ can still be added disabled by default with mocked contract tests.
 - Extracted the shared TMDB/Kinopoisk HTTP outcome policy after Standards review.
 - Live authenticated Doctor House search/details/eight-season smoke passed without logging the key.
 - Spec and Standards re-reviews report no remaining BLOCKING/IMPORTANT findings.
+
+## 2026-08-10 — TICKET-02 implemented and accepted
+
+- Added typed playback identity/request and explicit Found/NotConfigured/NoMatch/Failure outcomes.
+- MOVIE/SERIES now route only to direct/personal media; anime adapters remain on ANIME routes.
+- Preserved media type and provider ids through StreamPlayer recovery.
+- Added supervised provider-attempt isolation with structured-cancellation propagation.
+- Added distinct season/playback messages for unconfigured, no-match and provider failure.
+- Full app unit suite and compilation pass; Spec and Standards reviews have no remaining mandatory
+  findings.

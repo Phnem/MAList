@@ -45,7 +45,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaSession
-import com.example.myapplication.data.models.Anime
+import com.example.myapplication.data.models.MediaType
 import com.example.myapplication.domain.enrichment.CollectionEnrichmentCoordinator
 import com.example.myapplication.domain.enrichment.InteractiveMediaPauseViewModel
 import com.example.myapplication.domain.seasons.SeasonInfo
@@ -68,6 +68,7 @@ import com.example.myapplication.media.source.flattenVideosWithSource
 import com.example.myapplication.media.player.VetroVideoCache
 import com.example.myapplication.media.progress.EpisodePlaybackStore
 import com.example.myapplication.media.source.VetroVideo
+import com.example.myapplication.media.source.PlaybackIdentity
 import com.example.myapplication.media.source.rankVideosForResolution
 import com.example.myapplication.ui.shared.theme.OneUiTheme
 import kotlinx.coroutines.CancellationException
@@ -136,6 +137,17 @@ class StreamPlayerActivity : ComponentActivity(), PipHostActivity {
         val animeTitleRu = intent.getStringExtra(EXTRA_ANIME_TITLE_RU)
         val malId = intent.getIntExtra(EXTRA_MAL_ID, -1).takeIf { it > 0 }
         val anilistId = intent.getIntExtra(EXTRA_ANILIST_ID, -1).takeIf { it > 0 }
+        val playbackIdentity = intent.getStringExtra(EXTRA_PLAYBACK_IDENTITY_JSON)?.let {
+            runCatching { json.decodeFromString(PlaybackIdentity.serializer(), it) }.getOrNull()
+        } ?: PlaybackIdentity(
+            libraryId = animeId,
+            title = animeTitle,
+            titleEn = animeTitleEn,
+            titleRu = animeTitleRu,
+            mediaType = MediaType.ANIME,
+            malId = malId,
+            anilistId = anilistId,
+        )
         val season = intent.getIntExtra(EXTRA_SEASON, 1).coerceAtLeast(1)
         val initialEpisode = intent.getIntExtra(EXTRA_EPISODE, 1).coerceAtLeast(1)
         val seasonInfo = intent.getStringExtra(EXTRA_SEASON_JSON)?.let {
@@ -144,12 +156,7 @@ class StreamPlayerActivity : ComponentActivity(), PipHostActivity {
         // Сколько серий в сезоне доступно; null = не разрешено. Не то же самое, что «серий нет».
         val availableEpisodes = seasonInfo?.episodes
         val episodeResolver = episodeResolver(
-            animeId = animeId,
-            animeTitle = animeTitle,
-            animeTitleEn = animeTitleEn,
-            animeTitleRu = animeTitleRu,
-            malId = malId,
-            anilistId = anilistId,
+            playbackIdentity = playbackIdentity,
             seasonInfo = seasonInfo,
         )
 
@@ -707,27 +714,10 @@ class StreamPlayerActivity : ComponentActivity(), PipHostActivity {
      * пересборку протухшей ссылки текущей серии, и переход на соседнюю (TICKET-03).
      */
     private fun episodeResolver(
-        animeId: String,
-        animeTitle: String,
-        animeTitleEn: String?,
-        animeTitleRu: String?,
-        malId: Int?,
-        anilistId: Int?,
+        playbackIdentity: PlaybackIdentity,
         seasonInfo: SeasonInfo?,
     ): EpisodeStreamResolver = EpisodeStreamResolver { episode, preferredResolution ->
-        val anime = Anime(
-            id = animeId,
-            title = seasonInfo?.title?.takeIf { it.isNotBlank() } ?: animeTitle,
-            titleEn = animeTitleEn,
-            titleRu = animeTitleRu,
-            episodes = seasonInfo?.episodes?.coerceAtLeast(episode) ?: episode,
-            rating = 0f,
-            imageFileName = null,
-            orderIndex = 0,
-            dateAdded = 0L,
-            anilistId = seasonInfo?.anilistId ?: anilistId,
-            malId = seasonInfo?.malId ?: malId,
-        )
+        val anime = playbackIdentity.toAnime(seasonInfo, episode)
         val videos = flattenVideosWithSource(mediaGateway.resolveHosters(anime, episode, seasonInfo))
         rankVideosForResolution(videos, preferredResolution)
     }
@@ -758,6 +748,7 @@ class StreamPlayerActivity : ComponentActivity(), PipHostActivity {
         private const val EXTRA_SEASON = "season"
         private const val EXTRA_EPISODE = "episode"
         private const val EXTRA_SEASON_JSON = "season_json"
+        private const val EXTRA_PLAYBACK_IDENTITY_JSON = "playback_identity_json"
         private val intentJson = Json { encodeDefaults = true; ignoreUnknownKeys = true }
 
         fun intent(
@@ -773,6 +764,7 @@ class StreamPlayerActivity : ComponentActivity(), PipHostActivity {
             malId: Int? = null,
             anilistId: Int? = null,
             seasonInfo: SeasonInfo? = null,
+            playbackIdentity: PlaybackIdentity? = null,
         ): Intent = Intent(context, StreamPlayerActivity::class.java).apply {
             putExtra(
                 EXTRA_VIDEO_JSON,
@@ -793,6 +785,12 @@ class StreamPlayerActivity : ComponentActivity(), PipHostActivity {
             putExtra(EXTRA_ANILIST_ID, anilistId ?: -1)
             putExtra(EXTRA_SEASON, season)
             putExtra(EXTRA_EPISODE, episode)
+            playbackIdentity?.let {
+                putExtra(
+                    EXTRA_PLAYBACK_IDENTITY_JSON,
+                    intentJson.encodeToString(PlaybackIdentity.serializer(), it),
+                )
+            }
             seasonInfo?.let {
                 putExtra(
                     EXTRA_SEASON_JSON,

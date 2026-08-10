@@ -146,12 +146,14 @@ class StreamingSeasonDiscovery(
         data object NothingNew : Outcome
         /** Ни один источник не отдал ни одного сезона (тайтла у них нет либо сеть легла). */
         data object NotFound : Outcome
+        /** Для этого типа медиа нет настроенного источника потоковых сезонов. */
+        data object NotConfigured : Outcome
     }
 
     suspend fun discover(animeId: String, forceRefresh: Boolean = false): Outcome {
         store.ensureLoaded()
         val anime = localDataSource.getAnimeById(animeId) ?: return Outcome.NotFound
-        if (anime.mediaType != MediaType.ANIME) return Outcome.NotFound
+        if (anime.mediaType != MediaType.ANIME) return Outcome.NotConfigured
 
         val previous = store.entryFor(animeId)
         val known = previous?.seasons.orEmpty()

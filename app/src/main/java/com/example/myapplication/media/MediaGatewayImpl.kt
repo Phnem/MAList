@@ -17,12 +17,15 @@ import com.example.myapplication.download.InputTask
 import com.example.myapplication.media.download.MediaDownloadWorker
 import com.example.myapplication.media.download.MediaJobBus
 import com.example.myapplication.media.source.SourceEngine
+import com.example.myapplication.media.source.PlaybackRequest
+import com.example.myapplication.media.source.PlaybackResolution
 import com.example.myapplication.media.source.VetroHoster
 import com.example.myapplication.media.source.VetroVideo
 import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.ui.details.DownloadQuality
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -42,16 +45,28 @@ class MediaGatewayImpl(
         anime: Anime,
         episodeNumber: Int,
         seasonInfo: SeasonInfo?,
-    ): List<VetroHoster> {
+    ): List<VetroHoster> = when (val result = resolvePlayback(anime, episodeNumber, seasonInfo)) {
+        is PlaybackResolution.Found -> result.hosters
+        else -> emptyList()
+    }
+
+    override suspend fun resolvePlayback(
+        anime: Anime,
+        episodeNumber: Int,
+        seasonInfo: SeasonInfo?,
+    ): PlaybackResolution {
         return if (useNativeEngine()) {
             val language = currentLanguage()
-            runCatching {
-                sourceEngine.resolveHosters(anime, episodeNumber, seasonInfo, language)
+            try {
+                sourceEngine.resolve(PlaybackRequest(anime, episodeNumber, seasonInfo, language))
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                Log.w(TAG, "native resolve failed: ${error.message}")
+                PlaybackResolution.Failure
             }
-                .onFailure { Log.w(TAG, "native resolve failed, empty: ${it.message}") }
-                .getOrElse { emptyList() }
         } else {
-            emptyList()
+            PlaybackResolution.NotConfigured(anime.mediaType)
         }
     }
 

@@ -17,6 +17,8 @@ import com.example.myapplication.media.progress.EpisodePlaybackProgress
 import com.example.myapplication.media.progress.EpisodePlaybackStore
 import com.example.myapplication.media.source.flattenVideosWithSource
 import com.example.myapplication.media.source.VetroVideo
+import com.example.myapplication.media.source.PlaybackResolution
+import com.example.myapplication.media.source.PlaybackIdentity
 import com.example.myapplication.media.source.rankVideosForResolution
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -117,6 +119,7 @@ sealed interface EpisodeMenuEvent {
         val animeTitleRu: String?,
         val malId: Int?,
         val anilistId: Int?,
+        val playbackIdentity: PlaybackIdentity,
     ) : EpisodeMenuEvent
 
     data class PlayLocal(
@@ -201,6 +204,8 @@ class EpisodeMenuViewModel(
                     }
                 com.example.myapplication.domain.seasons.StreamingSeasonDiscovery.Outcome.NothingNew ->
                     if (ru) "Новых сезонов нет" else "No new seasons"
+                com.example.myapplication.domain.seasons.StreamingSeasonDiscovery.Outcome.NotConfigured ->
+                    if (ru) "Источник потоковых сезонов не настроен" else "Streaming season source is not configured"
                 else ->
                     if (ru) "Источники не нашли этот тайтл" else "Sources don't have this title"
             }
@@ -369,10 +374,14 @@ class EpisodeMenuViewModel(
         viewModelScope.launch {
             runCatching {
                 val seasonAnime = anime.forSeason(season)
-                val hosters = mediaGateway.resolveHosters(seasonAnime, episodeNumber, season)
+                val resolution = mediaGateway.resolvePlayback(seasonAnime, episodeNumber, season)
+                val hosters = when (resolution) {
+                    is com.example.myapplication.media.source.PlaybackResolution.Found -> resolution.hosters
+                    else -> error(playbackResolutionMessage(resolution))
+                }
                 val videos = flattenVideosWithSource(hosters)
                     .distinctBy { it.url }
-                    .ifEmpty { error("No playable streams found") }
+                    .ifEmpty { error("Поток не найден / No matching playable stream found") }
                 val options = availableQualityOptions(videos)
                 val selected = _state.value.selectedQuality
                 when {
@@ -443,6 +452,7 @@ class EpisodeMenuViewModel(
                         animeTitleRu = anime.titleRu,
                         malId = anime.malId,
                         anilistId = anime.anilistId,
+                        playbackIdentity = PlaybackIdentity.from(anime),
                     )
                 )
                 _state.update { it.copy(streaming = null) }
@@ -493,11 +503,15 @@ class EpisodeMenuViewModel(
             downloadSlots.withPermit {
                 runCatching {
                     val videos = alreadyResolved ?: run {
-                        val hosters = mediaGateway.resolveHosters(
+                        val resolution = mediaGateway.resolvePlayback(
                             anime.forSeason(season),
                             episodeNumber,
                             season,
                         )
+                        val hosters = when (resolution) {
+                            is PlaybackResolution.Found -> resolution.hosters
+                            else -> error(playbackResolutionMessage(resolution))
+                        }
                         flattenVideosWithSource(hosters)
                     }
                     val candidates = rankVideosForResolution(videos, preferredResolution)
@@ -719,6 +733,17 @@ fun availableQualityOptions(videos: List<VetroVideo>): List<EpisodeQualityOption
 
 fun chooseVideoForResolution(videos: List<VetroVideo>, preferredResolution: Int): VetroVideo? =
     rankVideosForResolution(videos, preferredResolution).firstOrNull()
+
+internal fun playbackResolutionMessage(resolution: PlaybackResolution): String = when (resolution) {
+    is PlaybackResolution.NotConfigured ->
+        "Источник видео не настроен / Video source is not configured"
+    PlaybackResolution.NoMatch ->
+        "Поток не найден / No matching stream found"
+    PlaybackResolution.Failure ->
+        "Ошибка источника / Playback provider temporarily unavailable"
+    is PlaybackResolution.Found ->
+        ""
+}
 
 private fun VetroVideo.resolutionValue(): Int? =
     resolution?.takeIf { it > 0 }
