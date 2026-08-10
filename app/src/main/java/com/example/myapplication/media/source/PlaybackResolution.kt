@@ -15,6 +15,8 @@ data class PlaybackIdentity(
     val mediaType: MediaType,
     val tmdbId: Int? = null,
     val kinopoiskId: Int? = null,
+    /** Canonical IMDb id (`tt0412142`); the only addressing key Stremio-style transports accept. */
+    val imdbId: String? = null,
     val malId: Int? = null,
     val anilistId: Int? = null,
 ) {
@@ -31,6 +33,7 @@ data class PlaybackIdentity(
         mediaType = mediaType,
         tmdbId = tmdbId,
         kinopoiskId = kinopoiskId,
+        imdbId = imdbId,
         malId = seasonInfo?.malId ?: malId,
         anilistId = seasonInfo?.anilistId ?: anilistId,
     )
@@ -44,6 +47,7 @@ data class PlaybackIdentity(
             mediaType = anime.mediaType,
             tmdbId = anime.tmdbId,
             kinopoiskId = anime.kinopoiskId,
+            imdbId = anime.imdbId,
             malId = anime.malId,
             anilistId = anime.anilistId,
         )
@@ -60,6 +64,7 @@ data class PlaybackRequest(
     val mediaType: MediaType get() = anime.mediaType
     val tmdbId: Int? get() = anime.tmdbId
     val kinopoiskId: Int? get() = anime.kinopoiskId
+    val imdbId: String? get() = anime.imdbId
     val seasonNumber: Int get() = seasonInfo?.seasonNumber ?: 1
 }
 

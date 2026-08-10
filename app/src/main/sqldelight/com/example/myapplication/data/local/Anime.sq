@@ -36,7 +36,9 @@ CREATE TABLE anime (
     tmdb_not_found_at INTEGER,
     -- Kinopoisk id (RU-обогащение MOVIE/SERIES) — вспомогательный, не канонический.
     kinopoisk_id INTEGER,
-    kinopoisk_not_found_at INTEGER
+    kinopoisk_not_found_at INTEGER,
+    -- IMDb id (MOVIE/SERIES). TEXT: канонический вид `tt0412142` со значащими ведущими нулями.
+    imdb_id TEXT
 );
 
 -- Delta Sync: rows that need to be pushed to cloud
@@ -83,6 +85,7 @@ SELECT
     anime.tmdb_not_found_at,
     anime.kinopoisk_id,
     anime.kinopoisk_not_found_at,
+    anime.imdb_id,
     GROUP_CONCAT(anime_tags.tag, CHAR(31)) AS tagsConcat
 FROM anime
 LEFT JOIN anime_tags ON anime.id = anime_tags.anime_id
@@ -118,6 +121,7 @@ SELECT
     anime.tmdb_not_found_at,
     anime.kinopoisk_id,
     anime.kinopoisk_not_found_at,
+    anime.imdb_id,
     GROUP_CONCAT(anime_tags.tag, CHAR(31)) AS tagsConcat
 FROM anime
 LEFT JOIN anime_tags ON anime.id = anime_tags.anime_id
@@ -145,9 +149,9 @@ INSERT INTO anime(
     anilist_id, mal_id, shikimori_id,
     anilist_not_found_at, mal_not_found_at, shikimori_not_found_at,
     isPrivate, encryptionIv, deletedAt, mediaType, title_en, title_ru,
-    tmdb_id, kinopoisk_id, tmdb_not_found_at, kinopoisk_not_found_at
+    tmdb_id, kinopoisk_id, tmdb_not_found_at, kinopoisk_not_found_at, imdb_id
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING_CREATE', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING_CREATE', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 updateAnime:
 UPDATE anime
@@ -178,7 +182,8 @@ SET title = ?,
     tmdb_id = ?,
     kinopoisk_id = ?,
     tmdb_not_found_at = ?,
-    kinopoisk_not_found_at = ?
+    kinopoisk_not_found_at = ?,
+    imdb_id = ?
 WHERE id = ?;
 
 updateAnimeFromSync:
@@ -213,7 +218,8 @@ SET anilist_id = coalesce(?, anilist_id),
     mal_id = coalesce(?, mal_id),
     shikimori_id = coalesce(?, shikimori_id),
     tmdb_id = coalesce(?, tmdb_id),
-    kinopoisk_id = coalesce(?, kinopoisk_id)
+    kinopoisk_id = coalesce(?, kinopoisk_id),
+    imdb_id = coalesce(?, imdb_id)
 WHERE id = ?;
 
 
@@ -245,6 +251,11 @@ WHERE id = ?;
 setKinopoiskId:
 UPDATE anime
 SET kinopoisk_id = ?, kinopoisk_not_found_at = NULL, updatedAt = ?, sync_status = 'PENDING_UPDATE'
+WHERE id = ?;
+
+setImdbId:
+UPDATE anime
+SET imdb_id = ?, updatedAt = ?, sync_status = 'PENDING_UPDATE'
 WHERE id = ?;
 
 clearKinopoiskId:
@@ -361,14 +372,15 @@ INSERT OR REPLACE INTO anime(
     anilist_id, mal_id, shikimori_id,
     anilist_not_found_at, mal_not_found_at, shikimori_not_found_at,
     isPrivate, encryptionIv, deletedAt, mediaType, title_en, title_en_checked_at, title_ru, title_ru_checked_at,
-    tmdb_id, tmdb_not_found_at, kinopoisk_id, kinopoisk_not_found_at
+    tmdb_id, tmdb_not_found_at, kinopoisk_id, kinopoisk_not_found_at, imdb_id
 )
 VALUES (
     :id, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SYNCED', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
     (SELECT tmdb_id FROM anime WHERE id = :id),
     (SELECT tmdb_not_found_at FROM anime WHERE id = :id),
     (SELECT kinopoisk_id FROM anime WHERE id = :id),
-    (SELECT kinopoisk_not_found_at FROM anime WHERE id = :id)
+    (SELECT kinopoisk_not_found_at FROM anime WHERE id = :id),
+    (SELECT imdb_id FROM anime WHERE id = :id)
 );
 
 keepingDirty:

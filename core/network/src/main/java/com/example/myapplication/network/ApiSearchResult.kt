@@ -13,6 +13,8 @@ data class ExternalIds(
     val shikimori: Int? = null,
     val tmdb: Int? = null,
     val kinopoisk: Int? = null,
+    /** Canonical IMDb id (`tt0412142`). String: the `tt` prefix and leading zeros are significant. */
+    val imdb: String? = null,
 )
 
 /**

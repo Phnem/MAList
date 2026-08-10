@@ -40,6 +40,7 @@ internal fun AnimeDatabase.insertNewAnime(
             kinopoisk_id = anime.kinopoiskId?.toLong(),
             tmdb_not_found_at = anime.tmdbNotFoundAt,
             kinopoisk_not_found_at = anime.kinopoiskNotFoundAt,
+            imdb_id = anime.imdbId,
         )
         anime.tags.forEach { tag ->
             animeQueries.insertAnimeTag(anime_id = anime.id, tag = tag)

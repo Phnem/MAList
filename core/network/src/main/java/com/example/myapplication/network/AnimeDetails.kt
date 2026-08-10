@@ -15,6 +15,8 @@ data class AnimeDetails(
     /** Имя API, отдавшего карточку («AniList», «Shikimori»), а не первоисточник тайтла. */
     val source: String,
     val airedOn: String? = null,
+    /** Canonical IMDb id when the provider exposes one. */
+    val imdbId: String? = null,
     /** Формат выпуска сырым кодом источника: `TV`, `ONA`, `MOVIE`, `tv`, `ova`… null = не отдал. */
     val format: String? = null,
     /** Первоисточник тайтла: `MANGA`, `LIGHT_NOVEL`, `ORIGINAL`… (AniList/Jikan). */

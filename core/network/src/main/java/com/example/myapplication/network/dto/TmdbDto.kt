@@ -39,6 +39,8 @@ data class TmdbMovieDetailsDto(
     @SerialName("release_date") val releaseDate: String? = null,
     val runtime: Int? = null,
     val genres: List<TmdbGenreDto> = emptyList(),
+    /** `/3/movie/{id}` exposes this natively; TV needs `append_to_response=external_ids`. */
+    @SerialName("imdb_id") val imdbId: String? = null,
 )
 
 @Serializable
@@ -52,6 +54,12 @@ data class TmdbTvDetailsDto(
     @SerialName("in_production") val inProduction: Boolean = false,
     val genres: List<TmdbGenreDto> = emptyList(),
     val seasons: List<TmdbSeasonDto> = emptyList(),
+    @SerialName("external_ids") val externalIds: TmdbExternalIdsDto? = null,
+)
+
+@Serializable
+data class TmdbExternalIdsDto(
+    @SerialName("imdb_id") val imdbId: String? = null,
 )
 
 @Serializable

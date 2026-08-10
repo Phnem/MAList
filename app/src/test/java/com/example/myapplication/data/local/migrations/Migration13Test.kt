@@ -71,11 +71,40 @@ class Migration13Test {
         seed(id = "g", mediaType = "TV_SERIES", categoryType = "MOVIE")
         migrate()
 
-        val db = AnimeDatabase(driver)
-        val rows = db.animeQueries.getAllAnime().executeAsList()
-        assertEquals(1, rows.size)
-        assertNull(rows.single().tmdb_id)
-        assertNull(rows.single().kinopoisk_id)
+        // Raw SQL on purpose: the generated queries always describe the LATEST schema, so reading
+        // this half-migrated database through them would break every time a later migration adds a
+        // column. This test is about 13.sqm alone.
+        assertEquals(1, countRows())
+        assertNull(columnOf("g", "tmdb_id"))
+        assertNull(columnOf("g", "kinopoisk_id"))
+    }
+
+    private fun countRows(): Int {
+        var count = 0
+        driver.executeQuery(
+            null,
+            "SELECT COUNT(*) FROM anime",
+            { cursor ->
+                if (cursor.next().value) count = cursor.getLong(0)?.toInt() ?: 0
+                QueryResult.Value(Unit)
+            },
+            0
+        )
+        return count
+    }
+
+    private fun columnOf(id: String, column: String): Long? {
+        var value: Long? = null
+        driver.executeQuery(
+            null,
+            "SELECT $column FROM anime WHERE id = '$id'",
+            { cursor ->
+                if (cursor.next().value) value = cursor.getLong(0)
+                QueryResult.Value(Unit)
+            },
+            0
+        )
+        return value
     }
 
     private fun seed(id: String, mediaType: String, categoryType: String) {

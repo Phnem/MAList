@@ -57,7 +57,8 @@ class AnimeLocalDataSource(
                             tmdbId = row.tmdb_id?.toInt(),
                             kinopoiskId = row.kinopoisk_id?.toInt(),
                             tmdbNotFoundAt = row.tmdb_not_found_at,
-                            kinopoiskNotFoundAt = row.kinopoisk_not_found_at
+                            kinopoiskNotFoundAt = row.kinopoisk_not_found_at,
+                            imdbId = row.imdb_id
                         )
                     }
                 }
@@ -90,7 +91,8 @@ class AnimeLocalDataSource(
                             tmdbId = row.tmdb_id?.toInt(),
                             kinopoiskId = row.kinopoisk_id?.toInt(),
                             tmdbNotFoundAt = row.tmdb_not_found_at,
-                            kinopoiskNotFoundAt = row.kinopoisk_not_found_at
+                            kinopoiskNotFoundAt = row.kinopoisk_not_found_at,
+                            imdbId = row.imdb_id
                         )
                     }
                 }
@@ -134,7 +136,8 @@ class AnimeLocalDataSource(
                     tmdbId = row.tmdb_id,
                     kinopoiskId = row.kinopoisk_id,
                     tmdbNotFoundAt = row.tmdb_not_found_at,
-                    kinopoiskNotFoundAt = row.kinopoisk_not_found_at
+                    kinopoiskNotFoundAt = row.kinopoisk_not_found_at,
+                    imdbId = row.imdb_id,
                 )
             }
     }
@@ -166,7 +169,8 @@ class AnimeLocalDataSource(
                     tmdbId = row.tmdb_id,
                     kinopoiskId = row.kinopoisk_id,
                     tmdbNotFoundAt = row.tmdb_not_found_at,
-                    kinopoiskNotFoundAt = row.kinopoisk_not_found_at
+                    kinopoiskNotFoundAt = row.kinopoisk_not_found_at,
+                    imdbId = row.imdb_id,
                 )
             }
     }
@@ -199,7 +203,8 @@ class AnimeLocalDataSource(
         tmdbId: Long? = null,
         kinopoiskId: Long? = null,
         tmdbNotFoundAt: Long? = null,
-        kinopoiskNotFoundAt: Long? = null
+        kinopoiskNotFoundAt: Long? = null,
+        imdbId: String? = null,
     ): Anime = Anime(
         id = id,
         title = title,
@@ -224,7 +229,8 @@ class AnimeLocalDataSource(
         tmdbId = tmdbId?.toInt(),
         kinopoiskId = kinopoiskId?.toInt(),
         tmdbNotFoundAt = tmdbNotFoundAt,
-        kinopoiskNotFoundAt = kinopoiskNotFoundAt
+        kinopoiskNotFoundAt = kinopoiskNotFoundAt,
+        imdbId = imdbId,
     )
 
     suspend fun insertAnime(anime: Anime) {
@@ -262,6 +268,7 @@ class AnimeLocalDataSource(
                 kinopoisk_id = anime.kinopoiskId?.toLong(),
                 tmdb_not_found_at = anime.tmdbNotFoundAt,
                 kinopoisk_not_found_at = anime.kinopoiskNotFoundAt,
+                imdb_id = anime.imdbId,
                 id = anime.id
             )
 
@@ -317,7 +324,8 @@ class AnimeLocalDataSource(
                     tmdb_id = anime.tmdbId?.toLong(),
                     kinopoisk_id = anime.kinopoiskId?.toLong(),
                     tmdb_not_found_at = anime.tmdbNotFoundAt,
-                    kinopoisk_not_found_at = anime.kinopoiskNotFoundAt
+                    kinopoisk_not_found_at = anime.kinopoiskNotFoundAt,
+                    imdb_id = anime.imdbId,
                 )
                 anime.tags.forEach { tag ->
                     db().animeQueries.insertAnimeTag(
@@ -643,6 +651,23 @@ class AnimeLocalDataSource(
     suspend fun setKinopoiskId(animeId: String, kinopoiskId: Int) {
         db().animeQueries.setKinopoiskId(
             kinopoisk_id = kinopoiskId.toLong(),
+            updatedAt = System.currentTimeMillis(),
+            id = animeId
+        )
+        mirrorCoordinator.requestExportIfEnabled()
+    }
+
+    /**
+     * Stores the canonical IMDb id (`tt0412142`).
+     *
+     * Blank input is rejected rather than written: an empty string would look like a resolved id and
+     * stop later enrichment from ever retrying.
+     */
+    suspend fun setImdbId(animeId: String, imdbId: String) {
+        val canonical = imdbId.trim()
+        if (canonical.isEmpty()) return
+        db().animeQueries.setImdbId(
+            imdb_id = canonical,
             updatedAt = System.currentTimeMillis(),
             id = animeId
         )

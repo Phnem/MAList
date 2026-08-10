@@ -88,6 +88,8 @@ class TmdbRemoteDataSource(private val client: HttpClient) {
                 appendPathSegments("3", "tv", id.toString())
                 parameter("api_key", apiKey())
                 parameter("language", language.tmdbLocale())
+                // Unlike /movie, the TV details payload carries no imdb_id of its own.
+                parameter("append_to_response", "external_ids")
             }
         }
     }.flatMap { response -> LookupResult.Found(response.body<TmdbTvDetailsDto>().toDomain()) }
@@ -216,6 +218,7 @@ private fun TmdbMovieDetailsDto.toAnimeDetails(): AnimeDetails = AnimeDetails(
     posterUrl = posterPath?.let { "https://image.tmdb.org/t/p/w500$it" },
     source = "TMDB",
     airedOn = releaseDate,
+    imdbId = imdbId?.takeIf(String::isNotBlank),
 )
 
 private fun TmdbTvDetailsDto.toDomain(): TmdbTvDetails = TmdbTvDetails(
@@ -227,6 +230,7 @@ private fun TmdbTvDetailsDto.toDomain(): TmdbTvDetails = TmdbTvDetails(
     genres = genres.mapNotNull { it.name },
     status = TmdbEpisodeCalculator.status(status, inProduction),
     seasons = seasons.map { it.toDomain() },
+    imdbId = externalIds?.imdbId?.takeIf(String::isNotBlank),
 )
 
 fun TmdbTvDetails.toAnimeDetails(): AnimeDetails = AnimeDetails(
@@ -242,6 +246,7 @@ fun TmdbTvDetails.toAnimeDetails(): AnimeDetails = AnimeDetails(
     rating = voteAverage,
     posterUrl = posterUrl,
     source = "TMDB",
+    imdbId = imdbId,
 )
 
 private fun TmdbSeasonDto.toDomain(): TmdbSeasonSummary = TmdbSeasonSummary(
@@ -264,4 +269,5 @@ data class TmdbTvDetails(
     val genres: List<String>,
     val status: SeriesStatus,
     val seasons: List<TmdbSeasonSummary>,
+    val imdbId: String? = null,
 )
