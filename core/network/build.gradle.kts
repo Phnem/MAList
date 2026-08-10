@@ -23,7 +23,7 @@ android {
             "\"${localProperties.getProperty("TMDB_API_KEY", "")}\""
         )
         // Известное ограничение: строка оказывается в APK как есть, извлекаема декомпиляцией.
-        // Для потенциально платного/лимитированного Kinopoisk.dev-ключа риск выше, чем у
+        // Для лимитированного Kinopoisk Unofficial-ключа риск выше, чем у
         // бесплатного TMDB — принято сознательно на этой итерации (см.
         // .scratch/movie-series-infra/spec.md); серверный прокси — в бэклоге.
         buildConfigField(
@@ -56,4 +56,5 @@ dependencies {
     implementation(libs.koin.android)
 
     testImplementation(libs.junit)
+    testImplementation("io.ktor:ktor-client-mock")
 }

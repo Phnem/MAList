@@ -6,6 +6,8 @@ import com.example.myapplication.network.ApiSearchResult
 import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.network.ExternalIds
 import com.example.myapplication.network.LookupResult
+import com.example.myapplication.network.executeHttpLookup
+import com.example.myapplication.network.flatMap
 import com.example.myapplication.network.dto.TmdbEpisodeDto
 import com.example.myapplication.network.dto.TmdbMovieDetailsDto
 import com.example.myapplication.network.dto.TmdbSearchResponseDto
@@ -17,8 +19,6 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
-import io.ktor.client.statement.HttpResponse
-import io.ktor.http.HttpStatusCode
 import io.ktor.http.URLProtocol
 import io.ktor.http.appendPathSegments
 import java.time.Clock
@@ -51,7 +51,7 @@ class TmdbRemoteDataSource(private val client: HttpClient) {
         year: Int?,
         yearParam: String,
         map: (TmdbSearchResultDto) -> ApiSearchResult,
-    ): LookupResult<List<ApiSearchResult>> = runRequest {
+    ): LookupResult<List<ApiSearchResult>> = runRequest(notFoundById = false) {
         client.get {
             url {
                 protocol = URLProtocol.HTTPS
@@ -63,7 +63,7 @@ class TmdbRemoteDataSource(private val client: HttpClient) {
                 if (year != null) parameter(yearParam, year)
             }
         }
-    }.map { response ->
+    }.flatMap { response ->
         val results = response.body<TmdbSearchResponseDto>().results.map(map)
         if (results.isEmpty()) LookupResult.NoMatch else LookupResult.Found(results)
     }
@@ -78,7 +78,7 @@ class TmdbRemoteDataSource(private val client: HttpClient) {
                 parameter("language", language.tmdbLocale())
             }
         }
-    }.map { response -> LookupResult.Found(response.body<TmdbMovieDetailsDto>().toAnimeDetails()) }
+    }.flatMap { response -> LookupResult.Found(response.body<TmdbMovieDetailsDto>().toAnimeDetails()) }
 
     suspend fun tvDetails(id: Int, language: AppLanguage): LookupResult<TmdbTvDetails> = runRequest {
         client.get {
@@ -90,7 +90,7 @@ class TmdbRemoteDataSource(private val client: HttpClient) {
                 parameter("language", language.tmdbLocale())
             }
         }
-    }.map { response -> LookupResult.Found(response.body<TmdbTvDetailsDto>().toDomain()) }
+    }.flatMap { response -> LookupResult.Found(response.body<TmdbTvDetailsDto>().toDomain()) }
 
     suspend fun seasonEpisodeAirDates(tvId: Int, seasonNumber: Int, language: AppLanguage): LookupResult<List<TmdbEpisodeAirDate>> = runRequest {
         client.get {
@@ -102,7 +102,7 @@ class TmdbRemoteDataSource(private val client: HttpClient) {
                 parameter("language", language.tmdbLocale())
             }
         }
-    }.map { response ->
+    }.flatMap { response ->
         val episodes = response.body<TmdbSeasonDetailsResponseDto>().episodes.map { it.toDomain() }
         LookupResult.Found(episodes)
     }
@@ -121,7 +121,7 @@ class TmdbRemoteDataSource(private val client: HttpClient) {
                 parameter("api_key", apiKey())
             }
         }
-    }.map { LookupResult.Found(Unit) }
+    }.flatMap { LookupResult.Found(Unit) }
 
     /**
      * Released-vs-known серии + статус одним заходом: [TmdbTvDetails] → при наличии
@@ -154,31 +154,14 @@ class TmdbRemoteDataSource(private val client: HttpClient) {
         return LookupResult.Found(SeriesEpisodeState(released, known, details.status))
     }
 
-    // ---- HTTP → LookupResult -------------------------------------------------------------
-
-    private suspend fun runRequest(block: suspend () -> HttpResponse): LookupResult<HttpResponse> = try {
-        val response = block()
-        when {
-            response.status.isSuccess() -> LookupResult.Found(response)
-            response.status == HttpStatusCode.NotFound -> LookupResult.NotFoundById
-            else -> LookupResult.Failure(
-                cause = IllegalStateException("TMDB HTTP ${response.status.value}"),
-                retryable = response.status.value in 500..599 || response.status == HttpStatusCode.TooManyRequests,
-            )
-        }
-    } catch (e: Exception) {
-        if (e is kotlinx.coroutines.CancellationException) throw e
-        LookupResult.Failure(cause = e, retryable = true)
-    }
-
-    private fun HttpStatusCode.isSuccess() = value in 200..299
-
-    private suspend fun <T, R> LookupResult<T>.map(transform: suspend (T) -> LookupResult<R>): LookupResult<R> = when (this) {
-        is LookupResult.Found -> transform(value)
-        is LookupResult.NoMatch -> LookupResult.NoMatch
-        is LookupResult.NotFoundById -> LookupResult.NotFoundById
-        is LookupResult.Failure -> this
-    }
+    private suspend fun runRequest(
+        notFoundById: Boolean = true,
+        block: suspend () -> io.ktor.client.statement.HttpResponse,
+    ): LookupResult<io.ktor.client.statement.HttpResponse> = executeHttpLookup(
+        providerName = "TMDB",
+        notFoundById = notFoundById,
+        block = block,
+    )
 }
 
 private fun AppLanguage.tmdbLocale(): String = when (this) {

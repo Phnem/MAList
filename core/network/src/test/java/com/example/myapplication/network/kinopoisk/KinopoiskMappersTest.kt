@@ -1,10 +1,8 @@
 package com.example.myapplication.network.kinopoisk
 
-import com.example.myapplication.network.dto.KinopoiskExternalIdDto
+import com.example.myapplication.network.dto.KinopoiskFilmDto
 import com.example.myapplication.network.dto.KinopoiskGenreDto
-import com.example.myapplication.network.dto.KinopoiskMovieDto
-import com.example.myapplication.network.dto.KinopoiskPosterDto
-import com.example.myapplication.network.dto.KinopoiskRatingDto
+import com.example.myapplication.network.dto.KinopoiskSearchFilmDto
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -12,88 +10,98 @@ import org.junit.Test
 class KinopoiskMappersTest {
 
     @Test
-    fun `maps tmdb bridge id into ExternalIds alongside kinopoisk id`() {
-        val dto = KinopoiskMovieDto(
-            id = 123,
-            name = "Дюна",
-            externalId = KinopoiskExternalIdDto(tmdb = 438631, imdb = "tt1160419"),
-        )
-        val result = dto.toApiSearchResult(categoryType = "MOVIE")
-        assertEquals(123, result.externalIds.kinopoisk)
-        assertEquals(438631, result.externalIds.tmdb)
-    }
+    fun `search carries kinopoisk identity without inventing a tmdb bridge`() {
+        val result = searchFilm(filmId = 123, nameRu = "Дюна").toApiSearchResult("MOVIE")
 
-    @Test
-    fun `missing externalId leaves tmdb bridge null without crashing`() {
-        val dto = KinopoiskMovieDto(id = 5, name = "Тест")
-        val result = dto.toApiSearchResult(categoryType = "SERIES")
-        assertEquals(5, result.externalIds.kinopoisk)
+        assertEquals(123, result.externalIds.kinopoisk)
         assertNull(result.externalIds.tmdb)
     }
 
     @Test
-    fun `kp rating 0 to 10 scales to the app's 0 to 100 rating`() {
-        val dto = KinopoiskMovieDto(id = 1, name = "X", rating = KinopoiskRatingDto(kp = 8.3))
-        assertEquals(83, dto.toApiSearchResult("MOVIE").rating)
+    fun `string rating scales from 0 to 10 into app 0 to 100`() {
+        val result = searchFilm(rating = "8.3").toApiSearchResult("MOVIE")
+
+        assertEquals(83, result.rating)
     }
 
     @Test
-    fun `falls back to alternativeName when name is absent`() {
-        val dto = KinopoiskMovieDto(id = 1, name = null, alternativeName = "Dune")
-        assertEquals("Dune", dto.toApiSearchResult("MOVIE").title)
+    fun `russian title leads while english title remains localized alias`() {
+        val result = searchFilm(nameRu = "1+1", nameEn = "The Intouchables")
+            .toApiSearchResult("MOVIE")
+
+        assertEquals("1+1", result.title)
+        assertEquals("The Intouchables", result.titleEn)
+        assertEquals("1+1", result.titleRu)
     }
 
     @Test
-    fun `movie episodes is always 1, series defaults to 0`() {
-        val movie = KinopoiskMovieDto(id = 1, name = "M")
-        val series = KinopoiskMovieDto(id = 2, name = "S")
-        assertEquals(1, movie.toApiSearchResult("MOVIE").episodes)
-        assertEquals(0, series.toApiSearchResult("SERIES").episodes)
+    fun `english title is a safe display fallback when russian is absent`() {
+        val result = searchFilm(nameRu = null, nameEn = "Dune").toApiSearchResult("MOVIE")
+
+        assertEquals("Dune", result.title)
     }
 
     @Test
-    fun `poster url comes from poster field, blank is treated as absent`() {
-        val withPoster = KinopoiskMovieDto(id = 1, name = "X", poster = KinopoiskPosterDto(url = "https://example/x.jpg"))
-        val blankPoster = KinopoiskMovieDto(id = 2, name = "Y", poster = KinopoiskPosterDto(url = ""))
-        assertEquals("https://example/x.jpg", withPoster.toApiSearchResult("MOVIE").posterUrl)
-        assertNull(blankPoster.toApiSearchResult("MOVIE").posterUrl)
+    fun `movie episodes is one while series remains unknown`() {
+        assertEquals(1, searchFilm().toApiSearchResult("MOVIE").episodes)
+        assertEquals(0, searchFilm().toApiSearchResult("SERIES").episodes)
     }
 
     @Test
-    fun `genres map to plain names, nulls filtered out`() {
-        val dto = KinopoiskMovieDto(id = 1, name = "X", genres = listOf(KinopoiskGenreDto("драма"), KinopoiskGenreDto(null)))
-        assertEquals(listOf("драма"), dto.toApiSearchResult("MOVIE").genres)
-    }
-
-    @Test
-    fun `release year is carried through for dedup`() {
-        val dto = KinopoiskMovieDto(id = 1, name = "X", year = 2021)
-        assertEquals(2021, dto.toApiSearchResult("MOVIE").seasonYear)
-    }
-
-    @Test
-    fun `english locale uses enName only while alternative stays original title`() {
-        val withoutEnglish = KinopoiskMovieDto(
-            id = 1,
-            name = "1+1",
-            enName = null,
-            alternativeName = "Intouchables",
+    fun `blank poster is absent and genre names are flattened`() {
+        val result = searchFilm(
+            posterUrl = "",
+            genres = listOf(KinopoiskGenreDto("драма"), KinopoiskGenreDto(null)),
         ).toApiSearchResult("MOVIE")
-        assertNull(withoutEnglish.titleEn)
-        assertEquals("Intouchables", withoutEnglish.originalTitle)
 
-        val withEnglish = KinopoiskMovieDto(
-            id = 2,
-            name = "1+1",
-            enName = "The Intouchables",
-            alternativeName = "Intouchables",
-        ).toApiSearchResult("MOVIE")
-        assertEquals("The Intouchables", withEnglish.titleEn)
+        assertNull(result.posterUrl)
+        assertEquals(listOf("драма"), result.genres)
     }
 
     @Test
-    fun `toDetails preserves kp rating unscaled for repair-level consumers`() {
-        val dto = KinopoiskMovieDto(id = 1, name = "X", rating = KinopoiskRatingDto(kp = 7.5))
-        assertEquals(7.5, dto.toDetails().ratingKp!!, 0.0001)
+    fun `year string is parsed for dedup`() {
+        assertEquals(2021, searchFilm(year = "2021").toApiSearchResult("MOVIE").seasonYear)
+        assertNull(searchFilm(year = "unknown").toApiSearchResult("MOVIE").seasonYear)
     }
+
+    @Test
+    fun `details preserve imdb bridge and native kp rating`() {
+        val details = KinopoiskFilmDto(
+            kinopoiskId = 178710,
+            imdbId = "tt0412142",
+            nameRu = "Доктор Хаус",
+            nameEn = "House, M.D.",
+            nameOriginal = "House",
+            year = 2004,
+            ratingKinopoisk = 8.8,
+            genres = listOf(KinopoiskGenreDto("драма")),
+        ).toDetails()
+
+        assertEquals("tt0412142", details.externalImdbId)
+        assertEquals("Доктор Хаус", details.nameRu)
+        assertEquals("House, M.D.", details.nameEn)
+        assertEquals("House", details.originalName)
+        assertEquals(2004, details.year)
+        assertEquals(8.8, details.ratingKp!!, 0.0001)
+        assertEquals(listOf("драма"), details.genres)
+    }
+
+    private fun searchFilm(
+        filmId: Int = 1,
+        nameRu: String? = "X",
+        nameEn: String? = null,
+        year: String? = null,
+        rating: String? = null,
+        posterUrl: String? = null,
+        genres: List<KinopoiskGenreDto> = emptyList(),
+    ) = KinopoiskSearchFilmDto(
+        filmId = filmId,
+        nameRu = nameRu,
+        nameEn = nameEn,
+        type = "FILM",
+        year = year,
+        rating = rating,
+        posterUrl = posterUrl,
+        genres = genres,
+    )
 }

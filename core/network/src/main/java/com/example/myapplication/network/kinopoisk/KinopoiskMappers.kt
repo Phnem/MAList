@@ -2,9 +2,12 @@ package com.example.myapplication.network.kinopoisk
 
 import com.example.myapplication.network.ApiSearchResult
 import com.example.myapplication.network.ExternalIds
-import com.example.myapplication.network.dto.KinopoiskMovieDto
+import com.example.myapplication.network.dto.KinopoiskEpisodeDto
+import com.example.myapplication.network.dto.KinopoiskFilmDto
+import com.example.myapplication.network.dto.KinopoiskSearchFilmDto
+import com.example.myapplication.network.dto.KinopoiskSeasonDto
 
-/** Карточка Kinopoisk-результата для деталей/репара — рейтинг оставлен как есть (0..10), не ×10 (см. [toApiSearchResult] для конвертации в общую шкалу). */
+/** Detail card owned by the Kinopoisk adapter; rating remains on the native 0..10 scale. */
 data class KinopoiskDetails(
     val id: Int,
     val name: String,
@@ -12,47 +15,83 @@ data class KinopoiskDetails(
     val posterUrl: String?,
     val ratingKp: Double?,
     val genres: List<String>,
-    val externalTmdbId: Int?,
+    /** This provider exposes IMDb rather than a direct TMDB bridge. */
+    val externalImdbId: String? = null,
+    /** Kept for repository compatibility; title/IMDb resolution supplies TMDB separately. */
+    val externalTmdbId: Int? = null,
+    val nameRu: String? = null,
+    val nameEn: String? = null,
+    val originalName: String? = null,
+    val year: Int? = null,
 )
 
-private fun KinopoiskMovieDto.displayName(): String =
-    name ?: alternativeName ?: ""
+data class KinopoiskSeason(
+    val number: Int,
+    val episodes: List<KinopoiskEpisode>,
+)
 
-private fun KinopoiskMovieDto.posterUrl(): String? =
-    poster?.url?.takeIf { it.isNotBlank() }
+data class KinopoiskEpisode(
+    val seasonNumber: Int,
+    val episodeNumber: Int,
+    val nameRu: String?,
+    val nameEn: String?,
+    val synopsis: String?,
+    val releaseDate: String?,
+)
 
-/**
- * Kinopoisk-рейтинг `kp` — уже 0..10 с десятичной точностью; переводим в общую 0..100 шкалу
- * приложения (та же, что TMDB `vote_average * 10`), чтобы дальше по конвейеру (`RatingScale`)
- * оба источника обрабатывались одинаково.
- */
 private fun Double?.toAppRating(): Int? = this?.let { (it * 10).toInt() }
 
-fun KinopoiskMovieDto.toApiSearchResult(categoryType: String): ApiSearchResult = ApiSearchResult(
-    title = displayName(),
-    altTitle = alternativeName?.takeIf { it != name },
-    posterUrl = posterUrl(),
-    episodes = if (categoryType == "MOVIE") 1 else 0,
+fun KinopoiskSearchFilmDto.toApiSearchResult(categoryType: String): ApiSearchResult {
+    val title = nameRu?.takeIf(String::isNotBlank)
+        ?: nameEn?.takeIf(String::isNotBlank)
+        .orEmpty()
+    return ApiSearchResult(
+        title = title,
+        altTitle = nameEn?.takeIf { it.isNotBlank() && it != title },
+        posterUrl = posterUrl?.takeIf(String::isNotBlank),
+        episodes = if (categoryType == "MOVIE") 1 else 0,
+        description = description.orEmpty(),
+        type = if (categoryType == "MOVIE") "FILM" else "TV",
+        genres = genres.mapNotNull { it.genre?.takeIf(String::isNotBlank) },
+        rating = rating?.toDoubleOrNull().toAppRating(),
+        source = "Kinopoisk",
+        categoryType = categoryType,
+        seasonYear = year?.toIntOrNull(),
+        originalTitle = nameEn?.takeIf(String::isNotBlank),
+        titleEn = nameEn?.takeIf(String::isNotBlank),
+        titleRu = nameRu?.takeIf(String::isNotBlank),
+        externalId = filmId.toString(),
+        externalIds = ExternalIds(kinopoisk = filmId),
+    )
+}
+
+fun KinopoiskFilmDto.toDetails(): KinopoiskDetails = KinopoiskDetails(
+    id = kinopoiskId,
+    name = nameRu?.takeIf(String::isNotBlank)
+        ?: nameEn?.takeIf(String::isNotBlank)
+        ?: nameOriginal?.takeIf(String::isNotBlank)
+        .orEmpty(),
     description = description.orEmpty(),
-    type = if (categoryType == "MOVIE") "Movie" else "TV",
-    genres = genres.mapNotNull { it.name },
-    rating = rating?.kp.toAppRating(),
-    source = "Kinopoisk",
-    categoryType = categoryType,
-    seasonYear = year,
-    originalTitle = alternativeName?.takeIf { it.isNotBlank() },
-    titleEn = enName?.takeIf { it.isNotBlank() },
-    titleRu = name?.takeIf { it.isNotBlank() },
-    externalId = id.toString(),
-    externalIds = ExternalIds(kinopoisk = id, tmdb = externalId?.tmdb),
+    posterUrl = posterUrl?.takeIf(String::isNotBlank),
+    ratingKp = ratingKinopoisk,
+    genres = genres.mapNotNull { it.genre?.takeIf(String::isNotBlank) },
+    externalImdbId = imdbId?.takeIf(String::isNotBlank),
+    nameRu = nameRu?.takeIf(String::isNotBlank),
+    nameEn = nameEn?.takeIf(String::isNotBlank),
+    originalName = nameOriginal?.takeIf(String::isNotBlank),
+    year = year,
 )
 
-fun KinopoiskMovieDto.toDetails(): KinopoiskDetails = KinopoiskDetails(
-    id = id,
-    name = displayName(),
-    description = description.orEmpty(),
-    posterUrl = posterUrl(),
-    ratingKp = rating?.kp,
-    genres = genres.mapNotNull { it.name },
-    externalTmdbId = externalId?.tmdb,
+fun KinopoiskSeasonDto.toDomain(): KinopoiskSeason = KinopoiskSeason(
+    number = number,
+    episodes = episodes.map(KinopoiskEpisodeDto::toDomain),
+)
+
+private fun KinopoiskEpisodeDto.toDomain(): KinopoiskEpisode = KinopoiskEpisode(
+    seasonNumber = seasonNumber,
+    episodeNumber = episodeNumber,
+    nameRu = nameRu,
+    nameEn = nameEn,
+    synopsis = synopsis,
+    releaseDate = releaseDate,
 )

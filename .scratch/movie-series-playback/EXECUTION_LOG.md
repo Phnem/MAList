@@ -1,0 +1,47 @@
+# Execution log
+
+## 2026-08-10 — Initial codebase discovery
+
+### Relevant modules
+
+- `core/network`: Kinopoisk/TMDB catalog adapters and `MovieSeriesRepository`.
+- `app/media/source`: playback adapters, `SourceEngine`, normalized video candidates.
+- `app/domain/seasons`: manual streaming season discovery.
+- `app/ui/details`: episode actions and error messages.
+
+### Existing behavior
+
+RU catalog orchestration requests Kinopoisk, but the concrete adapter targets a provider that does
+not accept the supplied key. Playback routes are anime-specific and SERIES discovery is explicitly
+rejected.
+
+### Existing tests
+
+Repository merge/mapping tests exist; Kinopoisk HTTP requests have no MockEngine tests. Source
+parsers and player/downloader policies have focused tests.
+
+### Constraints discovered
+
+- Supplied key was live-smoked only against its intended host and found Doctor House (`TV_SERIES`).
+- The documented Kinopoisk `/videos` endpoint returns trailers/teasers, not episode streams.
+- Secret is not recorded in tracked artifacts.
+
+### Questions answerable from code
+
+The app already has a single downstream `VetroVideo` model and shared player/download path; new
+adapters should terminate there.
+
+### Remaining material uncertainties
+
+Which personal media server, if any, the user owns. Primary-source research is running; adapters
+can still be added disabled by default with mocked contract tests.
+
+## 2026-08-10 — TICKET-01 implemented and accepted
+
+- Switched Kinopoisk requests to the supplied provider's documented host/header/endpoints.
+- Added typed search/details/seasons DTOs and Ktor MockEngine tests.
+- Preserved title variants, year, rating, poster, genres and IMDb id.
+- Split search 404 from saved-ID 404 semantics and covered blank/401/429/503 outcomes.
+- Extracted the shared TMDB/Kinopoisk HTTP outcome policy after Standards review.
+- Live authenticated Doctor House search/details/eight-season smoke passed without logging the key.
+- Spec and Standards re-reviews report no remaining BLOCKING/IMPORTANT findings.

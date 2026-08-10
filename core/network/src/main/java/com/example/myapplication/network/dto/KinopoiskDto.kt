@@ -2,55 +2,76 @@ package com.example.myapplication.network.dto
 
 import kotlinx.serialization.Serializable
 
+/** `GET /api/v2.1/films/search-by-keyword`. */
 @Serializable
 data class KinopoiskSearchResponseDto(
-    val docs: List<KinopoiskMovieDto> = emptyList()
+    val films: List<KinopoiskSearchFilmDto> = emptyList(),
 )
 
 @Serializable
-data class KinopoiskMovieDto(
-    val id: Int,
-    val name: String? = null,
-    val enName: String? = null,
-    val alternativeName: String? = null,
+data class KinopoiskSearchFilmDto(
+    val filmId: Int,
+    val nameRu: String? = null,
+    val nameEn: String? = null,
+    /** `FILM`, `TV_SERIES`, `MINI_SERIES`, `TV_SHOW`. */
+    val type: String? = null,
+    val year: String? = null,
     val description: String? = null,
-    /** `movie`/`tv-series`/`cartoon`/`anime`/`animated-series` — поиск фильтрует по нему запросом. */
+    val countries: List<KinopoiskCountryDto> = emptyList(),
+    val genres: List<KinopoiskGenreDto> = emptyList(),
+    /** The legacy search contract transports the 0..10 rating as a string. */
+    val rating: String? = null,
+    val posterUrl: String? = null,
+    val posterUrlPreview: String? = null,
+)
+
+/** `GET /api/v2.2/films/{id}`. */
+@Serializable
+data class KinopoiskFilmDto(
+    val kinopoiskId: Int,
+    val imdbId: String? = null,
+    val nameRu: String? = null,
+    val nameEn: String? = null,
+    val nameOriginal: String? = null,
+    val posterUrl: String? = null,
+    val posterUrlPreview: String? = null,
+    val ratingKinopoisk: Double? = null,
+    val description: String? = null,
     val type: String? = null,
     val year: Int? = null,
-    val rating: KinopoiskRatingDto? = null,
-    val poster: KinopoiskPosterDto? = null,
+    val countries: List<KinopoiskCountryDto> = emptyList(),
     val genres: List<KinopoiskGenreDto> = emptyList(),
-    val movieLength: Int? = null,
-    val seasonsInfo: List<KinopoiskSeasonInfoDto> = emptyList(),
-    val externalId: KinopoiskExternalIdDto? = null,
 )
 
 @Serializable
-data class KinopoiskRatingDto(
-    val kp: Double? = null,
-    val imdb: Double? = null,
-)
-
-@Serializable
-data class KinopoiskPosterDto(
-    val url: String? = null,
-    val previewUrl: String? = null,
+data class KinopoiskCountryDto(
+    val country: String? = null,
 )
 
 @Serializable
 data class KinopoiskGenreDto(
-    val name: String? = null,
+    val genre: String? = null,
+)
+
+/** `GET /api/v2.2/films/{id}/seasons`. Known catalogue layout only, never released count. */
+@Serializable
+data class KinopoiskSeasonResponseDto(
+    val total: Int = 0,
+    val items: List<KinopoiskSeasonDto> = emptyList(),
 )
 
 @Serializable
-data class KinopoiskSeasonInfoDto(
-    val number: Int? = null,
-    val episodesCount: Int? = null,
+data class KinopoiskSeasonDto(
+    val number: Int,
+    val episodes: List<KinopoiskEpisodeDto> = emptyList(),
 )
 
-/** Мост к другим каталогам — `tmdb` даёт прямую связку Kinopoisk-результата с TMDB-карточкой. */
 @Serializable
-data class KinopoiskExternalIdDto(
-    val tmdb: Int? = null,
-    val imdb: String? = null,
+data class KinopoiskEpisodeDto(
+    val seasonNumber: Int,
+    val episodeNumber: Int,
+    val nameRu: String? = null,
+    val nameEn: String? = null,
+    val synopsis: String? = null,
+    val releaseDate: String? = null,
 )
