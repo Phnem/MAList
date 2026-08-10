@@ -201,7 +201,6 @@ class JutSuSource(
                 },
                 timestamps = parsed.timestamps,
                 isPreferred = source.resolution == 720 || source.label.contains("720"),
-                downloadAllowed = true,
             )
         }.distinctBy { it.url }
             .sortedByDescending { it.resolution ?: 0 }

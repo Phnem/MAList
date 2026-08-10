@@ -377,7 +377,6 @@ internal fun parseAniLibriaV1Episode(
                     headers = headers,
                     timestamps = timestamps,
                     isPreferred = resolution == 1080,
-                    downloadAllowed = true,
                 )
             )
         }

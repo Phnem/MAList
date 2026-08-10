@@ -255,7 +255,6 @@ private class KodikExtractor(
                             resolution = resolution,
                             headers = headers,
                             isPreferred = resolution == 720,
-                            downloadAllowed = true,
                         )
                     )
                 }
