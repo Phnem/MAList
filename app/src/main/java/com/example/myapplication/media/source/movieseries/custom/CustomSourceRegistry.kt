@@ -73,13 +73,12 @@ class CustomSourceInstaller(
  * network even by accident.
  */
 class CustomSourceRegistry(
-    private val store: CustomSourceStore,
+    private val store: InstalledSourceStore,
     private val client: HttpClient,
     private val secretProvider: suspend (String) -> String? = { null },
 ) {
     suspend fun providers(): List<MovieSeriesStreamingProvider> {
-        store.ensureLoaded()
-        return store.sources.value
+        return store.all()
             .filter(InstalledSource::enabled)
             .mapNotNull(::providerFor)
     }

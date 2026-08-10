@@ -78,6 +78,7 @@ val viewModelModule = module {
     viewModel {
         PlaybackSourcesSettingsViewModel(
             service = get(),
+            customSources = get(),
         )
     }
     viewModel {

@@ -37,6 +37,19 @@ data class InstalledSource(
 )
 
 /**
+ * The installed-source collection, narrowed to what callers actually need.
+ *
+ * Keeps the settings service and the provider registry off Android storage, so both are testable
+ * without a Context.
+ */
+interface InstalledSourceStore {
+    suspend fun all(): List<InstalledSource>
+    suspend fun install(source: InstalledSource): InstalledSource
+    suspend fun setEnabled(key: String, enabled: Boolean)
+    suspend fun remove(key: String)
+}
+
+/**
  * The sources a user installed.
  *
  * Only the public definition lives here. Any secret a manifest needs stays in the encrypted
@@ -45,7 +58,7 @@ data class InstalledSource(
 class CustomSourceStore(
     context: Context,
     private val clock: () -> Long = System::currentTimeMillis,
-) {
+) : InstalledSourceStore {
     private val file = File(context.filesDir, CACHE_FILE)
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val mutex = Mutex()
@@ -71,8 +84,13 @@ class CustomSourceStore(
         }
     }
 
+    override suspend fun all(): List<InstalledSource> {
+        ensureLoaded()
+        return _sources.value
+    }
+
     /** Adds or replaces a source. Re-installing the same key is an update, not a duplicate. */
-    suspend fun install(source: InstalledSource): InstalledSource {
+    override suspend fun install(source: InstalledSource): InstalledSource {
         ensureLoaded()
         val stamped = source.copy(installedAt = clock())
         mutex.withLock {
@@ -82,7 +100,7 @@ class CustomSourceStore(
         return stamped
     }
 
-    suspend fun setEnabled(key: String, enabled: Boolean) {
+    override suspend fun setEnabled(key: String, enabled: Boolean) {
         ensureLoaded()
         mutex.withLock {
             _sources.value = _sources.value.map { source ->
@@ -92,7 +110,7 @@ class CustomSourceStore(
         }
     }
 
-    suspend fun remove(key: String) {
+    override suspend fun remove(key: String) {
         ensureLoaded()
         mutex.withLock {
             _sources.value = _sources.value.filterNot { it.key == key }

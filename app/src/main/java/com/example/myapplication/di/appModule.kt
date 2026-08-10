@@ -278,6 +278,13 @@ val appModule = module {
         )
     }
     single {
+        com.example.myapplication.media.source.movieseries.custom.CustomSourceSettingsService(
+            store = get(),
+            installer = get(),
+            client = get(),
+        )
+    }
+    single {
         com.example.myapplication.media.source.SourceEngine(
             aniLibriaSource = get(),
             animeGoSource = get(),

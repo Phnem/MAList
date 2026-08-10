@@ -6,6 +6,9 @@ import com.example.myapplication.media.source.PlaybackSourceConfigurationSummary
 import com.example.myapplication.media.source.PlaybackSourceKind
 import com.example.myapplication.media.source.PlaybackSourcePublicDraft
 import com.example.myapplication.media.source.PlaybackSourceSettingsService
+import com.example.myapplication.media.source.movieseries.custom.CustomSourceOutcome
+import com.example.myapplication.media.source.movieseries.custom.CustomSourceSettingsService
+import com.example.myapplication.media.source.movieseries.custom.CustomSourceSummary
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +24,9 @@ enum class PlaybackSourceSettingsMessage {
     CONNECTION_FAILED,
     SECRET_REQUIRED,
     INVALID_CONFIGURATION,
+    CUSTOM_SOURCE_INSTALLED,
+    CUSTOM_SOURCE_REMOVED,
+    CUSTOM_SOURCE_REJECTED,
 }
 
 data class PlaybackSourceEditorState(
@@ -41,10 +47,16 @@ data class PlaybackSourcesSettingsUiState(
     val editor: PlaybackSourceEditorState? = null,
     val isTesting: Boolean = false,
     val message: PlaybackSourceSettingsMessage? = null,
+    /** Sources the user installed themselves. */
+    val customSources: List<CustomSourceSummary> = emptyList(),
+    val isInstalling: Boolean = false,
+    /** Why the last install attempt was refused, shown verbatim so the user can fix it. */
+    val installError: String? = null,
 )
 
 class PlaybackSourcesSettingsViewModel(
     private val service: PlaybackSourceSettingsService,
+    private val customSources: CustomSourceSettingsService? = null,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(
         PlaybackSourcesSettingsUiState(sources = service.summaries())
@@ -119,7 +131,90 @@ class PlaybackSourcesSettingsViewModel(
     }
 
     fun clearMessage() {
-        _uiState.update { it.copy(message = null) }
+        _uiState.update { it.copy(message = null, installError = null) }
+    }
+
+    fun loadCustomSources() {
+        val sources = customSources ?: return
+        viewModelScope.launch { refreshCustomSources(sources) }
+    }
+
+    /** Installs from a pasted link or a pasted/imported definition, whichever the text is. */
+    fun installCustomSource(input: String) {
+        val sources = customSources ?: return
+        val text = input.trim()
+        if (text.isEmpty()) return
+        viewModelScope.launch { installCustomSourceNow(sources, text) }
+    }
+
+    fun setCustomSourceEnabled(key: String, enabled: Boolean) {
+        val sources = customSources ?: return
+        viewModelScope.launch {
+            sources.setEnabled(key, enabled)
+            refreshCustomSources(sources)
+        }
+    }
+
+    fun removeCustomSource(key: String) {
+        val sources = customSources ?: return
+        viewModelScope.launch {
+            sources.remove(key)
+            refreshCustomSources(sources)
+            _uiState.update { it.copy(message = PlaybackSourceSettingsMessage.CUSTOM_SOURCE_REMOVED) }
+        }
+    }
+
+    fun refreshCustomSource(key: String) {
+        val sources = customSources ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isInstalling = true, installError = null) }
+            applyOutcome(sources, sources.refresh(key))
+        }
+    }
+
+    internal suspend fun installCustomSourceNow(
+        sources: CustomSourceSettingsService,
+        text: String,
+    ) {
+        _uiState.update { it.copy(isInstalling = true, installError = null) }
+        // A bare link is fetched; anything else is treated as the definition itself.
+        val outcome = if (text.startsWith("http://") || text.startsWith("https://")) {
+            sources.installFromUrl(text)
+        } else {
+            sources.installFromText(text)
+        }
+        applyOutcome(sources, outcome)
+    }
+
+    private suspend fun applyOutcome(
+        sources: CustomSourceSettingsService,
+        outcome: CustomSourceOutcome,
+    ) {
+        when (outcome) {
+            is CustomSourceOutcome.Installed -> {
+                refreshCustomSources(sources)
+                _uiState.update {
+                    it.copy(
+                        isInstalling = false,
+                        installError = null,
+                        message = PlaybackSourceSettingsMessage.CUSTOM_SOURCE_INSTALLED,
+                    )
+                }
+            }
+
+            is CustomSourceOutcome.Rejected -> _uiState.update {
+                it.copy(
+                    isInstalling = false,
+                    installError = outcome.reason,
+                    message = PlaybackSourceSettingsMessage.CUSTOM_SOURCE_REJECTED,
+                )
+            }
+        }
+    }
+
+    private suspend fun refreshCustomSources(sources: CustomSourceSettingsService) {
+        val summaries = sources.summaries()
+        _uiState.update { it.copy(customSources = summaries, isInstalling = false) }
     }
 
     private fun beginProbe(): Probe? {
