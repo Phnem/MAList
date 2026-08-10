@@ -1,7 +1,10 @@
 package com.example.myapplication.media.source
 
 import com.example.myapplication.data.models.MediaType
+import com.example.myapplication.media.source.movieseries.MediaIdentity
+import com.example.myapplication.media.source.movieseries.MediaIdentityMatcher
 import com.example.myapplication.media.source.movieseries.MovieSeriesStreamingProvider
+import com.example.myapplication.media.source.movieseries.episodeMatches
 import com.example.myapplication.media.source.movieseries.ProviderCapability
 import com.example.myapplication.media.source.movieseries.ProviderId
 import com.example.myapplication.media.source.movieseries.ProviderResolution
@@ -132,14 +135,11 @@ class PersonalMediaServerPlaybackSource(
         requireProviderSuccess(response.status.value, provider.displayName)
         val items = json.decodeFromString<ServerItemsResponse>(response.bodyAsText()).items
             .filter { it.id.matches(SAFE_SERVER_ID) }
-        val exact = items.filter { it.identityRelation(request) == IdentityRelation.EXACT }
-        if (exact.size == 1) return exact.single()
-        if (exact.size > 1) return null
-        val titleCandidates = items.filter {
-            it.identityRelation(request) == IdentityRelation.MISSING &&
-                it.name.normalizeTitle() == request.anime.title.normalizeTitle()
-        }
-        return titleCandidates.singleOrNull()
+        return MediaIdentityMatcher.selectUnique(
+            wanted = MediaIdentity.of(request),
+            candidates = items,
+            identityOf = ServerItem::identity,
+        )
     }
 
     private suspend fun episode(
@@ -158,7 +158,7 @@ class PersonalMediaServerPlaybackSource(
         requireProviderSuccess(response.status.value, provider.displayName)
         return json.decodeFromString<ServerItemsResponse>(response.bodyAsText()).items
             .filter { it.id.matches(SAFE_SERVER_ID) }
-            .firstOrNull { it.parentIndexNumber == season && it.indexNumber == episode }
+            .firstOrNull { episodeMatches(it.parentIndexNumber, it.indexNumber, season, episode) }
     }
 
     private suspend fun playbackInfo(
@@ -223,32 +223,24 @@ class PersonalMediaServerPlaybackSource(
         return "$path?Static=true&MediaSourceId=${mediaSourceId.urlEncode()}&PlaySessionId=${session.urlEncode()}"
     }
 
-    private fun ServerItem.identityRelation(request: PlaybackRequest): IdentityRelation {
-        val tmdb = providerIds.entries.firstOrNull { it.key.equals("tmdb", true) }?.value?.toIntOrNull()
-        val kinopoisk = providerIds.entries.firstOrNull {
-            it.key.equals("kinopoisk", true) || it.key.equals("kp", true)
-        }?.value?.toIntOrNull()
-        val pairs = listOf(request.tmdbId to tmdb, request.kinopoiskId to kinopoisk)
-            .filter { (local, _) -> local != null }
-        if (pairs.any { (local, remote) -> remote != null && local != remote }) {
-            return IdentityRelation.CONFLICT
-        }
-        return if (pairs.any { (local, remote) -> remote != null && local == remote }) {
-            IdentityRelation.EXACT
-        } else {
-            IdentityRelation.MISSING
-        }
-    }
-
-    private fun String.normalizeTitle(): String = lowercase()
-        .replace(Regex("[^\\p{L}\\p{N}]+"), " ").trim()
-
     private companion object {
         const val TOKEN_HEADER = "X-Emby-Token"
     }
 }
 
-private enum class IdentityRelation { EXACT, MISSING, CONFLICT }
+/** Server-reported provider ids, translated into the shared identity vocabulary. */
+private fun ServerItem.identity(): MediaIdentity = MediaIdentity(
+    tmdbId = providerId("tmdb")?.toIntOrNull(),
+    imdbId = providerId("imdb"),
+    kinopoiskId = (providerId("kinopoisk") ?: providerId("kp"))?.toIntOrNull(),
+    title = name,
+    year = productionYear,
+)
+
+private fun ServerItem.providerId(key: String): String? =
+    providerIds.entries.firstOrNull { it.key.equals(key, ignoreCase = true) }
+        ?.value
+        ?.takeIf(String::isNotBlank)
 
 private data class PlaybackCandidate(
     val url: String,
@@ -286,6 +278,7 @@ private data class ServerItem(
     @SerialName("ParentIndexNumber") val parentIndexNumber: Int? = null,
     @SerialName("IndexNumber") val indexNumber: Int? = null,
     @SerialName("CanDownload") val canDownload: Boolean? = null,
+    @SerialName("ProductionYear") val productionYear: Int? = null,
 )
 
 /** The documented Jellyfin/Emby PlaybackInfo subset used by this adapter is wire-compatible. */
