@@ -75,20 +75,47 @@ sealed interface PlaybackResolution {
     data object Failure : PlaybackResolution
 }
 
+/**
+ * Which cascade serves one request.
+ *
+ * RU and EN are separate routes rather than one list: a provider that only carries Russian audio has
+ * no business being asked for an English stream, and each language needs its own ordering later.
+ */
 sealed interface PlaybackRoute {
     data object AnimeRu : PlaybackRoute
     data object AnimeEn : PlaybackRoute
-    data object DirectOnly : PlaybackRoute
+
+    /**
+     * Replaces the former `DirectOnly`. That name described a direct URL, but the route has covered
+     * the whole controlled-source path since personal media servers joined it.
+     */
+    data object MovieSeriesRu : PlaybackRoute
+    data object MovieSeriesEn : PlaybackRoute
     data object None : PlaybackRoute
 }
 
+/** The language a MOVIE/SERIES route resolves for; `null` for routes that are not MOVIE/SERIES. */
+val PlaybackRoute.movieSeriesLanguage: AppLanguage?
+    get() = when (this) {
+        PlaybackRoute.MovieSeriesRu -> AppLanguage.RU
+        PlaybackRoute.MovieSeriesEn -> AppLanguage.EN
+        PlaybackRoute.AnimeRu, PlaybackRoute.AnimeEn, PlaybackRoute.None -> null
+    }
+
 /** Pure capability policy; [SourceEngine] dispatches exclusively through this route. */
 object PlaybackRoutingPolicy {
-    fun route(mediaType: MediaType, language: AppLanguage): PlaybackRoute = when {
-        mediaType == MediaType.ANIME && language == AppLanguage.RU -> PlaybackRoute.AnimeRu
-        mediaType == MediaType.ANIME && language == AppLanguage.EN -> PlaybackRoute.AnimeEn
-        mediaType == MediaType.MOVIE || mediaType == MediaType.SERIES -> PlaybackRoute.DirectOnly
-        else -> PlaybackRoute.None
+    fun route(mediaType: MediaType, language: AppLanguage): PlaybackRoute = when (mediaType) {
+        MediaType.ANIME -> when (language) {
+            AppLanguage.RU -> PlaybackRoute.AnimeRu
+            AppLanguage.EN -> PlaybackRoute.AnimeEn
+        }
+
+        MediaType.MOVIE, MediaType.SERIES -> when (language) {
+            AppLanguage.RU -> PlaybackRoute.MovieSeriesRu
+            AppLanguage.EN -> PlaybackRoute.MovieSeriesEn
+        }
+
+        MediaType.MANGA -> PlaybackRoute.None
     }
 }
 

@@ -3,6 +3,8 @@ package com.example.myapplication.media.source
 import com.example.myapplication.data.models.MediaType
 import com.example.myapplication.network.AppLanguage
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 import kotlinx.coroutines.runBlocking
 
@@ -28,12 +30,34 @@ class PlaybackRoutingPolicyTest {
     fun `movies and series never route through anime providers`() {
         listOf(MediaType.MOVIE, MediaType.SERIES).forEach { mediaType ->
             AppLanguage.entries.forEach { language ->
-                assertEquals(
-                    PlaybackRoute.DirectOnly,
-                    PlaybackRoutingPolicy.route(mediaType, language),
-                )
+                val route = PlaybackRoutingPolicy.route(mediaType, language)
+                assertNotEquals(PlaybackRoute.AnimeRu, route)
+                assertNotEquals(PlaybackRoute.AnimeEn, route)
             }
         }
+    }
+
+    @Test
+    fun `movies and series get a separate cascade per language`() {
+        listOf(MediaType.MOVIE, MediaType.SERIES).forEach { mediaType ->
+            assertEquals(
+                PlaybackRoute.MovieSeriesRu,
+                PlaybackRoutingPolicy.route(mediaType, AppLanguage.RU),
+            )
+            assertEquals(
+                PlaybackRoute.MovieSeriesEn,
+                PlaybackRoutingPolicy.route(mediaType, AppLanguage.EN),
+            )
+        }
+    }
+
+    @Test
+    fun `only movie series routes report a resolution language`() {
+        assertEquals(AppLanguage.RU, PlaybackRoute.MovieSeriesRu.movieSeriesLanguage)
+        assertEquals(AppLanguage.EN, PlaybackRoute.MovieSeriesEn.movieSeriesLanguage)
+        assertNull(PlaybackRoute.AnimeRu.movieSeriesLanguage)
+        assertNull(PlaybackRoute.AnimeEn.movieSeriesLanguage)
+        assertNull(PlaybackRoute.None.movieSeriesLanguage)
     }
 
     @Test

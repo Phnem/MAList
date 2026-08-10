@@ -37,12 +37,15 @@ class SourceEngine(
         if (request.episodeNumber <= 0) return PlaybackResolution.NoMatch
         val route = PlaybackRoutingPolicy.route(request.mediaType, request.language)
         if (route == PlaybackRoute.None) return PlaybackResolution.NotConfigured(request.mediaType)
-        if (route == PlaybackRoute.DirectOnly) return resolveMovieSeries(request)
+        if (route.movieSeriesLanguage != null) return resolveMovieSeries(request)
 
         val batch = when (route) {
             PlaybackRoute.AnimeRu -> resolveRu(request.anime, request.episodeNumber, request.seasonInfo)
             PlaybackRoute.AnimeEn -> resolveEn(request.anime, request.episodeNumber, request.seasonInfo)
-            PlaybackRoute.DirectOnly, PlaybackRoute.None -> error("Route handled above")
+            PlaybackRoute.MovieSeriesRu,
+            PlaybackRoute.MovieSeriesEn,
+            PlaybackRoute.None,
+            -> error("Route handled above")
         }
         val normalized = batch.hosters.withPropagatedSkipReference().playableHosters()
         Log.i(
