@@ -31,7 +31,7 @@ management for WebDAV/Jellyfin/Emby.
 
 ## Active ticket
 
-None. All implementation tickets are complete; cumulative final review is active.
+None. All implementation tickets and the cumulative final review are complete.
 
 ## Next eligible ticket
 
@@ -50,12 +50,12 @@ None.
 
 ## Current repository state
 
-All feature code is committed. TICKET-05 is `96c6817`; the cumulative-review default-deny safety
-correction is `a5e6500`. Only this final documentation synchronization remains uncommitted.
+All feature code and closure documentation are committed. TICKET-05 is `96c6817`; the cumulative-
+review default-deny safety correction is `a5e6500`; closure artifacts were recorded in `7a968d7`.
 
 ## Relevant commits
 
-Feature base: `ab230b4`; TICKET-05: `96c6817`; latest code commit: `a5e6500`.
+Feature base: `ab230b4`; TICKET-05: `96c6817`; latest code commit: `a5e6500`; closure docs: `7a968d7`.
 
 ## Verification already performed
 
