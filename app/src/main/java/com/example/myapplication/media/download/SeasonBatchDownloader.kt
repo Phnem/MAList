@@ -4,7 +4,6 @@ import com.example.myapplication.data.models.Anime
 import com.example.myapplication.domain.seasons.SeasonInfo
 import com.example.myapplication.media.JobId
 import com.example.myapplication.media.MediaGateway
-import com.example.myapplication.ui.details.DownloadQuality
 import java.io.File
 
 /**

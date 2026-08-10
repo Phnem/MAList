@@ -6,34 +6,40 @@ import com.example.myapplication.media.source.VetroHoster
 import com.example.myapplication.media.source.VetroVideo
 import com.example.myapplication.media.source.PlaybackResolution
 import com.example.myapplication.media.source.isSafeForBackgroundPersistence
-import com.example.myapplication.ui.details.DownloadQuality
+import com.example.myapplication.media.download.DownloadQuality
 import java.io.File
 
 @JvmInline
 value class JobId(val value: String)
 
+/** Streams from a resolution, or none. Keeps the reason available to callers that want it. */
+val PlaybackResolution.hostersOrEmptyPublic: List<VetroHoster>
+    get() = (this as? PlaybackResolution.Found)?.hosters.orEmpty()
+
 /**
  * Single facade for resolve → play | download. UI depends only on this interface.
  */
 interface MediaGateway {
+    /**
+     * The primary resolution seam: it keeps *why* there is nothing to play.
+     *
+     * This used to be a default implementation built on [resolveHosters], which meant an empty list
+     * was re-labelled `NoMatch` and the difference between "no source is configured", "every source
+     * failed" and "nobody carries this title" was destroyed before any caller could see it. The
+     * source picker needs that difference to tell the user something true.
+     */
     suspend fun resolvePlayback(
         anime: Anime,
         episodeNumber: Int,
         seasonInfo: SeasonInfo? = null,
-    ): PlaybackResolution {
-        val hosters = resolveHosters(anime, episodeNumber, seasonInfo)
-        return if (hosters.isEmpty()) {
-            PlaybackResolution.NoMatch
-        } else {
-            PlaybackResolution.Found(hosters)
-        }
-    }
+    ): PlaybackResolution
 
+    /** Convenience for callers that only need the streams and have already handled the reason. */
     suspend fun resolveHosters(
         anime: Anime,
         episodeNumber: Int,
         seasonInfo: SeasonInfo? = null,
-    ): List<VetroHoster>
+    ): List<VetroHoster> = resolvePlayback(anime, episodeNumber, seasonInfo).hostersOrEmptyPublic
 
     suspend fun resolveBestVideo(hosters: List<VetroHoster>): VetroVideo?
 

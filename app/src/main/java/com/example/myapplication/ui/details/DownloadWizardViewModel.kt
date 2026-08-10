@@ -1,5 +1,6 @@
 package com.example.myapplication.ui.details
 
+import com.example.myapplication.media.download.DownloadQuality
 import android.app.Application
 import android.os.Environment
 import androidx.lifecycle.AndroidViewModel
@@ -20,11 +21,6 @@ import java.util.UUID
 
 /** Шаги мастера скачивания (4-й — экран прогресса активной загрузки). */
 enum class DownloadStep { SEASON, QUALITY, EPISODES, PROGRESS }
-
-/** Варианты качества. */
-enum class DownloadQuality(val label: String) {
-    P480("480p"), P720("720p"), P1080("1080p")
-}
 
 /**
  * Единый иммутабельный стейт мастера (MVI): что выбрано на каждом шаге + снимок прогресса

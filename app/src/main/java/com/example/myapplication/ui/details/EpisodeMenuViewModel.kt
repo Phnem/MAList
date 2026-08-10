@@ -1,5 +1,6 @@
 package com.example.myapplication.ui.details
 
+import com.example.myapplication.media.download.DownloadQuality
 import android.app.Application
 import android.os.Environment
 import android.util.Log

@@ -23,7 +23,7 @@ import com.example.myapplication.media.source.VetroHoster
 import com.example.myapplication.media.source.VetroVideo
 import com.example.myapplication.media.source.withoutPersistedSecrets
 import com.example.myapplication.network.AppLanguage
-import com.example.myapplication.ui.details.DownloadQuality
+import com.example.myapplication.media.download.DownloadQuality
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.CancellationException
@@ -41,15 +41,6 @@ class MediaGatewayImpl(
 ) : MediaGateway {
 
     private val json = Json { encodeDefaults = true }
-
-    override suspend fun resolveHosters(
-        anime: Anime,
-        episodeNumber: Int,
-        seasonInfo: SeasonInfo?,
-    ): List<VetroHoster> = when (val result = resolvePlayback(anime, episodeNumber, seasonInfo)) {
-        is PlaybackResolution.Found -> result.hosters
-        else -> emptyList()
-    }
 
     override suspend fun resolvePlayback(
         anime: Anime,
