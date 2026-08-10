@@ -56,6 +56,7 @@ import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Share
@@ -164,6 +165,16 @@ private val IconUpdateReady = IosDesign.Category.Network
 private val IconDonate = IosDesign.Category.Donate
 private val IconDeveloper = IosDesign.Category.Storage
 
+private sealed interface SettingsOverlaySheet {
+    data object Cloud : SettingsOverlaySheet
+    data object AiConnect : SettingsOverlaySheet
+    data object Enrichment : SettingsOverlaySheet
+    data object PlaybackSources : SettingsOverlaySheet
+    data object Contact : SettingsOverlaySheet
+    data object UpdateChangelog : SettingsOverlaySheet
+    data class Picker(val key: String) : SettingsOverlaySheet
+}
+
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun SettingsScreen(
@@ -210,16 +221,11 @@ fun SettingsScreen(
     val enrichmentStrings = getCollectionEnrichmentStrings(uiState.language)
     val playerSettingsStrings = getPlayerSettingsStrings(uiState.language)
 
-    var showCloudSheet by remember { mutableStateOf(false) }
-    var showAiConnectSheet by remember { mutableStateOf(false) }
-    var showEnrichmentSheet by remember { mutableStateOf(false) }
-    var showContactSheet by remember { mutableStateOf(false) }
-    var showUpdateChangelogSheet by remember { mutableStateOf(false) }
+    var activeSheet by remember { mutableStateOf<SettingsOverlaySheet?>(null) }
     var showFdroidUpdateDialog by remember { mutableStateOf(false) }
     var showGithubUpdatesEnableDialog by remember { mutableStateOf(false) }
     var showDeveloperSection by rememberSaveable { mutableStateOf(false) }
     // Активный picker-лист: "lang" | "theme" | "content" | null.
-    var activePicker by remember { mutableStateOf<String?>(null) }
 
     val importDbPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -229,8 +235,7 @@ fun SettingsScreen(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { viewModel.onReturnedFromInstallSettings(context) }
 
-    val anyOverlayVisible = showCloudSheet || showAiConnectSheet || showEnrichmentSheet ||
-        showContactSheet || showUpdateChangelogSheet || activePicker != null ||
+    val anyOverlayVisible = activeSheet != null ||
         uiState.showRepairDbLogDialog || uiState.showTitleDubbingNoAiDialog ||
         showFdroidUpdateDialog || showGithubUpdatesEnableDialog
     LaunchedEffect(anyOverlayVisible) { onOverlayVisibleChange(anyOverlayVisible) }
@@ -253,20 +258,13 @@ fun SettingsScreen(
             showFdroidUpdateDialog -> showFdroidUpdateDialog = false
             uiState.showTitleDubbingNoAiDialog -> viewModel.dismissTitleDubbingNoAiDialog()
             uiState.showRepairDbLogDialog -> viewModel.discardRepairDbLog()
-            activePicker != null -> activePicker = null
-            else -> {
-                showCloudSheet = false
-                showAiConnectSheet = false
-                showEnrichmentSheet = false
-                showContactSheet = false
-                showUpdateChangelogSheet = false
-            }
+            else -> activeSheet = null
         }
     }
 
     // Мягкий блюр фона под модальными листами (§10, но без ударной физики — тут sheet).
     val blurRadius by animateDpAsState(
-        targetValue = if (showCloudSheet || showAiConnectSheet || showEnrichmentSheet || showContactSheet || showUpdateChangelogSheet) 16.dp else 0.dp,
+        targetValue = if (activeSheet != null) 16.dp else 0.dp,
         animationSpec = tween(300),
         label = "backgroundBlur"
     )
@@ -300,7 +298,7 @@ fun SettingsScreen(
             onConnect = {
                 performHaptic(view, "light")
                 viewModel.dismissTitleDubbingNoAiDialog()
-                showAiConnectSheet = true
+                activeSheet = SettingsOverlaySheet.AiConnect
             },
             onDismiss = { performHaptic(view, "light"); viewModel.dismissTitleDubbingNoAiDialog() },
         )
@@ -333,15 +331,8 @@ fun SettingsScreen(
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
     IosSheetScaffold(
-        sheetVisible = showCloudSheet || showAiConnectSheet || showEnrichmentSheet || showContactSheet || showUpdateChangelogSheet || activePicker != null,
-        onDismiss = {
-            showCloudSheet = false
-            showAiConnectSheet = false
-            showEnrichmentSheet = false
-            showContactSheet = false
-            showUpdateChangelogSheet = false
-            activePicker = null
-        },
+        sheetVisible = activeSheet != null,
+        onDismiss = { activeSheet = null },
         sheetHeightFraction = null,
         // Все шторки настроек — та же панель, что и в остальном приложении (iosSheetContainer).
         // Раньше здесь стоял Transparent, и каждая шторка рисовала свою плавающую карточку.
@@ -403,13 +394,28 @@ fun SettingsScreen(
                             rows = listOf(
                                 {
                                     IosRow(
+                                        title = if (uiState.language == AppLanguage.RU) "Источники видео" else "Video sources",
+                                        subtitle = if (uiState.language == AppLanguage.RU) {
+                                            "WebDAV, Jellyfin и Emby"
+                                        } else {
+                                            "WebDAV, Jellyfin and Emby"
+                                        },
+                                        isDark = isDark,
+                                        icon = Icons.Filled.PlayCircle,
+                                        iconWell = false,
+                                        showChevron = true,
+                                        onClick = { performHaptic(view, "light"); activeSheet = SettingsOverlaySheet.PlaybackSources },
+                                    )
+                                },
+                                {
+                                    IosRow(
                                         title = strings.languageCardTitle,
                                         isDark = isDark,
                                         iconRes = R.drawable.hugeicon_language,
                                         iconWell = false,
                                         value = if (uiState.language == AppLanguage.RU) "Русский" else "English",
                                         showChevron = true,
-                                        onClick = { performHaptic(view, "light"); activePicker = "lang" },
+                                        onClick = { performHaptic(view, "light"); activeSheet = SettingsOverlaySheet.Picker("lang") },
                                     )
                                 },
                                 {
@@ -424,7 +430,7 @@ fun SettingsScreen(
                                             AppTheme.SYSTEM -> strings.themeSystem
                                         },
                                         showChevron = true,
-                                        onClick = { performHaptic(view, "light"); activePicker = "theme" },
+                                        onClick = { performHaptic(view, "light"); activeSheet = SettingsOverlaySheet.Picker("theme") },
                                     )
                                 },
                                 {
@@ -435,7 +441,7 @@ fun SettingsScreen(
                                         iconWell = false,
                                         value = if (uiState.contentType == AppContentType.MOVIE) strings.typeMovies else strings.typeAnime,
                                         showChevron = true,
-                                        onClick = { performHaptic(view, "light"); activePicker = "content" },
+                                        onClick = { performHaptic(view, "light"); activeSheet = SettingsOverlaySheet.Picker("content") },
                                     )
                                 },
                             ),
@@ -455,7 +461,7 @@ fun SettingsScreen(
                                         iconRes = R.drawable.hugeicon_account,
                                         iconWell = false,
                                         showChevron = true,
-                                        onClick = { performHaptic(view, "light"); showCloudSheet = true },
+                                        onClick = { performHaptic(view, "light"); activeSheet = SettingsOverlaySheet.Cloud },
                                     )
                                 },
                                 *(if (onOpenSyncPanel != null) {
@@ -487,7 +493,7 @@ fun SettingsScreen(
                                         icon = Icons.Filled.AutoFixHigh,
                                         iconWell = false,
                                         showChevron = true,
-                                        onClick = { performHaptic(view, "light"); showEnrichmentSheet = true },
+                                        onClick = { performHaptic(view, "light"); activeSheet = SettingsOverlaySheet.Enrichment },
                                     )
                                 },
                                 {
@@ -498,7 +504,7 @@ fun SettingsScreen(
                                         iconRes = R.drawable.ic_ai_sparkle,
                                         iconWell = false,
                                         showChevron = true,
-                                        onClick = { performHaptic(view, "light"); showAiConnectSheet = true },
+                                        onClick = { performHaptic(view, "light"); activeSheet = SettingsOverlaySheet.AiConnect },
                                     )
                                 },
                                 {
@@ -545,7 +551,7 @@ fun SettingsScreen(
                                         iconRes = R.drawable.hugeicon_contact,
                                         iconWell = false,
                                         showChevron = true,
-                                        onClick = { performHaptic(view, "light"); showContactSheet = true },
+                                        onClick = { performHaptic(view, "light"); activeSheet = SettingsOverlaySheet.Contact },
                                     )
                                 },
                             ),
@@ -583,7 +589,7 @@ fun SettingsScreen(
                                         onClick = {
                                             performHaptic(view, "light")
                                             if (uiState.devGithubUpdatesEnabled) {
-                                                showUpdateChangelogSheet = true
+                                                activeSheet = SettingsOverlaySheet.UpdateChangelog
                                                 viewModel.notifyUpdateChangelogSheetPresentedFromSettings()
                                                 viewModel.loadUpdateChangelog(context)
                                             } else {
@@ -744,7 +750,7 @@ fun SettingsScreen(
                     .padding(top = GrabberReservedTop, bottom = 8.dp),
             ) {
                 when {
-                    activePicker == "lang" -> IosSelectionSheet(
+                    activeSheet == SettingsOverlaySheet.Picker("lang") -> IosSelectionSheet(
                         title = strings.languageCardTitle,
                         options = listOf(
                             IosSelectionOption("English", Icons.Outlined.Language, IconLanguage),
@@ -756,10 +762,10 @@ fun SettingsScreen(
                         onSelect = { i ->
                             performHaptic(view, "light")
                             viewModel.setLanguage(if (i == 1) AppLanguage.RU else AppLanguage.EN)
-                            activePicker = null
+                            activeSheet = null
                         },
                     )
-                    activePicker == "theme" -> IosSelectionSheet(
+                    activeSheet == SettingsOverlaySheet.Picker("theme") -> IosSelectionSheet(
                         title = strings.themeTitle,
                         options = listOf(
                             IosSelectionOption(strings.themeLight, Icons.Outlined.LightMode, IconAppearance),
@@ -782,10 +788,10 @@ fun SettingsScreen(
                                     else -> AppTheme.SYSTEM
                                 }
                             )
-                            activePicker = null
+                            activeSheet = null
                         },
                     )
-                    activePicker == "content" -> IosSelectionSheet(
+                    activeSheet == SettingsOverlaySheet.Picker("content") -> IosSelectionSheet(
                         title = strings.contentTypeTitle,
                         options = listOf(
                             IosSelectionOption(strings.typeAnime, Icons.Outlined.Category, IconContent),
@@ -797,26 +803,30 @@ fun SettingsScreen(
                         onSelect = { i ->
                             performHaptic(view, "light")
                             viewModel.setContentType(if (i == 1) AppContentType.MOVIE else AppContentType.ANIME)
-                            activePicker = null
+                            activeSheet = null
                         },
                     )
-                    showCloudSheet -> CloudSettingsSheet(
-                        onDismiss = { showCloudSheet = false },
-                        onLogout = { showCloudSheet = false; navController.navigateToWelcome() },
+                    activeSheet == SettingsOverlaySheet.Cloud -> CloudSettingsSheet(
+                        onDismiss = { activeSheet = null },
+                        onLogout = { activeSheet = null; navController.navigateToWelcome() },
                     )
-                    showAiConnectSheet -> AiConnectSheet(
-                        onDismiss = { showAiConnectSheet = false },
+                    activeSheet == SettingsOverlaySheet.AiConnect -> AiConnectSheet(
+                        onDismiss = { activeSheet = null },
                     )
-                    showEnrichmentSheet -> CollectionEnrichmentSheet(
+                    activeSheet == SettingsOverlaySheet.Enrichment -> CollectionEnrichmentSheet(
                         viewModel = viewModel,
-                        onDismiss = { showEnrichmentSheet = false },
+                        onDismiss = { activeSheet = null },
                     )
-                    showContactSheet -> ContactSheet(
-                        onDismiss = { showContactSheet = false },
+                    activeSheet == SettingsOverlaySheet.PlaybackSources -> PlaybackSourcesSettingsSheet(
+                        language = uiState.language,
+                        onDismiss = { activeSheet = null },
                     )
-                    showUpdateChangelogSheet -> UpdateChangelogSheet(
+                    activeSheet == SettingsOverlaySheet.Contact -> ContactSheet(
+                        onDismiss = { activeSheet = null },
+                    )
+                    activeSheet == SettingsOverlaySheet.UpdateChangelog -> UpdateChangelogSheet(
                         viewModel = viewModel,
-                        onDismiss = { showUpdateChangelogSheet = false },
+                        onDismiss = { activeSheet = null },
                         installPermissionLauncher = installPermissionLauncher,
                     )
                 }

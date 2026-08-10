@@ -2,10 +2,10 @@
 
 ## Workflow
 
-Current workflow state: BETWEEN_TICKETS
+Current workflow state: FINAL_REVIEW
 Current ticket: None
-Last completed ticket: TICKET-04
-Next eligible ticket: TICKET-05
+Last completed ticket: TICKET-05
+Next eligible ticket: None
 Last updated: 2026-08-10
 
 ## Goal
@@ -56,8 +56,8 @@ See specification Out of scope.
 | TICKET-01 | Switch Kinopoisk catalog adapter | DONE | — | 94c2505 | accepted |
 | TICKET-02 | Capability-aware playback routing | DONE | 01 | a78499d | accepted |
 | TICKET-03 | Direct HTTP and WebDAV adapters | DONE | 02, research | 20c328c | accepted |
-| TICKET-04 | Jellyfin and Emby adapters | DONE | 03 | pending | accepted |
-| TICKET-05 | Playback source settings UI | READY | 03, 04 | — | — |
+| TICKET-04 | Jellyfin and Emby adapters | DONE | 03 | 3e64adb | accepted |
+| TICKET-05 | Playback source settings UI | DONE | 03, 04 | pending | accepted |
 
 ## Ticket details
 
@@ -87,7 +87,7 @@ Dependencies: 03
 
 ### TICKET-05 — Playback source settings UI
 
-Status: READY
+Status: DONE
 Tracker reference: [`issues/05-playback-source-settings.md`](./issues/05-playback-source-settings.md)
 Dependencies: 03, 04
 
@@ -100,7 +100,10 @@ Dependencies: 03, 04
 
 ## Global deviations
 
-None yet.
+- Unlicensed public embed/CDN resolvers from the initial discussion were not implemented. The
+  delivered cascade is limited to sources the user controls or is explicitly authorized to use.
+- Real-device connection smokes require user-owned WebDAV/Jellyfin/Emby endpoints and remain a
+  manual verification item; adapter contracts, routing and security boundaries are automated.
 
 ## Known risks
 
@@ -111,14 +114,15 @@ None yet.
 ## Deferred work
 
 - Provider health persistence and long-term ranking.
-- Additional personal media servers after the first adapter proves the seam.
+- Plex and additional personal media servers.
+- Curated public-domain Internet Archive/Wikimedia Commons adapters.
 
 ## Final acceptance checklist
 
-- [ ] Every required ticket completed
-- [ ] Full test suite or agreed equivalent run
+- [x] Every required ticket completed
+- [x] Full test suite or agreed equivalent run
 - [ ] Specification reviewed requirement by requirement
-- [ ] No unresolved blocking review findings
-- [ ] User-visible behavior verified
-- [ ] Deferred work explicitly recorded
+- [x] No unresolved blocking review findings
+- [x] User-visible behavior verified by ViewModel/UI-state tests and debug assembly
+- [x] Deferred work explicitly recorded
 - [ ] Final architecture checkpoint completed

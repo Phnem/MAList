@@ -7,6 +7,7 @@ import com.example.myapplication.ui.home.recommendations.RecommendationsViewMode
 import com.example.myapplication.ui.inspect.InspectViewModel
 import com.example.myapplication.ui.settings.AiConnectViewModel
 import com.example.myapplication.ui.settings.SettingsViewModel
+import com.example.myapplication.ui.settings.PlaybackSourcesSettingsViewModel
 import com.example.myapplication.ui.splash.SplashViewModel
 import org.koin.android.ext.koin.androidApplication
 import org.koin.core.module.dsl.viewModel
@@ -72,6 +73,11 @@ val viewModelModule = module {
             enrichmentCoordinator = get(),
             aiCredentialsStore = get(),
             app = androidApplication()
+        )
+    }
+    viewModel {
+        PlaybackSourcesSettingsViewModel(
+            service = get(),
         )
     }
     viewModel {

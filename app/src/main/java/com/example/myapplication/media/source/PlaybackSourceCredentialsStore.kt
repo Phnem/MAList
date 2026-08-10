@@ -5,7 +5,17 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 
 /** Encrypted local credentials for user-owned playback sources. */
-class PlaybackSourceCredentialsStore(context: Context) {
+interface PlaybackSourceConfigStore {
+    fun webDav(): WebDavConfig?
+    fun saveWebDav(config: WebDavConfig)
+    fun clearWebDav()
+    fun personalServer(provider: PersonalMediaServerProvider): PersonalMediaServerConfig?
+    fun savePersonalServer(provider: PersonalMediaServerProvider, config: PersonalMediaServerConfig)
+    fun clearPersonalServer(provider: PersonalMediaServerProvider)
+}
+
+/** Encrypted local implementation; UI depends only on [PlaybackSourceConfigStore]. */
+class PlaybackSourceCredentialsStore(context: Context) : PlaybackSourceConfigStore {
     private val prefs = EncryptedSharedPreferences.create(
         context,
         PREF_FILE,
@@ -14,7 +24,7 @@ class PlaybackSourceCredentialsStore(context: Context) {
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
     )
 
-    fun webDav(): WebDavConfig? {
+    override fun webDav(): WebDavConfig? {
         val baseUrl = prefs.getString(WEB_DAV_BASE_URL, null) ?: return null
         return WebDavConfig(
             baseUrl = baseUrl,
@@ -26,7 +36,7 @@ class PlaybackSourceCredentialsStore(context: Context) {
         ).takeIf(WebDavConfig::isValid)
     }
 
-    fun saveWebDav(config: WebDavConfig) {
+    override fun saveWebDav(config: WebDavConfig) {
         require(config.isValid()) { "Invalid WebDAV configuration" }
         prefs.edit()
             .putString(WEB_DAV_BASE_URL, config.baseUrl.trim())
@@ -38,7 +48,7 @@ class PlaybackSourceCredentialsStore(context: Context) {
             .apply()
     }
 
-    fun clearWebDav() {
+    override fun clearWebDav() {
         prefs.edit().apply {
             listOf(
                 WEB_DAV_BASE_URL,
@@ -51,7 +61,7 @@ class PlaybackSourceCredentialsStore(context: Context) {
         }.apply()
     }
 
-    fun personalServer(provider: PersonalMediaServerProvider): PersonalMediaServerConfig? {
+    override fun personalServer(provider: PersonalMediaServerProvider): PersonalMediaServerConfig? {
         val prefix = provider.credentialPrefix
         val baseUrl = prefs.getString("${prefix}_base_url", null) ?: return null
         return PersonalMediaServerConfig(
@@ -63,7 +73,7 @@ class PlaybackSourceCredentialsStore(context: Context) {
         ).takeIf(PersonalMediaServerConfig::isValid)
     }
 
-    fun savePersonalServer(
+    override fun savePersonalServer(
         provider: PersonalMediaServerProvider,
         config: PersonalMediaServerConfig,
     ) {
@@ -78,7 +88,7 @@ class PlaybackSourceCredentialsStore(context: Context) {
             .apply()
     }
 
-    fun clearPersonalServer(provider: PersonalMediaServerProvider) {
+    override fun clearPersonalServer(provider: PersonalMediaServerProvider) {
         val prefix = provider.credentialPrefix
         prefs.edit().apply {
             listOf(

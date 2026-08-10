@@ -219,6 +219,9 @@ val appModule = module {
         )
     }
     single { com.example.myapplication.media.source.PlaybackSourceCredentialsStore(androidContext()) }
+    single<com.example.myapplication.media.source.PlaybackSourceConfigStore> {
+        get<com.example.myapplication.media.source.PlaybackSourceCredentialsStore>()
+    }
     single(named("webdav")) {
         io.ktor.client.HttpClient(io.ktor.client.engine.okhttp.OkHttp) {
             followRedirects = false
@@ -228,6 +231,18 @@ val appModule = module {
         io.ktor.client.HttpClient(io.ktor.client.engine.okhttp.OkHttp) {
             followRedirects = false
         }
+    }
+    single<com.example.myapplication.media.source.PlaybackSourceConnectionTester> {
+        com.example.myapplication.media.source.KtorPlaybackSourceConnectionTester(
+            webDavClient = get(named("webdav")),
+            personalServerClient = get(named("personal-media")),
+        )
+    }
+    single<com.example.myapplication.media.source.PlaybackSourceSettingsService> {
+        com.example.myapplication.media.source.DefaultPlaybackSourceSettingsService(
+            store = get(),
+            connectionTester = get(),
+        )
     }
     single {
         val credentials = get<com.example.myapplication.media.source.PlaybackSourceCredentialsStore>()

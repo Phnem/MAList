@@ -74,3 +74,17 @@ can still be added disabled by default with mocked contract tests.
 - Covered encoded path/query/token bypasses and disabled credentialed redirects.
 - Focused source/security tests and app compilation pass; final Spec and Standards reviews have no
   remaining BLOCKING/IMPORTANT findings.
+
+## 2026-08-10 — TICKET-05 implemented and accepted
+
+- Added runtime Settings configuration for WebDAV/Nextcloud, Jellyfin and Emby.
+- Added masked replacement-secret input, configured status, connection tests and encrypted
+  save/remove actions.
+- Moved credential merging and normalized scope checks behind the media-source settings service;
+  stored secrets never enter UI state.
+- Added tracked/generation-guarded probe cancellation so stale results cannot overwrite the active
+  editor.
+- Added an explicit non-secret `SECRET_REQUIRED` state after server/root/user changes.
+- Focused tests, full core/app unit suites and debug assembly pass. Spec and Standards reviews have
+  no remaining BLOCKING/IMPORTANT findings.
+- Next: cumulative specification and architecture review from `ab230b4`.
