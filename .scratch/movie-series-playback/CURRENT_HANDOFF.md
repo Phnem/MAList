@@ -13,7 +13,7 @@ source practical for the existing player and downloader.
 
 ## Current workflow state
 
-FINAL_REVIEW
+COMPLETED
 
 ## Completed tickets
 
@@ -50,12 +50,12 @@ None.
 
 ## Current repository state
 
-TICKET-04 is committed as `3e64adb`; TICKET-05 implementation and ticket-close documentation are
-ready for their focused commit.
+All feature code is committed. TICKET-05 is `96c6817`; the cumulative-review default-deny safety
+correction is `a5e6500`. Only this final documentation synchronization remains uncommitted.
 
 ## Relevant commits
 
-Feature base: `ab230b4`; latest completed commit: `3e64adb`.
+Feature base: `ab230b4`; TICKET-05: `96c6817`; latest code commit: `a5e6500`.
 
 ## Verification already performed
 
@@ -74,5 +74,5 @@ architecture-checkpoint artifacts.
 
 ## Exact recommended next action
 
-Commit TICKET-05, run cumulative Spec and Standards/architecture review from `ab230b4`, record the
-result, and mark the workflow COMPLETED if no mandatory findings remain.
+No implementation action remains. Optionally perform real-device smokes against user-owned
+WebDAV/Jellyfin/Emby endpoints when those endpoints are available.

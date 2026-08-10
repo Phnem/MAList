@@ -2,7 +2,7 @@
 
 ## Workflow
 
-Current workflow state: FINAL_REVIEW
+Current workflow state: COMPLETED
 Current ticket: None
 Last completed ticket: TICKET-05
 Next eligible ticket: None
@@ -57,7 +57,7 @@ See specification Out of scope.
 | TICKET-02 | Capability-aware playback routing | DONE | 01 | a78499d | accepted |
 | TICKET-03 | Direct HTTP and WebDAV adapters | DONE | 02, research | 20c328c | accepted |
 | TICKET-04 | Jellyfin and Emby adapters | DONE | 03 | 3e64adb | accepted |
-| TICKET-05 | Playback source settings UI | DONE | 03, 04 | pending | accepted |
+| TICKET-05 | Playback source settings UI | DONE | 03, 04 | 96c6817 | accepted |
 
 ## Ticket details
 
@@ -90,6 +90,8 @@ Dependencies: 03
 Status: DONE
 Tracker reference: [`issues/05-playback-source-settings.md`](./issues/05-playback-source-settings.md)
 Dependencies: 03, 04
+Commit: `96c6817`
+Follow-up safety correction: `a5e6500` restores default-deny downloads for legacy ANIME sources.
 
 ## Decisions
 
@@ -121,8 +123,8 @@ Dependencies: 03, 04
 
 - [x] Every required ticket completed
 - [x] Full test suite or agreed equivalent run
-- [ ] Specification reviewed requirement by requirement
+- [x] Specification reviewed requirement by requirement
 - [x] No unresolved blocking review findings
 - [x] User-visible behavior verified by ViewModel/UI-state tests and debug assembly
 - [x] Deferred work explicitly recorded
-- [ ] Final architecture checkpoint completed
+- [x] Final architecture checkpoint completed
