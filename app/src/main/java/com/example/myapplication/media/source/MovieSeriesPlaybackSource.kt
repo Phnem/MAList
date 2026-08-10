@@ -4,6 +4,9 @@ import com.example.myapplication.data.models.MediaType
 import com.example.myapplication.media.source.movieseries.MovieSeriesCandidate
 import com.example.myapplication.media.source.movieseries.MovieSeriesRanking
 import com.example.myapplication.media.source.movieseries.MovieSeriesStreamingProvider
+import com.example.myapplication.media.source.movieseries.NoProviderHealth
+import com.example.myapplication.media.source.movieseries.ProviderHealthPolicy
+import com.example.myapplication.media.source.movieseries.ProviderHealthRegistry
 import com.example.myapplication.media.source.movieseries.ProviderApplicability
 import com.example.myapplication.media.source.movieseries.ProviderResolution
 import com.example.myapplication.media.source.movieseries.buildCandidates
@@ -41,17 +44,39 @@ internal suspend fun resolveMovieSeriesSources(
     sources: List<MovieSeriesStreamingProvider>,
     timeoutMs: Long = 20_000L,
     preferredResolution: Int = DEFAULT_PREFERRED_RESOLUTION,
-    healthPenalty: (MovieSeriesStreamingProvider) -> Int = { 0 },
+    health: ProviderHealthRegistry = NoProviderHealth,
+    now: () -> Long = System::currentTimeMillis,
 ): PlaybackResolution {
     val applicable = selectMovieSeriesProviders(sources, request.mediaType, request.language)
     if (applicable.isEmpty()) return PlaybackResolution.NotConfigured(request.mediaType)
 
+    // A provider that failed its last several attempts is skipped outright. Waiting out its full
+    // timeout again on every episode is exactly the cost section 19 of the brief is about.
+    val instant = now()
+    val reachable = applicable.filterNot { health.healthOf(it.id).isDisabledAt(instant) }
+    if (reachable.isEmpty()) return PlaybackResolution.Failure
+
     val attempts = runPlaybackProviderCascade(
-        applicable.map { source ->
+        reachable.map { source ->
             PlaybackProviderCall(source.displayName, timeoutMs) { source.resolve(request) }
         }
     )
-    val byLabel = applicable.associateBy { it.displayName }
+    val byLabel = reachable.associateBy { it.displayName }
+
+    // Snapshot the penalties before recording this round. Recording first would reset the counter of
+    // any provider that just answered, leaving every candidate on a penalty of zero and turning the
+    // health dimension of the ranking into dead weight.
+    val penalties = reachable.associate { provider ->
+        provider.id to ProviderHealthPolicy.penalty(health.healthOf(provider.id))
+    }
+
+    attempts.forEach { attempt ->
+        val provider = byLabel[attempt.label] ?: return@forEach
+        // A crash or a timeout has no outcome object, but it is still a failure worth remembering.
+        val outcome = attempt.value
+            ?: ProviderResolution.TemporaryError(if (attempt.timedOut) "timeout" else "error")
+        health.record(provider.id, outcome, attempt.elapsedMs)
+    }
     val candidates = attempts.flatMap { attempt ->
         val found = attempt.value as? ProviderResolution.Found ?: return@flatMap emptyList()
         val provider = byLabel[attempt.label] ?: return@flatMap emptyList()
@@ -62,7 +87,7 @@ internal suspend fun resolveMovieSeriesSources(
             accuracy = found.accuracy,
             language = found.language,
             elapsedMs = attempt.elapsedMs,
-            healthPenalty = healthPenalty(provider),
+            healthPenalty = penalties[provider.id] ?: 0,
         )
     }
 

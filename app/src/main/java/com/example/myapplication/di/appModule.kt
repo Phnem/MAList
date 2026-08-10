@@ -268,6 +268,7 @@ val appModule = module {
             configProvider = { credentials.personalServer(provider) },
         )
     }
+    single { com.example.myapplication.media.source.movieseries.ProviderHealthStore(androidContext()) }
     single {
         com.example.myapplication.media.source.SourceEngine(
             aniLibriaSource = get(),
@@ -287,6 +288,7 @@ val appModule = module {
                     named("emby-source")
                 ),
             ),
+            providerHealth = get<com.example.myapplication.media.source.movieseries.ProviderHealthStore>(),
         )
     }
     single { com.example.myapplication.media.cookies.MediaCookieStore(androidContext()) }

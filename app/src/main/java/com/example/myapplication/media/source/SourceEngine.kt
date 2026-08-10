@@ -5,6 +5,9 @@ import com.example.myapplication.data.local.WebLinksStore
 import com.example.myapplication.data.models.Anime
 import com.example.myapplication.domain.seasons.SeasonInfo
 import com.example.myapplication.media.source.movieseries.MovieSeriesStreamingProvider
+import com.example.myapplication.media.source.movieseries.NoProviderHealth
+import com.example.myapplication.media.source.movieseries.ProviderHealthRegistry
+import com.example.myapplication.media.source.movieseries.ProviderHealthStore
 import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.network.WebLinkSites
 
@@ -23,6 +26,7 @@ class SourceEngine(
     private val urlSource: UrlSource,
     private val webLinksStore: WebLinksStore,
     private val movieSeriesSources: List<MovieSeriesStreamingProvider> = emptyList(),
+    private val providerHealth: ProviderHealthRegistry = NoProviderHealth,
 ) {
     suspend fun resolveHosters(
         anime: Anime,
@@ -59,10 +63,12 @@ class SourceEngine(
     }
 
     private suspend fun resolveMovieSeries(request: PlaybackRequest): PlaybackResolution {
+        (providerHealth as? ProviderHealthStore)?.ensureLoaded()
         return resolveMovieSeriesSources(
             request = request,
             sources = movieSeriesSources,
             timeoutMs = PERSONAL_SOURCE_TIMEOUT_MS,
+            health = providerHealth,
         )
     }
 
