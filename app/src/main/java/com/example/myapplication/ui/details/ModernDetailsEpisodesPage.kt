@@ -292,16 +292,26 @@ fun ModernDetailsEpisodesPage(
         }
 
         state.qualityPicker?.let { picker ->
-            qualityAnchor?.let { anchor ->
-                EpisodeQualityPopover(
-                    state = picker,
-                    selectedQuality = state.selectedQuality,
-                    anchor = anchor,
+            if (picker.sources.isNotEmpty()) {
+                // Movies and series pick a source first; anime keeps the anchored quality menu.
+                MovieSeriesSourceSheet(
+                    sources = picker.sources,
                     ru = ru,
-                    isDark = isDark,
-                    onSelect = viewModel::selectQuality,
+                    onSelect = viewModel::selectSourceStream,
                     onDismiss = viewModel::dismissQualityPicker,
                 )
+            } else {
+                qualityAnchor?.let { anchor ->
+                    EpisodeQualityPopover(
+                        state = picker,
+                        selectedQuality = state.selectedQuality,
+                        anchor = anchor,
+                        ru = ru,
+                        isDark = isDark,
+                        onSelect = viewModel::selectQuality,
+                        onDismiss = viewModel::dismissQualityPicker,
+                    )
+                }
             }
         }
     }

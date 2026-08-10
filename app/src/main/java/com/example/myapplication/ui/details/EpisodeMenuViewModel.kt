@@ -18,7 +18,10 @@ import com.example.myapplication.media.progress.EpisodePlaybackProgress
 import com.example.myapplication.media.progress.EpisodePlaybackStore
 import com.example.myapplication.media.source.flattenVideosWithSource
 import com.example.myapplication.media.source.VetroVideo
+import com.example.myapplication.data.models.MediaType
 import com.example.myapplication.media.source.PlaybackResolution
+import com.example.myapplication.media.source.movieseries.MovieSeriesSourceOptions
+import com.example.myapplication.media.source.movieseries.SourceOption
 import com.example.myapplication.media.source.PlaybackIdentity
 import com.example.myapplication.media.source.rankVideosForResolution
 import kotlinx.coroutines.Job
@@ -90,6 +93,12 @@ data class EpisodeQualityPickerState(
     val intent: EpisodeQualityIntent,
     val options: List<EpisodeQualityOption>,
     val resolvedVideos: List<VetroVideo>,
+    /**
+     * Sources behind this episode, best first. Only populated for MOVIE/SERIES, where several
+     * providers and translations routinely carry the same episode and the choice belongs to the
+     * user. Anime keeps the plain quality list it has always had.
+     */
+    val sources: List<SourceOption> = emptyList(),
 )
 
 data class EpisodeMenuUiState(
@@ -293,6 +302,22 @@ class EpisodeMenuViewModel(
         }
     }
 
+    /**
+     * Plays one specific stream the user picked from the movie/series source list.
+     *
+     * Bypasses the resolution preference deliberately: the user chose this exact source and quality,
+     * so re-ranking here would quietly hand them a different stream than the one they tapped.
+     */
+    fun selectSourceStream(video: VetroVideo) {
+        val picker = _state.value.qualityPicker ?: return
+        _state.update {
+            it.copy(qualityPicker = null, streaming = null, resolvingQuality = false)
+        }
+        viewModelScope.launch {
+            executeResolvedIntent(picker.intent, listOf(video), video.resolutionValue() ?: 0)
+        }
+    }
+
     fun dismissQualityPicker() {
         val picker = _state.value.qualityPicker
         picker?.intent?.targetKey()?.let { key ->
@@ -384,6 +409,13 @@ class EpisodeMenuViewModel(
                     .distinctBy { it.url }
                     .ifEmpty { error("Поток не найден / No matching playable stream found") }
                 val options = availableQualityOptions(videos)
+                val sources = if (seasonAnime.mediaType == MediaType.MOVIE ||
+                    seasonAnime.mediaType == MediaType.SERIES
+                ) {
+                    MovieSeriesSourceOptions.from(hosters)
+                } else {
+                    emptyList()
+                }
                 val selected = _state.value.selectedQuality
                 when {
                     options.isEmpty() && intent is EpisodeQualityIntent.ChangeOnly -> {
@@ -405,7 +437,7 @@ class EpisodeMenuViewModel(
                         }
                         _state.update {
                             it.copy(
-                                qualityPicker = EpisodeQualityPickerState(intent, options, videos),
+                                qualityPicker = EpisodeQualityPickerState(intent, options, videos, sources),
                                 streaming = null,
                                 resolvingQuality = false,
                             )
