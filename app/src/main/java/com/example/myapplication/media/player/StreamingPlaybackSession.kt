@@ -17,6 +17,7 @@ import androidx.media3.exoplayer.upstream.DefaultAllocator
 import com.example.myapplication.media.source.SanitizeHeaders
 import com.example.myapplication.media.source.VetroSubtitleTrack
 import com.example.myapplication.media.source.VetroVideo
+import com.example.myapplication.media.source.forPlaybackCandidate
 import okhttp3.OkHttpClient
 
 /**
@@ -103,7 +104,7 @@ object StreamingPlaybackSessionFactory {
         transferMonitor: StreamingTransferMonitor,
     ): DefaultMediaSourceFactory {
         val headers = SanitizeHeaders.sanitize(video.headers)
-        val okHttpFactory = OkHttpDataSource.Factory(client)
+        val okHttpFactory = OkHttpDataSource.Factory(client.forPlaybackCandidate(video))
             .setDefaultRequestProperties(headers)
             .setTransferListener(transferMonitor)
         return DefaultMediaSourceFactory(okHttpFactory)

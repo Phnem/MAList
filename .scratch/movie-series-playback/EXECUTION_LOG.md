@@ -64,3 +64,13 @@ can still be added disabled by default with mocked contract tests.
 - Made download permission default-deny and blocked sensitive URLs/headers from WorkManager data.
 - Restricted authenticated WebDAV to strict progressive filename suffixes.
 - Full app unit tests pass; Spec and Standards reviews have no mandatory findings.
+
+## 2026-08-10 — TICKET-04 implemented and accepted
+
+- Added Jellyfin and Emby library/episode lookup with exact provider-id conflict protection.
+- Added typed PlaybackInfo direct/HLS selection and enforced server capability flags.
+- Added encrypted provider configs and permission-aware progressive downloads.
+- Bound credentials to canonical provider/root scopes for player, adaptive children and worker.
+- Covered encoded path/query/token bypasses and disabled credentialed redirects.
+- Focused source/security tests and app compilation pass; final Spec and Standards reviews have no
+  remaining BLOCKING/IMPORTANT findings.

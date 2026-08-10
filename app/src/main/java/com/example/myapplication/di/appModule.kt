@@ -224,11 +224,34 @@ val appModule = module {
             followRedirects = false
         }
     }
+    single(named("personal-media")) {
+        io.ktor.client.HttpClient(io.ktor.client.engine.okhttp.OkHttp) {
+            followRedirects = false
+        }
+    }
     single {
         val credentials = get<com.example.myapplication.media.source.PlaybackSourceCredentialsStore>()
         com.example.myapplication.media.source.WebDavPlaybackSource(client = get(named("webdav"))) {
             credentials.webDav()
         }
+    }
+    single(named("jellyfin-source")) {
+        val credentials = get<com.example.myapplication.media.source.PlaybackSourceCredentialsStore>()
+        val provider = com.example.myapplication.media.source.PersonalMediaServerProvider.JELLYFIN
+        com.example.myapplication.media.source.PersonalMediaServerPlaybackSource(
+            client = get(named("personal-media")),
+            provider = provider,
+            configProvider = { credentials.personalServer(provider) },
+        )
+    }
+    single(named("emby-source")) {
+        val credentials = get<com.example.myapplication.media.source.PlaybackSourceCredentialsStore>()
+        val provider = com.example.myapplication.media.source.PersonalMediaServerProvider.EMBY
+        com.example.myapplication.media.source.PersonalMediaServerPlaybackSource(
+            client = get(named("personal-media")),
+            provider = provider,
+            configProvider = { credentials.personalServer(provider) },
+        )
     }
     single {
         com.example.myapplication.media.source.SourceEngine(
@@ -242,6 +265,12 @@ val appModule = module {
             movieSeriesSources = listOf(
                 get<com.example.myapplication.media.source.DirectHttpPlaybackSource>(),
                 get<com.example.myapplication.media.source.WebDavPlaybackSource>(),
+                get<com.example.myapplication.media.source.PersonalMediaServerPlaybackSource>(
+                    named("jellyfin-source")
+                ),
+                get<com.example.myapplication.media.source.PersonalMediaServerPlaybackSource>(
+                    named("emby-source")
+                ),
             ),
         )
     }

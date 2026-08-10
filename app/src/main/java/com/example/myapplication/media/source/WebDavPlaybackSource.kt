@@ -14,7 +14,6 @@ import java.net.URI
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.util.Base64
-import java.security.MessageDigest
 import javax.xml.parsers.DocumentBuilderFactory
 import org.xml.sax.InputSource
 
@@ -29,8 +28,9 @@ data class WebDavConfig(
     fun isValid(): Boolean {
         val uri = runCatching { URI(baseUrl.trim()) }.getOrNull() ?: return false
         val schemeAllowed = uri.scheme == "https" || (uri.scheme == "http" && allowInsecureHttp)
-        return schemeAllowed && !uri.host.isNullOrBlank() && username.isNotBlank() &&
-            password.isNotBlank()
+        return schemeAllowed && !uri.host.isNullOrBlank() && uri.rawUserInfo == null &&
+            uri.query == null && uri.fragment == null && username.isNotBlank() &&
+            password.isNotBlank() && authScope() != null
     }
 }
 
@@ -73,6 +73,7 @@ class WebDavPlaybackSource(
             isPreferred = true,
             downloadAllowed = config.downloadAllowed,
             credentialRef = config.credentialRef(),
+            credentialScope = requireNotNull(config.authScope()).credentialScope(),
         )
         return MovieSeriesSourceResult.Found(
             listOf(VetroHoster(name = sourceName, url = mediaUrl, videos = listOf(video)))
@@ -137,23 +138,11 @@ internal fun WebDavConfig.authorizationHeader(): String {
 }
 
 internal fun WebDavConfig.credentialRef(): PlaybackCredentialRef {
-    val root = URI(baseUrl.trim().trimEnd('/') + "/" + rootPath.trim().trim('/')).normalize()
-    val identity = "${root.scheme.lowercase()}://${root.host.lowercase()}:${root.effectivePort()}${root.path}"
-    val digest = MessageDigest.getInstance("SHA-256")
-        .digest(identity.toByteArray(StandardCharsets.UTF_8))
-        .joinToString("") { byte -> "%02x".format(byte) }
-    return PlaybackCredentialRef("webdav:${digest.take(24)}")
+    return requireNotNull(authScope()).credentialRef("webdav")
 }
 
 internal fun WebDavConfig.isAllowedMediaUrl(url: String): Boolean =
-    runCatching {
-        val root = URI(baseUrl.trim().trimEnd('/') + "/" + rootPath.trim().trim('/'))
-            .normalize()
-        val candidate = URI(url).normalize()
-        sameOrigin(root, candidate) &&
-            candidate.rawUserInfo == null && candidate.fragment == null && candidate.query == null &&
-            candidate.path.startsWith(root.path.trimEnd('/') + "/")
-    }.getOrDefault(false)
+    authScope()?.contains(url) == true
 
 private fun resolveAllowedHref(config: WebDavConfig, href: String): URI? = runCatching {
     val root = URI(config.baseUrl.trim().trimEnd('/') + "/" + config.rootPath.trim().trim('/') + "/")
@@ -171,13 +160,5 @@ internal fun VetroVideo.rehydrateWebDavCredentials(config: WebDavConfig?): Vetro
     return copy(headers = headers + (HttpHeaders.Authorization to config.authorizationHeader()))
 }
 
-private fun sameOrigin(first: URI, second: URI): Boolean =
-    first.scheme.equals(second.scheme, ignoreCase = true) &&
-        first.host.equals(second.host, ignoreCase = true) &&
-        first.effectivePort() == second.effectivePort()
-
-private fun URI.effectivePort(): Int = when {
-    port >= 0 -> port
-    scheme.equals("https", ignoreCase = true) -> 443
-    else -> 80
-}
+private fun WebDavConfig.authScope(): PlaybackAuthScope? =
+    PlaybackAuthScope.create(baseUrl, rootPath, allowQuery = false)

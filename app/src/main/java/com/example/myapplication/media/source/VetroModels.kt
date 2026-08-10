@@ -2,7 +2,7 @@ package com.example.myapplication.media.source
 
 import com.example.myapplication.localplayer.domain.SkipKind
 import kotlinx.serialization.Serializable
-import java.net.URI
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 @Serializable
 data class VetroSubtitleTrack(
@@ -55,6 +55,8 @@ data class VetroVideo(
     val downloadAllowed: Boolean = false,
     /** Encrypted-store lookup key used to rehydrate sensitive headers in background work. */
     val credentialRef: PlaybackCredentialRef? = null,
+    /** Non-secret canonical root to which rehydrated credentials may be sent. */
+    val credentialScope: PlaybackCredentialScope? = null,
     val resolvedAt: Long = System.currentTimeMillis(),
 ) {
     init {
@@ -77,6 +79,9 @@ internal fun VetroVideo.withoutPersistedSecrets(): VetroVideo = copy(
     }
 )
 
+internal fun areHeadersSafeForPersistence(headers: Map<String, String>): Boolean =
+    headers.all { (key, value) -> isPersistableHeader(key, value) }
+
 internal fun VetroVideo.isSafeForBackgroundPersistence(): Boolean {
     val unsupportedHeaders = headers.any { (key, value) ->
         !isPersistableHeader(key, value)
@@ -95,11 +100,21 @@ private fun isPersistableHeader(key: String, value: String): Boolean {
     return true
 }
 
-private fun containsSensitiveQuery(url: String): Boolean {
-    val query = runCatching { URI(url).rawQuery }.getOrNull().orEmpty()
-    if (query.isBlank()) return false
-    val keys = query.split('&').map { it.substringBefore('=').lowercase() }
+internal fun containsSensitiveQuery(url: String): Boolean {
+    val parsed = url.toHttpUrlOrNull() ?: return true
+    val keys = parsed.queryParameterNames.map(String::lowercase)
     return keys.any { key -> SENSITIVE_QUERY_KEYS.any(key::contains) }
+}
+
+internal fun urlContainsSecret(url: String, secret: String): Boolean {
+    if (secret.isEmpty()) return false
+    val parsed = url.toHttpUrlOrNull() ?: return true
+    val decodedPath = parsed.pathSegments.joinToString("/", prefix = "/")
+    return secret in decodedPath || parsed.queryParameterNames.any { name ->
+        secret in name || parsed.queryParameterValues(name).any { value ->
+            value != null && secret in value
+        }
+    }
 }
 
 private val PERSISTED_HEADER_ALLOWLIST = setOf("User-Agent", "Accept", "Referer", "Origin")

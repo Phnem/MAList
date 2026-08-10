@@ -51,6 +51,46 @@ class PlaybackSourceCredentialsStore(context: Context) {
         }.apply()
     }
 
+    fun personalServer(provider: PersonalMediaServerProvider): PersonalMediaServerConfig? {
+        val prefix = provider.credentialPrefix
+        val baseUrl = prefs.getString("${prefix}_base_url", null) ?: return null
+        return PersonalMediaServerConfig(
+            baseUrl = baseUrl,
+            userId = prefs.getString("${prefix}_user_id", "").orEmpty(),
+            accessToken = prefs.getString("${prefix}_access_token", "").orEmpty(),
+            downloadAllowed = prefs.getBoolean("${prefix}_download_allowed", false),
+            allowInsecureHttp = prefs.getBoolean("${prefix}_allow_insecure_http", false),
+        ).takeIf(PersonalMediaServerConfig::isValid)
+    }
+
+    fun savePersonalServer(
+        provider: PersonalMediaServerProvider,
+        config: PersonalMediaServerConfig,
+    ) {
+        require(config.isValid()) { "Invalid ${provider.displayName} configuration" }
+        val prefix = provider.credentialPrefix
+        prefs.edit()
+            .putString("${prefix}_base_url", config.baseUrl.trim())
+            .putString("${prefix}_user_id", config.userId.trim())
+            .putString("${prefix}_access_token", config.accessToken)
+            .putBoolean("${prefix}_download_allowed", config.downloadAllowed)
+            .putBoolean("${prefix}_allow_insecure_http", config.allowInsecureHttp)
+            .apply()
+    }
+
+    fun clearPersonalServer(provider: PersonalMediaServerProvider) {
+        val prefix = provider.credentialPrefix
+        prefs.edit().apply {
+            listOf(
+                "${prefix}_base_url",
+                "${prefix}_user_id",
+                "${prefix}_access_token",
+                "${prefix}_download_allowed",
+                "${prefix}_allow_insecure_http",
+            ).forEach(::remove)
+        }.apply()
+    }
+
     private companion object {
         const val PREF_FILE = "secure_playback_sources"
         const val WEB_DAV_BASE_URL = "webdav_base_url"

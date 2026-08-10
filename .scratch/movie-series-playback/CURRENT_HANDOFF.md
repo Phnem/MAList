@@ -24,13 +24,15 @@ TICKET-02 — capability-aware playback routing, explicit outcomes and typed pla
 
 TICKET-03 — Direct HTTPS/WebDAV adapters, explicit download capability and encrypted credentials.
 
+TICKET-04 — Jellyfin/Emby library search, PlaybackInfo direct/HLS resolution and scoped secrets.
+
 ## Active ticket
 
-None; TICKET-04 is ready.
+None.
 
 ## Next eligible ticket
 
-TICKET-04 — Jellyfin and Emby adapters.
+TICKET-05 is ready.
 
 ## Decisions that must be preserved
 
@@ -45,17 +47,17 @@ None.
 
 ## Current repository state
 
-TICKET-03 changes are ready for their focused commit.
+TICKET-04 changes are ready for their focused commit.
 
 ## Relevant commits
 
-Base: `ab230b4`.
+Feature base: `ab230b4`; latest completed commit before this ticket: `20c328c`.
 
 ## Verification already performed
 
-Authenticated live search/details/seasons/videos/external-sources smoke against the intended
-Kinopoisk host; key was not printed. Focused Kinopoisk/TMDB/repository tests, full core-network
-unit tests and app Kotlin compilation pass. Spec and Standards reviews are accepted.
+Authenticated Kinopoisk smoke, focused catalog tests, full earlier app suite, and focused
+Jellyfin/Emby/WebDAV/security tests pass. App Kotlin compilation passes. Spec and Standards
+reviews for TICKET-04 are accepted.
 
 ## Known failures or blockers
 
@@ -63,9 +65,9 @@ No blocker. Playback-source research is complete.
 
 ## Files most relevant to the next ticket
 
-`PlaybackResolution.kt`, `PlaybackProviderCascade.kt`, `SourceEngine.kt`, and the source research.
+`SettingsScreen.kt`, `SettingsViewModel.kt`, `PlaybackSourceCredentialsStore.kt`, and the personal
+source adapters.
 
 ## Exact recommended next action
 
-Commit TICKET-02, split TICKET-03 by adapter family, then start Direct HTTP/WebDAV with a failing
-contract test.
+Commit TICKET-04, activate TICKET-05, then add a failing settings-state test before UI wiring.

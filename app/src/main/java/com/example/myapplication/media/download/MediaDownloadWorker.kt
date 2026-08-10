@@ -15,6 +15,9 @@ import com.example.myapplication.media.source.SanitizeHeaders
 import com.example.myapplication.media.source.VetroVideo
 import com.example.myapplication.media.source.PlaybackSourceCredentialsStore
 import com.example.myapplication.media.source.rehydrateWebDavCredentials
+import com.example.myapplication.media.source.PersonalMediaServerProvider
+import com.example.myapplication.media.source.rehydratePersonalServerCredentials
+import com.example.myapplication.media.source.forPlaybackCandidate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -197,7 +200,14 @@ class MediaDownloadWorker(
     }
 
     private fun rehydrateCredentials(video: VetroVideo): VetroVideo =
-        video.rehydrateWebDavCredentials(playbackCredentials.webDav())
+        PersonalMediaServerProvider.entries.fold(
+            video.rehydrateWebDavCredentials(playbackCredentials.webDav())
+        ) { hydrated, provider ->
+            hydrated.rehydratePersonalServerCredentials(
+                provider,
+                playbackCredentials.personalServer(provider),
+            )
+        }
 
     private fun downloadSeekableHls(
         video: VetroVideo,
@@ -216,7 +226,7 @@ class MediaDownloadWorker(
             false
         }
         try {
-            HlsSegmentDownloader(downloadClient).download(
+            HlsSegmentDownloader(downloadClient.forPlaybackCandidate(video)).download(
                 video = video,
                 destination = transport,
                 onProgress = { onProgress((it * 9) / 10) },
@@ -304,7 +314,7 @@ class MediaDownloadWorker(
             }
         }.build()
 
-        downloadClient.newCall(request).execute().use { response ->
+        downloadClient.forPlaybackCandidate(video).newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
                 throw IOException("HTTP ${response.code} при загрузке")
             }
