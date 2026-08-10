@@ -269,6 +269,14 @@ val appModule = module {
         )
     }
     single { com.example.myapplication.media.source.movieseries.ProviderHealthStore(androidContext()) }
+    single { com.example.myapplication.media.source.movieseries.custom.CustomSourceStore(androidContext()) }
+    single { com.example.myapplication.media.source.movieseries.custom.CustomSourceInstaller() }
+    single {
+        com.example.myapplication.media.source.movieseries.custom.CustomSourceRegistry(
+            store = get(),
+            client = get(),
+        )
+    }
     single {
         com.example.myapplication.media.source.SourceEngine(
             aniLibriaSource = get(),
@@ -289,6 +297,10 @@ val appModule = module {
                 ),
             ),
             providerHealth = get<com.example.myapplication.media.source.movieseries.ProviderHealthStore>(),
+            customSources = {
+                get<com.example.myapplication.media.source.movieseries.custom.CustomSourceRegistry>()
+                    .providers()
+            },
         )
     }
     single { com.example.myapplication.media.cookies.MediaCookieStore(androidContext()) }

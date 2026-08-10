@@ -27,6 +27,8 @@ class SourceEngine(
     private val webLinksStore: WebLinksStore,
     private val movieSeriesSources: List<MovieSeriesStreamingProvider> = emptyList(),
     private val providerHealth: ProviderHealthRegistry = NoProviderHealth,
+    /** User-installed sources, resolved per request so settings changes apply without a restart. */
+    private val customSources: suspend () -> List<MovieSeriesStreamingProvider> = { emptyList() },
 ) {
     suspend fun resolveHosters(
         anime: Anime,
@@ -66,7 +68,9 @@ class SourceEngine(
         (providerHealth as? ProviderHealthStore)?.ensureLoaded()
         return resolveMovieSeriesSources(
             request = request,
-            sources = movieSeriesSources,
+            // Built-in providers first; a user-installed source joins the same cascade rather than
+            // replacing anything.
+            sources = movieSeriesSources + customSources(),
             timeoutMs = PERSONAL_SOURCE_TIMEOUT_MS,
             health = providerHealth,
         )
