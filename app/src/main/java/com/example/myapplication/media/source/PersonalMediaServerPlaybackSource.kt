@@ -1,6 +1,12 @@
 package com.example.myapplication.media.source
 
 import com.example.myapplication.data.models.MediaType
+import com.example.myapplication.media.source.movieseries.MovieSeriesStreamingProvider
+import com.example.myapplication.media.source.movieseries.ProviderCapability
+import com.example.myapplication.media.source.movieseries.ProviderId
+import com.example.myapplication.media.source.movieseries.ProviderResolution
+import com.example.myapplication.media.source.movieseries.requireProviderSuccess
+import com.example.myapplication.media.source.movieseries.resolveTyped
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -51,27 +57,45 @@ class PersonalMediaServerPlaybackSource(
     private val client: HttpClient,
     private val provider: PersonalMediaServerProvider,
     private val configProvider: () -> PersonalMediaServerConfig?,
-) : MovieSeriesPlaybackSource {
-    override val sourceName: String = provider.displayName
+) : MovieSeriesStreamingProvider {
+    override val id: ProviderId = ProviderId(provider.credentialPrefix)
+    override val displayName: String = provider.displayName
+    private val sourceName: String get() = displayName
     private val json = Json { ignoreUnknownKeys = true }
 
-    override suspend fun resolve(request: PlaybackRequest): MovieSeriesSourceResult {
+    /** Matches by provider ids first, so it declares every id capability it searches on. */
+    override val capabilities: Set<ProviderCapability> = setOf(
+        ProviderCapability.MOVIE,
+        ProviderCapability.SERIES,
+        ProviderCapability.DIRECT,
+        ProviderCapability.HLS,
+        ProviderCapability.SUBTITLES,
+        ProviderCapability.DOWNLOAD,
+        ProviderCapability.TMDB_ID,
+        ProviderCapability.IMDB_ID,
+        ProviderCapability.KINOPOISK_ID,
+    )
+
+    override suspend fun resolve(request: PlaybackRequest): ProviderResolution =
+        resolveTyped(provider.displayName) { resolveFromServer(request) }
+
+    private suspend fun resolveFromServer(request: PlaybackRequest): ProviderResolution {
         val config = configProvider()?.takeIf(PersonalMediaServerConfig::isValid)
-            ?: return MovieSeriesSourceResult.NotConfigured
+            ?: return ProviderResolution.NotConfigured
         if (request.mediaType !in setOf(MediaType.MOVIE, MediaType.SERIES)) {
-            return MovieSeriesSourceResult.NoMatch
+            return ProviderResolution.Unsupported
         }
-        val item = search(config, request) ?: return MovieSeriesSourceResult.NoMatch
+        val item = search(config, request) ?: return ProviderResolution.NotFound
         val playableItem = if (request.mediaType == MediaType.SERIES) {
             episode(config, item.id, request.seasonNumber, request.episodeNumber)
-                ?: return MovieSeriesSourceResult.NoMatch
+                ?: return ProviderResolution.NotFound
         } else {
             item
         }
         val playback = playbackInfo(config, playableItem.id)
-            ?: return MovieSeriesSourceResult.NoMatch
+            ?: return ProviderResolution.NotFound
         val candidate = playback.candidate(config, playableItem.id)
-            ?: return MovieSeriesSourceResult.NoMatch
+            ?: return ProviderResolution.NotFound
         val tokenHeader = candidate.requiredHeaders
             .filterKeys { !it.equals(TOKEN_HEADER, ignoreCase = true) } +
             (TOKEN_HEADER to config.accessToken)
@@ -87,7 +111,7 @@ class PersonalMediaServerPlaybackSource(
             credentialRef = config.credentialRef(provider),
             credentialScope = requireNotNull(config.authScope()).credentialScope(),
         )
-        return MovieSeriesSourceResult.Found(
+        return ProviderResolution.Found(
             listOf(VetroHoster(provider.displayName, candidate.url, listOf(video)))
         )
     }
@@ -105,7 +129,7 @@ class PersonalMediaServerPlaybackSource(
             parameter("Recursive", true)
             parameter("Fields", "ProviderIds")
         }
-        check(response.status.isSuccess()) { "${provider.displayName} HTTP ${response.status.value}" }
+        requireProviderSuccess(response.status.value, provider.displayName)
         val items = json.decodeFromString<ServerItemsResponse>(response.bodyAsText()).items
             .filter { it.id.matches(SAFE_SERVER_ID) }
         val exact = items.filter { it.identityRelation(request) == IdentityRelation.EXACT }
@@ -131,7 +155,7 @@ class PersonalMediaServerPlaybackSource(
             parameter("UserId", config.userId)
             parameter("Season", season)
         }
-        check(response.status.isSuccess()) { "${provider.displayName} HTTP ${response.status.value}" }
+        requireProviderSuccess(response.status.value, provider.displayName)
         return json.decodeFromString<ServerItemsResponse>(response.bodyAsText()).items
             .filter { it.id.matches(SAFE_SERVER_ID) }
             .firstOrNull { it.parentIndexNumber == season && it.indexNumber == episode }
@@ -147,7 +171,7 @@ class PersonalMediaServerPlaybackSource(
             header(TOKEN_HEADER, config.accessToken)
             parameter("UserId", config.userId)
         }
-        check(response.status.isSuccess()) { "${provider.displayName} HTTP ${response.status.value}" }
+        requireProviderSuccess(response.status.value, provider.displayName)
         val body = response.bodyAsText()
         return json.decodeFromString<PersonalPlaybackInfoDto>(body).toDomain()
     }

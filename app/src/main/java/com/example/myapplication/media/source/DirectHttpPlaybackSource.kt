@@ -1,23 +1,38 @@
 package com.example.myapplication.media.source
 
 import com.example.myapplication.data.local.WebLinksStore
+import com.example.myapplication.media.source.movieseries.MovieSeriesStreamingProvider
+import com.example.myapplication.media.source.movieseries.ProviderCapability
+import com.example.myapplication.media.source.movieseries.ProviderId
+import com.example.myapplication.media.source.movieseries.ProviderResolution
 import com.example.myapplication.network.AppLanguage
 
 /** Explicit direct HTTPS media already attached by the user to this library entry. */
 class DirectHttpPlaybackSource(
     private val urlSource: UrlSource,
     private val webLinksStore: WebLinksStore,
-) : MovieSeriesPlaybackSource {
-    override val sourceName: String = "Direct HTTPS"
+) : MovieSeriesStreamingProvider {
+    override val id: ProviderId = ProviderId("direct-https")
+    override val displayName: String = "Direct HTTPS"
 
-    override suspend fun resolve(request: PlaybackRequest): MovieSeriesSourceResult {
-        val direct = directUrl(request) ?: return MovieSeriesSourceResult.NotConfigured
-        // Stored web links prove technical reachability, not offline-copy permission.
+    /**
+     * Language-agnostic: the stored link set is chosen per request language, but the provider itself
+     * serves both. No DOWNLOAD — a stored link proves reachability, not offline-copy permission.
+     */
+    override val capabilities: Set<ProviderCapability> = setOf(
+        ProviderCapability.MOVIE,
+        ProviderCapability.SERIES,
+        ProviderCapability.DIRECT,
+        ProviderCapability.HLS,
+    )
+
+    override suspend fun resolve(request: PlaybackRequest): ProviderResolution {
+        val direct = directUrl(request) ?: return ProviderResolution.NotConfigured
         val hosters = urlSource.resolveFromWebUrl(direct, downloadAllowed = false)
         return if (hosters.isEmpty()) {
-            MovieSeriesSourceResult.NoMatch
+            ProviderResolution.NotFound
         } else {
-            MovieSeriesSourceResult.Found(hosters)
+            ProviderResolution.Found(hosters)
         }
     }
 

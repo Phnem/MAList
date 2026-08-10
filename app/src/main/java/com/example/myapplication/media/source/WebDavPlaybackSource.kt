@@ -1,6 +1,12 @@
 package com.example.myapplication.media.source
 
 import com.example.myapplication.data.models.MediaType
+import com.example.myapplication.media.source.movieseries.MovieSeriesStreamingProvider
+import com.example.myapplication.media.source.movieseries.ProviderCapability
+import com.example.myapplication.media.source.movieseries.ProviderId
+import com.example.myapplication.media.source.movieseries.ProviderResolution
+import com.example.myapplication.media.source.movieseries.providerResolutionForStatus
+import com.example.myapplication.media.source.movieseries.resolveTyped
 import io.ktor.client.HttpClient
 import io.ktor.client.request.header
 import io.ktor.client.request.request
@@ -37,14 +43,27 @@ data class WebDavConfig(
 class WebDavPlaybackSource(
     private val client: HttpClient,
     private val configProvider: () -> WebDavConfig?,
-) : MovieSeriesPlaybackSource {
-    override val sourceName: String = "WebDAV"
+) : MovieSeriesStreamingProvider {
+    override val id: ProviderId = ProviderId("webdav")
+    override val displayName: String = "WebDAV"
+    private val sourceName: String get() = displayName
 
-    override suspend fun resolve(request: PlaybackRequest): MovieSeriesSourceResult {
+    /** The user owns the library, so downloads are possible; the config still decides per stream. */
+    override val capabilities: Set<ProviderCapability> = setOf(
+        ProviderCapability.MOVIE,
+        ProviderCapability.SERIES,
+        ProviderCapability.DIRECT,
+        ProviderCapability.DOWNLOAD,
+    )
+
+    override suspend fun resolve(request: PlaybackRequest): ProviderResolution =
+        resolveTyped(displayName) { resolveFromServer(request) }
+
+    private suspend fun resolveFromServer(request: PlaybackRequest): ProviderResolution {
         val config = configProvider()?.takeIf(WebDavConfig::isValid)
-            ?: return MovieSeriesSourceResult.NotConfigured
+            ?: return ProviderResolution.NotConfigured
         if (request.mediaType !in setOf(MediaType.MOVIE, MediaType.SERIES)) {
-            return MovieSeriesSourceResult.NoMatch
+            return ProviderResolution.Unsupported
         }
         val auth = config.authorizationHeader()
         val response = client.request(listingUrl(config)) {
@@ -55,12 +74,21 @@ class WebDavPlaybackSource(
             setBody(PROPFIND_BODY)
         }
         if (response.status != HttpStatusCode.MultiStatus) {
-            error("WebDAV HTTP ${response.status.value}")
+            // 207 is the only success here. A 404 means the configured root is wrong, which says
+            // nothing about the title — reporting NotFound would hide a broken configuration and
+            // leave provider health looking clean.
+            val status = response.status.value
+            return if (status == 404 || status in 200..299) {
+                ProviderResolution.InvalidResponse("WebDAV root did not list: HTTP $status")
+            } else {
+                providerResolutionForStatus(status)
+                    ?: ProviderResolution.InvalidResponse("WebDAV HTTP $status")
+            }
         }
         val href = parseDavHrefs(response.bodyAsText())
             .mapNotNull { resolveAllowedHref(config, it) }
             .firstOrNull { matchesRequest(it.toASCIIString(), request) }
-            ?: return MovieSeriesSourceResult.NoMatch
+            ?: return ProviderResolution.NotFound
         val mediaUrl = href.toASCIIString()
         val resolution = Regex("(?i)(?:^|[^0-9])(\\d{3,4})p(?:[^0-9]|$)")
             .find(mediaUrl)?.groupValues?.getOrNull(1)?.toIntOrNull()
@@ -75,7 +103,7 @@ class WebDavPlaybackSource(
             credentialRef = config.credentialRef(),
             credentialScope = requireNotNull(config.authScope()).credentialScope(),
         )
-        return MovieSeriesSourceResult.Found(
+        return ProviderResolution.Found(
             listOf(VetroHoster(name = sourceName, url = mediaUrl, videos = listOf(video)))
         )
     }

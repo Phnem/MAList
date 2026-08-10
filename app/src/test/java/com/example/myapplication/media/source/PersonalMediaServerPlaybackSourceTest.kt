@@ -1,5 +1,6 @@
 package com.example.myapplication.media.source
 
+import com.example.myapplication.media.source.movieseries.ProviderResolution
 import com.example.myapplication.data.models.Anime
 import com.example.myapplication.data.models.MediaType
 import com.example.myapplication.domain.seasons.SeasonInfo
@@ -52,7 +53,7 @@ class PersonalMediaServerPlaybackSourceTest {
             configProvider = { config },
         )
 
-        val result = source.resolve(seriesRequest()) as MovieSeriesSourceResult.Found
+        val result = source.resolve(seriesRequest()) as ProviderResolution.Found
         val video = result.hosters.single().videos.orEmpty().single()
 
         assertEquals(
@@ -105,7 +106,7 @@ class PersonalMediaServerPlaybackSourceTest {
             },
         )
 
-        val result = source.resolve(movieRequest()) as MovieSeriesSourceResult.Found
+        val result = source.resolve(movieRequest()) as ProviderResolution.Found
         val video = result.hosters.single().videos.orEmpty().single()
 
         assertEquals(
@@ -162,7 +163,7 @@ class PersonalMediaServerPlaybackSourceTest {
             configProvider = { serverConfig("https://jellyfin.example", "token") },
         )
 
-        assertEquals(MovieSeriesSourceResult.NoMatch, source.resolve(seriesRequest()))
+        assertEquals(ProviderResolution.NotFound, source.resolve(seriesRequest()))
     }
 
     @Test
@@ -174,7 +175,7 @@ class PersonalMediaServerPlaybackSourceTest {
         )
         val request = seriesRequest().copy(anime = anime(MediaType.SERIES, tmdbId = null))
 
-        assertEquals(MovieSeriesSourceResult.NoMatch, source.resolve(request))
+        assertEquals(ProviderResolution.NotFound, source.resolve(request))
     }
 
     @Test
@@ -195,7 +196,7 @@ class PersonalMediaServerPlaybackSourceTest {
             },
         )
 
-        val result = source.resolve(movieRequest()) as MovieSeriesSourceResult.Found
+        val result = source.resolve(movieRequest()) as ProviderResolution.Found
 
         assertFalse(result.hosters.single().videos.orEmpty().single().downloadAllowed)
     }
@@ -203,7 +204,7 @@ class PersonalMediaServerPlaybackSourceTest {
     @Test
     fun `disabled direct capability falls back to enabled HLS`() = runBlocking {
         val result = movieSourceWithPlayback(DISABLED_DIRECT_WITH_HLS)
-            .resolve(movieRequest()) as MovieSeriesSourceResult.Found
+            .resolve(movieRequest()) as ProviderResolution.Found
 
         assertEquals("HLS", result.hosters.single().videos.orEmpty().single().label)
     }
@@ -212,7 +213,7 @@ class PersonalMediaServerPlaybackSourceTest {
     fun `disabled transcode capability rejects advertised URL`() = runBlocking {
         val result = movieSourceWithPlayback(DISABLED_TRANSCODE).resolve(movieRequest())
 
-        assertEquals(MovieSeriesSourceResult.NoMatch, result)
+        assertEquals(ProviderResolution.NotFound, result)
     }
 
     @Test

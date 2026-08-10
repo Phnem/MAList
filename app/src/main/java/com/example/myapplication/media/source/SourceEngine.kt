@@ -4,6 +4,7 @@ import android.util.Log
 import com.example.myapplication.data.local.WebLinksStore
 import com.example.myapplication.data.models.Anime
 import com.example.myapplication.domain.seasons.SeasonInfo
+import com.example.myapplication.media.source.movieseries.MovieSeriesStreamingProvider
 import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.network.WebLinkSites
 
@@ -21,7 +22,7 @@ class SourceEngine(
     private val animeHeavenSource: AnimeHeavenSource,
     private val urlSource: UrlSource,
     private val webLinksStore: WebLinksStore,
-    private val movieSeriesSources: List<MovieSeriesPlaybackSource> = emptyList(),
+    private val movieSeriesSources: List<MovieSeriesStreamingProvider> = emptyList(),
 ) {
     suspend fun resolveHosters(
         anime: Anime,

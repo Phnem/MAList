@@ -1,5 +1,6 @@
 package com.example.myapplication.media.source
 
+import com.example.myapplication.media.source.movieseries.ProviderResolution
 import com.example.myapplication.data.models.Anime
 import com.example.myapplication.data.models.MediaType
 import com.example.myapplication.domain.seasons.SeasonInfo
@@ -41,7 +42,7 @@ class WebDavPlaybackSourceTest {
             )
         }
 
-        val hosters = (source.resolve(seriesRequest()) as MovieSeriesSourceResult.Found).hosters
+        val hosters = (source.resolve(seriesRequest()) as ProviderResolution.Found).hosters
         val video = hosters.single().videos.orEmpty().single()
 
         assertEquals("https://cloud.example/remote.php/dav/files/alice/Series/Doctor%20House/S01E02.mp4", video.url)
@@ -66,7 +67,7 @@ class WebDavPlaybackSourceTest {
             WebDavConfig("https://cloud.example/dav", "/Series", "alice", "secret")
         }
 
-        assertEquals(MovieSeriesSourceResult.NoMatch, source.resolve(seriesRequest(episode = 9)))
+        assertEquals(ProviderResolution.NotFound, source.resolve(seriesRequest(episode = 9)))
     }
 
     @Test
@@ -83,7 +84,7 @@ class WebDavPlaybackSourceTest {
             WebDavConfig("https://cloud.example/dav", "/Series", "alice", "secret")
         }
 
-        assertEquals(MovieSeriesSourceResult.NoMatch, source.resolve(seriesRequest()))
+        assertEquals(ProviderResolution.NotFound, source.resolve(seriesRequest()))
     }
 
     @Test
@@ -109,6 +110,42 @@ class WebDavPlaybackSourceTest {
         val attacker = video.copy(url = "https://attacker.example/House/S01E02.mp4")
         assertFalse(attacker.rehydrateWebDavCredentials(original).headers.containsKey("Authorization"))
     }
+
+    @Test
+    fun `missing webdav root is an invalid response rather than a clean not found`() = runBlocking {
+        val engine = MockEngine {
+            respond(content = "", status = HttpStatusCode.NotFound)
+        }
+        val source = WebDavPlaybackSource(HttpClient(engine)) { validConfig() }
+
+        val result = source.resolve(seriesRequest())
+
+        // A wrong root says nothing about the title; reporting NotFound would hide the mistake.
+        assertTrue(result is ProviderResolution.InvalidResponse)
+    }
+
+    @Test
+    fun `webdav auth rejection is reported as blocked`() = runBlocking {
+        val engine = MockEngine { respond(content = "", status = HttpStatusCode.Unauthorized) }
+        val source = WebDavPlaybackSource(HttpClient(engine)) { validConfig() }
+
+        assertTrue(source.resolve(seriesRequest()) is ProviderResolution.Blocked)
+    }
+
+    @Test
+    fun `webdav server fault is reported as temporary`() = runBlocking {
+        val engine = MockEngine { respond(content = "", status = HttpStatusCode.ServiceUnavailable) }
+        val source = WebDavPlaybackSource(HttpClient(engine)) { validConfig() }
+
+        assertTrue(source.resolve(seriesRequest()) is ProviderResolution.TemporaryError)
+    }
+
+    private fun validConfig() = WebDavConfig(
+        baseUrl = "https://cloud.example/remote.php/dav/files/alice",
+        rootPath = "/Series",
+        username = "alice",
+        password = "app-password",
+    )
 
     private fun seriesRequest(episode: Int = 2) = PlaybackRequest(
         anime = Anime(
