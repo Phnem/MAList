@@ -55,3 +55,12 @@ can still be added disabled by default with mocked contract tests.
 - Added distinct season/playback messages for unconfigured, no-match and provider failure.
 - Full app unit suite and compilation pass; Spec and Standards reviews have no remaining mandatory
   findings.
+
+## 2026-08-10 — TICKET-03 implemented and accepted
+
+- Added one typed, bounded source contract for Direct HTTPS and WebDAV.
+- Added encrypted WebDAV config, PROPFIND matching and progressive playback candidates.
+- Bound Basic auth to normalized origin/root and a validated credential reference.
+- Made download permission default-deny and blocked sensitive URLs/headers from WorkManager data.
+- Restricted authenticated WebDAV to strict progressive filename suffixes.
+- Full app unit tests pass; Spec and Standards reviews have no mandatory findings.

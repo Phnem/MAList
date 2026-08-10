@@ -225,6 +225,7 @@ dependencies {
 
     // Test
     testImplementation(libs.junit)
+    testImplementation("io.ktor:ktor-client-mock")
     // JVM SQLite driver — прогон SQLDelight-миграций в JUnit-тестах (не android-driver, тому
     // нужен Android runtime).
     testImplementation(libs.sqldelight.sqlite.driver)

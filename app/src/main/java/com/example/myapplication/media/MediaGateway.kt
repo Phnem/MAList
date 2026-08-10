@@ -5,6 +5,7 @@ import com.example.myapplication.domain.seasons.SeasonInfo
 import com.example.myapplication.media.source.VetroHoster
 import com.example.myapplication.media.source.VetroVideo
 import com.example.myapplication.media.source.PlaybackResolution
+import com.example.myapplication.media.source.isSafeForBackgroundPersistence
 import com.example.myapplication.ui.details.DownloadQuality
 import java.io.File
 
@@ -45,4 +46,17 @@ interface MediaGateway {
         episodeNumber: Int = 0,
         durationSec: Int? = null,
     ): JobId
+}
+
+internal fun downloadableCandidates(
+    video: VetroVideo,
+    fallbackVideos: List<VetroVideo>,
+): List<VetroVideo> {
+    require(video.downloadAllowed) { "Источник разрешает только просмотр / Source is stream-only" }
+    require(video.isSafeForBackgroundPersistence()) {
+        "Секретный URL нельзя передать фоновой загрузке / Sensitive stream cannot be persisted"
+    }
+    return (listOf(video) + fallbackVideos)
+        .filter { it.downloadAllowed && it.isSafeForBackgroundPersistence() }
+        .distinctBy(VetroVideo::url)
 }

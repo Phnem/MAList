@@ -213,6 +213,24 @@ val appModule = module {
     }
     single { com.example.myapplication.media.source.UrlSource(context = androidContext()) }
     single {
+        com.example.myapplication.media.source.DirectHttpPlaybackSource(
+            urlSource = get(),
+            webLinksStore = get(),
+        )
+    }
+    single { com.example.myapplication.media.source.PlaybackSourceCredentialsStore(androidContext()) }
+    single(named("webdav")) {
+        io.ktor.client.HttpClient(io.ktor.client.engine.okhttp.OkHttp) {
+            followRedirects = false
+        }
+    }
+    single {
+        val credentials = get<com.example.myapplication.media.source.PlaybackSourceCredentialsStore>()
+        com.example.myapplication.media.source.WebDavPlaybackSource(client = get(named("webdav"))) {
+            credentials.webDav()
+        }
+    }
+    single {
         com.example.myapplication.media.source.SourceEngine(
             aniLibriaSource = get(),
             animeGoSource = get(),
@@ -221,6 +239,10 @@ val appModule = module {
             animeHeavenSource = get(),
             urlSource = get(),
             webLinksStore = get(),
+            movieSeriesSources = listOf(
+                get<com.example.myapplication.media.source.DirectHttpPlaybackSource>(),
+                get<com.example.myapplication.media.source.WebDavPlaybackSource>(),
+            ),
         )
     }
     single { com.example.myapplication.media.cookies.MediaCookieStore(androidContext()) }

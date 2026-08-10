@@ -21,6 +21,7 @@ import com.example.myapplication.media.source.PlaybackRequest
 import com.example.myapplication.media.source.PlaybackResolution
 import com.example.myapplication.media.source.VetroHoster
 import com.example.myapplication.media.source.VetroVideo
+import com.example.myapplication.media.source.withoutPersistedSecrets
 import com.example.myapplication.network.AppLanguage
 import com.example.myapplication.ui.details.DownloadQuality
 import kotlinx.coroutines.flow.first
@@ -88,7 +89,8 @@ class MediaGatewayImpl(
             com.example.myapplication.media.download.MediaJobProgress(jobId, "queued")
         )
 
-        val candidates = (listOf(video) + fallbackVideos).distinctBy { it.url }
+        val candidates = downloadableCandidates(video, fallbackVideos)
+        val persistedCandidates = candidates.map(VetroVideo::withoutPersistedSecrets)
         val data = workDataOf(
             MediaDownloadWorker.KEY_JOB_ID to jobId,
             MediaDownloadWorker.KEY_URL to video.url,
@@ -98,8 +100,10 @@ class MediaGatewayImpl(
             MediaDownloadWorker.KEY_ANIME_ID to animeId,
             MediaDownloadWorker.KEY_QUALITY to quality.label,
             MediaDownloadWorker.KEY_DURATION_SEC to (durationSec ?: -1),
-            MediaDownloadWorker.KEY_HEADERS_JSON to json.encodeToString(video.headers),
-            MediaDownloadWorker.KEY_CANDIDATES_JSON to json.encodeToString(candidates),
+            MediaDownloadWorker.KEY_HEADERS_JSON to json.encodeToString(
+                video.withoutPersistedSecrets().headers
+            ),
+            MediaDownloadWorker.KEY_CANDIDATES_JSON to json.encodeToString(persistedCandidates),
         )
         val req = OneTimeWorkRequestBuilder<MediaDownloadWorker>()
             .setInputData(data)

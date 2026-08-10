@@ -22,13 +22,15 @@ MockEngine regression tests and shared HTTP outcome semantics.
 
 TICKET-02 — capability-aware playback routing, explicit outcomes and typed player recovery.
 
+TICKET-03 — Direct HTTPS/WebDAV adapters, explicit download capability and encrypted credentials.
+
 ## Active ticket
 
-None; TICKET-03 is ready.
+None; TICKET-04 is ready.
 
 ## Next eligible ticket
 
-TICKET-03 — lawful playback adapters.
+TICKET-04 — Jellyfin and Emby adapters.
 
 ## Decisions that must be preserved
 
@@ -43,7 +45,7 @@ None.
 
 ## Current repository state
 
-TICKET-02 changes are ready for their focused commit.
+TICKET-03 changes are ready for their focused commit.
 
 ## Relevant commits
 

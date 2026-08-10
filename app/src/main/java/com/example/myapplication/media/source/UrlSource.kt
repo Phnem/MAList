@@ -1,7 +1,7 @@
 package com.example.myapplication.media.source
 
 import android.content.Context
-import android.net.Uri
+import java.net.URI
 
 /**
  * Safe direct-media fallback.
@@ -12,10 +12,10 @@ import android.net.Uri
  * accepts only an already-direct HTTP media URL.
  */
 class UrlSource(
-    @Suppress("UNUSED_PARAMETER") context: Context,
+    @Suppress("UNUSED_PARAMETER") context: Context? = null,
 ) {
     fun canResolveDirect(url: String): Boolean {
-        val parsed = runCatching { Uri.parse(url.trim()) }.getOrNull() ?: return false
+        val parsed = runCatching { URI(url.trim()) }.getOrNull() ?: return false
         if (parsed.scheme !in setOf("http", "https")) return false
         val value = url.lowercase()
         return DIRECT_MEDIA_MARKERS.any(value::contains)
@@ -24,6 +24,7 @@ class UrlSource(
     suspend fun resolveFromWebUrl(
         webUrl: String,
         preferredHeight: Int = 720,
+        downloadAllowed: Boolean = false,
     ): List<VetroHoster> {
         if (!canResolveDirect(webUrl)) return emptyList()
         val resolution = Regex("""(?i)(?:^|[_./-])(\d{3,4})p?(?:[_./?-]|$)""")
@@ -43,6 +44,7 @@ class UrlSource(
                         resolution = resolution,
                         headers = mapOf("User-Agent" to VetroHttpSource.DEFAULT_UA),
                         isPreferred = resolution == null || resolution <= preferredHeight,
+                        downloadAllowed = downloadAllowed,
                     )
                 ),
             )

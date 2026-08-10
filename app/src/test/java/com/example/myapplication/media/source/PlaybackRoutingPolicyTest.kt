@@ -60,7 +60,7 @@ class PlaybackRoutingPolicyTest {
         assertEquals(
             PlaybackResolution.Found(listOf(hoster)),
             playbackResolution(
-                playableHosters = attempts.flatMap { it.hosters },
+                playableHosters = attempts.flatMap { it.value.orEmpty() },
                 hadProviderFailure = attempts.any { it.failed },
             ),
         )

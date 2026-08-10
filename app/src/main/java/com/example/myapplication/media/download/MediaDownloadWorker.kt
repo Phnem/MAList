@@ -13,6 +13,8 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.example.myapplication.media.source.SanitizeHeaders
 import com.example.myapplication.media.source.VetroVideo
+import com.example.myapplication.media.source.PlaybackSourceCredentialsStore
+import com.example.myapplication.media.source.rehydrateWebDavCredentials
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -38,6 +40,7 @@ class MediaDownloadWorker(
 ) : CoroutineWorker(appContext, params), KoinComponent {
 
     private val okHttpClient: OkHttpClient by inject()
+    private val playbackCredentials: PlaybackSourceCredentialsStore by inject()
     private val json = Json { ignoreUnknownKeys = true }
 
     /**
@@ -95,6 +98,7 @@ class MediaDownloadWorker(
         )
         val candidates = parseCandidates(inputData.getString(KEY_CANDIDATES_JSON).orEmpty())
             .ifEmpty { listOf(legacyVideo) }
+            .map(::rehydrateCredentials)
             .distinctBy { it.url }
 
         val outputDirectory = File(outDir)
@@ -191,6 +195,9 @@ class MediaDownloadWorker(
             fail(jobId, error.message ?: "Ошибка загрузки")
         }
     }
+
+    private fun rehydrateCredentials(video: VetroVideo): VetroVideo =
+        video.rehydrateWebDavCredentials(playbackCredentials.webDav())
 
     private fun downloadSeekableHls(
         video: VetroVideo,

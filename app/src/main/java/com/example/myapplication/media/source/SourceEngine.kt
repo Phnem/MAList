@@ -21,6 +21,7 @@ class SourceEngine(
     private val animeHeavenSource: AnimeHeavenSource,
     private val urlSource: UrlSource,
     private val webLinksStore: WebLinksStore,
+    private val movieSeriesSources: List<MovieSeriesPlaybackSource> = emptyList(),
 ) {
     suspend fun resolveHosters(
         anime: Anime,
@@ -35,7 +36,7 @@ class SourceEngine(
         if (request.episodeNumber <= 0) return PlaybackResolution.NoMatch
         val route = PlaybackRoutingPolicy.route(request.mediaType, request.language)
         if (route == PlaybackRoute.None) return PlaybackResolution.NotConfigured(request.mediaType)
-        if (route == PlaybackRoute.DirectOnly) return resolveDirectOnly(request)
+        if (route == PlaybackRoute.DirectOnly) return resolveMovieSeries(request)
 
         val batch = when (route) {
             PlaybackRoute.AnimeRu -> resolveRu(request.anime, request.episodeNumber, request.seasonInfo)
@@ -53,24 +54,12 @@ class SourceEngine(
         return playbackResolution(normalized, batch.hadFailure)
     }
 
-    private suspend fun resolveDirectOnly(request: PlaybackRequest): PlaybackResolution {
-        webLinksStore.ensureLoaded()
-        val stored = webLinksStore.flow.value[request.anime.id]
-        val urls = when (request.language) {
-            AppLanguage.RU -> stored?.ruLinks
-            AppLanguage.EN -> stored?.enLinks
-        }.orEmpty().map { it.url }
-        val direct = urls.firstOrNull(urlSource::canResolveDirect)
-            ?: return PlaybackResolution.NotConfigured(request.mediaType)
-        val attempt = runCalls(
-            listOf(
-                PlaybackProviderCall("direct URL", DIRECT_TIMEOUT_MS) {
-                    urlSource.resolveFromWebUrl(direct)
-                }
-            )
-        ).single()
-        val resolved = attempt.hosters.withPropagatedSkipReference().playableHosters()
-        return playbackResolution(resolved, attempt.failed)
+    private suspend fun resolveMovieSeries(request: PlaybackRequest): PlaybackResolution {
+        return resolveMovieSeriesSources(
+            request = request,
+            sources = movieSeriesSources,
+            timeoutMs = PERSONAL_SOURCE_TIMEOUT_MS,
+        )
     }
 
     private suspend fun resolveRu(
@@ -146,13 +135,13 @@ class SourceEngine(
             }
         )
         val attempts = exact + native
-        val resolved = attempts.flatMap { it.hosters }
+        val resolved = attempts.flatMap { it.value.orEmpty() }
         if (resolved.hasPlayableVideo()) {
             return SourceBatch(resolved, attempts.any { it.failed })
         }
 
         val direct = resolveDirectFallback(links.map { it.url })
-        return SourceBatch(resolved + direct.hosters, attempts.any { it.failed } || direct.failed)
+        return SourceBatch(resolved + direct.value.orEmpty(), attempts.any { it.failed } || direct.failed)
     }
 
     private suspend fun resolveEn(
@@ -174,8 +163,8 @@ class SourceEngine(
         )
         val native = attempts[0]
         val jutReference = attempts[1]
-        val nativeHosters = native.hosters
-        val referenceHosters = jutReference.hosters
+        val nativeHosters = native.value.orEmpty()
+        val referenceHosters = jutReference.value.orEmpty()
         if (nativeHosters.hasPlayableVideo()) {
             return SourceBatch(
                 nativeHosters + referenceHosters,
@@ -187,14 +176,14 @@ class SourceEngine(
         val links = webLinksStore.flow.value[anime.id]?.enLinks.orEmpty()
         val direct = resolveDirectFallback(links.map { it.url })
         return SourceBatch(
-            referenceHosters + direct.hosters,
+            referenceHosters + direct.value.orEmpty(),
             native.failed || jutReference.failed || direct.failed,
         )
     }
 
-    private suspend fun resolveDirectFallback(urls: List<String>): SourceAttempt {
+    private suspend fun resolveDirectFallback(urls: List<String>): SourceAttempt<List<VetroHoster>> {
         val direct = urls.firstOrNull(urlSource::canResolveDirect)
-            ?: return SourceAttempt(label = "direct URL", hosters = emptyList())
+            ?: return SourceAttempt(label = "direct URL", value = emptyList())
         return runCalls(
             listOf(
                 PlaybackProviderCall("direct URL", DIRECT_TIMEOUT_MS) {
@@ -208,18 +197,21 @@ class SourceEngine(
      * Исход КАЖДОЙ ветки попадает в лог, включая пустую. Раньше молчание источника было
      * неотличимо от того, что его вообще не запускали, и отказ разбирался по сырым строкам Ktor.
      */
-    private suspend fun runCalls(calls: List<PlaybackProviderCall>): List<SourceAttempt> =
+    private suspend fun runCalls(
+        calls: List<PlaybackProviderCall<List<VetroHoster>>>,
+    ): List<SourceAttempt<List<VetroHoster>>> =
         runPlaybackProviderCascade(calls).onEach { attempt ->
             when {
                 attempt.timedOut -> Log.w(TAG, "${attempt.label} timed out")
                 attempt.failed -> Log.w(TAG, "${attempt.label} failed")
             }
-            val playable = attempt.hosters.sumOf { hoster ->
+            val hosters = attempt.value.orEmpty()
+            val playable = hosters.sumOf { hoster ->
                 hoster.videos.orEmpty().count { isPlayableVetroVideoUrl(it.url) }
             }
             Log.i(
                 TAG,
-                "${attempt.label} → ${attempt.hosters.size} hoster(s), " +
+                "${attempt.label} → ${hosters.size} hoster(s), " +
                     "$playable playable video(s), ${attempt.elapsedMs}ms",
             )
         }
@@ -237,6 +229,7 @@ class SourceEngine(
         private const val KODIK_SOURCE_TIMEOUT_MS = 24_000L
         private const val EN_SOURCE_TIMEOUT_MS = 20_000L
         private const val DIRECT_TIMEOUT_MS = 5_000L
+        private const val PERSONAL_SOURCE_TIMEOUT_MS = 20_000L
     }
 
     private data class SourceBatch(

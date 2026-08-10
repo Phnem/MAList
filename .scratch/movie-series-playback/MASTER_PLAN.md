@@ -4,8 +4,8 @@
 
 Current workflow state: IMPLEMENTING_TICKET
 Current ticket: —
-Last completed ticket: TICKET-02
-Next eligible ticket: TICKET-03
+Last completed ticket: TICKET-03
+Next eligible ticket: TICKET-04
 Last updated: 2026-08-10
 
 ## Goal
@@ -54,8 +54,10 @@ See specification Out of scope.
 | ID | Title | Status | Blocked by | Commit | Review |
 |---|---|---|---|---|---|
 | TICKET-01 | Switch Kinopoisk catalog adapter | DONE | — | 94c2505 | accepted |
-| TICKET-02 | Capability-aware playback routing | DONE | 01 | pending commit | accepted |
-| TICKET-03 | Lawful playback adapters | READY | 02, research | — | — |
+| TICKET-02 | Capability-aware playback routing | DONE | 01 | a78499d | accepted |
+| TICKET-03 | Direct HTTP and WebDAV adapters | DONE | 02, research | pending commit | accepted |
+| TICKET-04 | Jellyfin and Emby adapters | READY | 03 | — | — |
+| TICKET-05 | Playback source settings UI | PENDING | 03, 04 | — | — |
 
 ## Ticket details
 
@@ -71,11 +73,23 @@ Status: DONE
 Tracker reference: [`issues/02-provider-capabilities.md`](./issues/02-provider-capabilities.md)
 Dependencies: 01
 
-### TICKET-03 — Lawful playback adapters
+### TICKET-03 — Direct HTTP and WebDAV adapters
 
-Status: READY
+Status: DONE
 Tracker reference: [`issues/03-lawful-playback-adapters.md`](./issues/03-lawful-playback-adapters.md)
 Dependencies: 02, research
+
+### TICKET-04 — Jellyfin and Emby adapters
+
+Status: READY
+Tracker reference: [`issues/04-personal-media-servers.md`](./issues/04-personal-media-servers.md)
+Dependencies: 03
+
+### TICKET-05 — Playback source settings UI
+
+Status: PENDING
+Tracker reference: [`issues/05-playback-source-settings.md`](./issues/05-playback-source-settings.md)
+Dependencies: 03, 04
 
 ## Decisions
 
