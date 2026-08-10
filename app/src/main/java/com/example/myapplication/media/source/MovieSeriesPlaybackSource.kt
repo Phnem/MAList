@@ -1,24 +1,25 @@
 package com.example.myapplication.media.source
 
 import com.example.myapplication.data.models.MediaType
+import com.example.myapplication.media.source.movieseries.MovieSeriesCandidate
+import com.example.myapplication.media.source.movieseries.MovieSeriesRanking
 import com.example.myapplication.media.source.movieseries.MovieSeriesStreamingProvider
 import com.example.myapplication.media.source.movieseries.ProviderApplicability
 import com.example.myapplication.media.source.movieseries.ProviderResolution
+import com.example.myapplication.media.source.movieseries.buildCandidates
 import com.example.myapplication.media.source.movieseries.isConfigured
 import com.example.myapplication.media.source.movieseries.isFailure
+import com.example.myapplication.media.source.movieseries.toHosters
 import com.example.myapplication.network.AppLanguage
 
-/**
- * Runs every applicable MOVIE/SERIES provider and folds the answers into one resolution.
- *
- * Providers that cannot serve this request are dropped before any network call, so an unconfigured
- * library never costs a timeout. One provider failing never suppresses a sibling's success.
- */
+/** Default quality target when the caller has no stored preference. */
+private const val DEFAULT_PREFERRED_RESOLUTION = 1080
+
 /**
  * The providers that serve one language's cascade.
  *
  * Pure and separate from the cascade so the RU and EN line-ups can be asserted without running any
- * provider. Order is preserved; ranking is a later concern.
+ * provider. Order is preserved; ranking happens after the results come back.
  */
 fun selectMovieSeriesProviders(
     providers: List<MovieSeriesStreamingProvider>,
@@ -28,10 +29,19 @@ fun selectMovieSeriesProviders(
     ProviderApplicability.isApplicable(provider.capabilities, mediaType, language)
 }
 
+/**
+ * Runs every applicable MOVIE/SERIES provider and folds the answers into one ranked resolution.
+ *
+ * Providers that cannot serve this request are dropped before any network call, so an unconfigured
+ * library never costs a timeout. The cascade deliberately does not stop at the first hit: the source
+ * picker needs every option, and a second provider often carries a better translation or quality.
+ */
 internal suspend fun resolveMovieSeriesSources(
     request: PlaybackRequest,
     sources: List<MovieSeriesStreamingProvider>,
     timeoutMs: Long = 20_000L,
+    preferredResolution: Int = DEFAULT_PREFERRED_RESOLUTION,
+    healthPenalty: (MovieSeriesStreamingProvider) -> Int = { 0 },
 ): PlaybackResolution {
     val applicable = selectMovieSeriesProviders(sources, request.mediaType, request.language)
     if (applicable.isEmpty()) return PlaybackResolution.NotConfigured(request.mediaType)
@@ -41,11 +51,23 @@ internal suspend fun resolveMovieSeriesSources(
             PlaybackProviderCall(source.displayName, timeoutMs) { source.resolve(request) }
         }
     )
+    val byLabel = applicable.associateBy { it.displayName }
+    val candidates = attempts.flatMap { attempt ->
+        val found = attempt.value as? ProviderResolution.Found ?: return@flatMap emptyList()
+        val provider = byLabel[attempt.label] ?: return@flatMap emptyList()
+        buildCandidates(
+            providerId = provider.id,
+            providerName = provider.displayName,
+            hosters = found.hosters,
+            accuracy = found.accuracy,
+            language = found.language,
+            elapsedMs = attempt.elapsedMs,
+            healthPenalty = healthPenalty(provider),
+        )
+    }
+
+    val playable = rankedPlayableHosters(candidates, preferredResolution, request.language)
     val results = attempts.mapNotNull(SourceAttempt<ProviderResolution>::value)
-    val playable = results.filterIsInstance<ProviderResolution.Found>()
-        .flatMap(ProviderResolution.Found::hosters)
-        .withPropagatedSkipReference()
-        .playableHosters()
 
     // A crashed or timed-out attempt has no value to inspect, so both sources of failure count.
     val hadFailure = attempts.any(SourceAttempt<ProviderResolution>::failed) ||
@@ -55,3 +77,13 @@ internal suspend fun resolveMovieSeriesSources(
     if (!anyConfigured && !hadFailure) return PlaybackResolution.NotConfigured(request.mediaType)
     return playbackResolution(playable, hadFailure)
 }
+
+private fun rankedPlayableHosters(
+    candidates: List<MovieSeriesCandidate>,
+    preferredResolution: Int,
+    language: AppLanguage,
+): List<VetroHoster> = MovieSeriesRanking
+    .rank(candidates, preferredResolution, language)
+    .toHosters()
+    .withPropagatedSkipReference()
+    .playableHosters()

@@ -42,8 +42,18 @@ enum class ProviderCapability {
  * it does not carry a title, and the source picker must not describe an outage as "not found".
  */
 sealed interface ProviderResolution {
-    /** The provider carries this title and returned playable candidates. */
-    data class Found(val hosters: List<VetroHoster>) : ProviderResolution
+    /**
+     * The provider carries this title and returned playable candidates.
+     *
+     * [accuracy] and [language] are how the provider identified the title. They stay optional so an
+     * adapter that cannot say is not forced to invent a confident-looking answer; ranking treats a
+     * missing accuracy as the weakest evidence rather than the strongest.
+     */
+    data class Found(
+        val hosters: List<VetroHoster>,
+        val accuracy: MatchAccuracy? = null,
+        val language: AppLanguage? = null,
+    ) : ProviderResolution
 
     /** The provider answered correctly and does not carry this title. Not a failure. */
     data object NotFound : ProviderResolution

@@ -25,7 +25,7 @@ class MovieSeriesSourceCascadeTest {
 
         val outcome = resolveMovieSeriesSources(seriesRequest(), listOf(failing, direct), 1_000)
 
-        assertEquals(PlaybackResolution.Found(listOf(workingHoster)), outcome)
+        assertEquals(listOf(workingVideoUrl), outcome.playableUrls())
     }
 
     @Test
@@ -35,7 +35,7 @@ class MovieSeriesSourceCascadeTest {
 
         val outcome = resolveMovieSeriesSources(seriesRequest(), listOf(missing, found), 1_000)
 
-        assertEquals(PlaybackResolution.Found(listOf(workingHoster)), outcome)
+        assertEquals(listOf(workingVideoUrl), outcome.playableUrls())
     }
 
     @Test
@@ -128,12 +128,22 @@ class MovieSeriesSourceCascadeTest {
         assertTrue("CancellationException must escape the cascade", escaped)
     }
 
+    private val workingVideoUrl = "https://owned.example/house-s01e02.mp4"
+
     private val workingHoster = VetroHoster(
         name = "Direct HTTPS",
-        videos = listOf(
-            VetroVideo(url = "https://owned.example/house-s01e02.mp4", label = "Auto")
-        ),
+        videos = listOf(VetroVideo(url = workingVideoUrl, label = "Auto")),
     )
+
+    /**
+     * Compares by stream URL rather than whole objects: the cascade now attributes each video to the
+     * provider that produced it, so asserting object identity would just re-state the plumbing.
+     */
+    private fun PlaybackResolution.playableUrls(): List<String> =
+        (this as? PlaybackResolution.Found)
+            ?.hosters
+            ?.flatMap { hoster -> hoster.videos.orEmpty().map(VetroVideo::url) }
+            .orEmpty()
 
     private fun fakeSource(
         name: String,
